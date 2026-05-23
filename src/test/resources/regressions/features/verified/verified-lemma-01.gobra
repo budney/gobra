@@ -1,0 +1,23 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose postcondition can be used in another function's spec.
+
+requires n >= 0
+ensures ret == n + 1
+decreases
+verified
+func succSpec(n int) (ret int) {
+	ret = n + 1
+	return ret
+}
+
+// A second function that uses succSpec in its precondition and postcondition.
+// By the axiom, succSpec(n) == n + 1, so succSpec(n) > n holds when n >= 0.
+requires n >= 0
+ensures succSpec(n) > n
+func proveSuccGreater(n int) {
+	// The axiom for succSpec gives succSpec(n) == n + 1 > n when n >= 0.
+}

@@ -1,0 +1,29 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose body calls an ordinary (non-pure) Go function.
+// The ordinary helper has its own postcondition, enabling the verified function's proof.
+
+decreases
+ensures result == x + 1
+func ordinaryHelper(x int) (result int) {
+	return x + 1
+}
+
+requires x >= 0
+ensures ret == x + 1
+decreases
+verified
+func wrapsOrdinary(x int) (ret int) {
+	ret = ordinaryHelper(x)
+	return ret
+}
+
+requires wrapsOrdinary(n) > 5
+ensures result > 5
+func useWrapped(n int) (result int) {
+	result = wrapsOrdinary(n)
+	return result
+}

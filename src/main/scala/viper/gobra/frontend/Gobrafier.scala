@@ -28,6 +28,7 @@ object Gobrafier {
   private val ghost_keyword: String = "ghost"
   private val func_keyword: String = "func"
   private val pure_keyword: String = "pure"
+  private val verified_keyword: String = "verified"
   private val return_keyword: String = "return"
 
   /**
@@ -52,6 +53,7 @@ object Gobrafier {
   private val ghostResultsRegex = s"(?s)${singlelineComment(s"$ghost_results\\s*(.*?)\\n$spec$functionDecl")}".r
   private val returnGhostRegex = s"(?m)$return_keyword\\s*$args\\s*${singlelineComment(s"$with_keyword\\s*$args")}$$".r
   private val pureKeywordRegex = s"(?m)${singlelineComment(s"$pure_keyword$spec")}$$".r
+  private val verifiedKeywordRegex = s"(?m)${singlelineComment(s"$verified_keyword$spec")}$$".r
   private val assignGhostRegex = s"(?m)$assignment\\s*${singlelineComment(s"$with_keyword\\s*$assignment\\s*$goifiedComment")}$$".r
 
   private val addressableVariablesRegex = s"(?m)(^.*?)\\s*${singlelineComment(addressable_variables)}$vars$$".r
@@ -176,6 +178,16 @@ object Gobrafier {
       val spec = m.group(1)
 
       "pure" +
+      spec
+    })
+
+    /**
+      * Add verified keyword to function declaration.
+      */
+    newFileContents = verifiedKeywordRegex.replaceAllIn(newFileContents, m => {
+      val spec = m.group(1)
+
+      "verified" +
       spec
     })
 

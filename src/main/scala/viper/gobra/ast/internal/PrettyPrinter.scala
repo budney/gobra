@@ -144,7 +144,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   }
 
   def showFunction(f: Function): Doc = f match {
-    case Function(name, args, results, pres, posts, measures, backendAnnotations, body) =>
+    case Function(name, args, results, pres, posts, measures, backendAnnotations, body, _) =>
       "func" <+> name.name <> parens(showFormalArgList(args)) <+> parens(showVarDeclList(results)) <>
         spec(showPreconditions(pres) <> showPostconditions(posts) <> showTerminationMeasures(measures) <> showBackendAnnotations(backendAnnotations)) <> opt(body)(b => block(showStmt(b)))
   }
@@ -703,7 +703,7 @@ class ShortPrettyPrinter extends DefaultPrettyPrinter {
 
 
   override def showFunction(f: Function): Doc = f match {
-    case Function(name, args, results, pres, posts, measures, backendAnnotations, _) =>
+    case Function(name, args, results, pres, posts, measures, backendAnnotations, _, _) =>
       "func" <+> name.name <> parens(showFormalArgList(args)) <+> parens(showVarDeclList(results)) <>
         spec(showPreconditions(pres) <>
           showPostconditions(posts) <> showTerminationMeasures(measures) <> showBackendAnnotations(backendAnnotations))

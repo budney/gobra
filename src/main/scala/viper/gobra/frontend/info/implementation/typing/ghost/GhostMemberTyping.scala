@@ -7,8 +7,9 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PBlock, PCodeRootWithResult, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, PParameter, PPreserves, PReturn, PVariadicType, PWithBody}
-import viper.gobra.frontend.info.base.SymbolTable.{MPredicateSpec, MethodImpl, MethodSpec}
+import viper.gobra.ast.frontend.{PAssume, PBlock, PCodeRootWithResult, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, POld, PParameter, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{AstPattern => ap}
+import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
 import viper.gobra.frontend.info.implementation.TypeInfoImpl
 import viper.gobra.frontend.info.implementation.typing.BaseTyping
@@ -96,6 +97,40 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     } else noMessages
   }
 
+  private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
+    if (member.spec.isVerified) {
+      error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
+            member.spec.terminationMeasures.isEmpty) ++
+      error(member, s"\"verified\" function \"${member.id.name}\" has multiple return values. Multi-return encoding is not yet supported.",
+            member.result.outs.size > 1) ++
+      member.spec.posts.flatMap(p =>
+        if (allChildren(p).exists(_.isInstanceOf[POld]))
+          error(p, s"\"verified\" function \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
+        else noMessages
+      ) ++
+      member.body.toVector.flatMap { case (_, block) =>
+        allChildren(block).collect { case a: PAssume => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten
+      }
+    } else noMessages
+  }
+
+  private[typing] def wellDefIfVerifiedMethod(member: PMethodDecl): Messages = {
+    if (member.spec.isVerified) {
+      error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
+            member.spec.terminationMeasures.isEmpty) ++
+      error(member, s"\"verified\" method \"${member.id.name}\" has multiple return values. Multi-return encoding is not yet supported.",
+            member.result.outs.size > 1) ++
+      member.spec.posts.flatMap(p =>
+        if (allChildren(p).exists(_.isInstanceOf[POld]))
+          error(p, s"\"verified\" method \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
+        else noMessages
+      ) ++
+      member.body.toVector.flatMap { case (_, block) =>
+        allChildren(block).collect { case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten
+      }
+    } else noMessages
+  }
+
   private def isSingleResultArg(member: PCodeRootWithResult): Messages = {
     error(member, "For now, pure methods and pure functions must have exactly one result argument", member.result.outs.size != 1)
   }
@@ -119,6 +154,77 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
   private[typing] def nonVariadicArguments(args: Vector[PParameter]): Messages = args.flatMap {
     p: PParameter => error(p, s"Pure members cannot have variadic arguments, but got $p", p.typ.isInstanceOf[PVariadicType])
+  }
+
+  /** Check that no verified function is self-recursive or mutually recursive (v1 restriction). */
+  def wellVerifiedRecursionCheck: Messages = {
+    val verifiedFuncs: Vector[PFunctionDecl] =
+      tree.root.programs.flatMap(_.declarations.collect { case f: PFunctionDecl if f.spec.isVerified => f })
+
+    if (verifiedFuncs.isEmpty) return noMessages
+
+    val funcByName: Map[String, PFunctionDecl] = verifiedFuncs.map(f => f.id.name -> f).toMap
+
+    def calleeNamesInBody(f: PFunctionDecl): Set[String] = {
+      val bodyNodes = f.body.toVector.flatMap { case (_, block) => allChildren(block) }
+      bodyNodes.collect {
+        case invoke: PInvoke => resolve(invoke) match {
+          case Some(ap.FunctionCall(ap.Function(_, symb: FuncSymbol), _)) if symb.isVerified => Some(symb.decl.id.name)
+          case _ => None
+        }
+      }.flatten.toSet
+    }
+
+    // Build adjacency list for verified functions
+    val callGraph: Map[String, Set[String]] = verifiedFuncs.map(f => f.id.name -> calleeNamesInBody(f)).toMap
+
+    // Tarjan's SCC algorithm
+    var index = 0
+    val indexMap = scala.collection.mutable.Map[String, Int]()
+    val lowlink = scala.collection.mutable.Map[String, Int]()
+    val onStack = scala.collection.mutable.Set[String]()
+    val stack = scala.collection.mutable.ArrayBuffer[String]()
+    var msgs: Messages = noMessages
+
+    def strongconnect(v: String): Unit = {
+      indexMap(v) = index
+      lowlink(v) = index
+      index += 1
+      stack.append(v)
+      onStack.add(v)
+
+      for (w <- callGraph.getOrElse(v, Set.empty)) {
+        if (!indexMap.contains(w)) {
+          strongconnect(w)
+          lowlink(v) = math.min(lowlink(v), lowlink(w))
+        } else if (onStack.contains(w)) {
+          lowlink(v) = math.min(lowlink(v), indexMap(w))
+        }
+      }
+
+      if (lowlink(v) == indexMap(v)) {
+        val scc = scala.collection.mutable.ArrayBuffer[String]()
+        var w = ""
+        while (w != v) {
+          w = stack.remove(stack.size - 1)
+          onStack.remove(w)
+          scc.append(w)
+        }
+        if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
+          val cycle = scc.toVector
+          val decl = funcByName(cycle.head)
+          if (cycle.size == 1)
+            msgs ++= error(decl, s"\"verified\" function \"${cycle.head}\" calls itself. Recursive domain axioms are unsound.")
+          else
+            msgs ++= error(decl, s"\"verified\" functions form a recursion cycle: ${cycle.mkString(" -> ")} -> ${cycle.head}. Recursive domain axioms are unsound.")
+        }
+      }
+    }
+
+    for (f <- verifiedFuncs if !indexMap.contains(f.id.name)) {
+      strongconnect(f.id.name)
+    }
+    msgs
   }
 
   override lazy val localImplementationProofs: Vector[(Type, InterfaceT, Vector[String], Vector[String])] = {

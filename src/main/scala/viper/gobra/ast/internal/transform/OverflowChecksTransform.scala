@@ -25,8 +25,8 @@ object OverflowChecksTransform extends InternalTransform {
     // adds overflow checks per statement that contains subexpressions of bounded integer type and adds assume
     /// statements at the beginning of a function or method body assuming that the value of an argument (of
     // bounded integer type) respects the bounds.
-    case f@Function(name, args, results, pres, posts, terminationMeasure, annotations, body) =>
-      Function(name, args, results, pres, posts, terminationMeasure, annotations, body map computeNewBody)(f.info)
+    case f@Function(name, args, results, pres, posts, terminationMeasure, annotations, body, isVerified) =>
+      Function(name, args, results, pres, posts, terminationMeasure, annotations, body map computeNewBody, isVerified)(f.info)
 
     // same as functions
     case m@Method(receiver, name, args, results, pres, posts, terminationMeasure, annotations, body) =>

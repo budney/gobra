@@ -903,6 +903,7 @@ case class PFunctionSpec(
                           backendAnnotations: Vector[PBackendAnnotation],
                           isPure: Boolean = false,
                           isTrusted: Boolean = false,
+                          isVerified: Boolean = false,
                           isOpaque: Boolean = false,
                           mayBeUsedInInit: Boolean = false,
                       ) extends PSpecification {

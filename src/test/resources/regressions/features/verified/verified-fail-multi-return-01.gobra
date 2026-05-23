@@ -1,0 +1,16 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with multiple return values — type error (v1 restriction).
+
+//:: ExpectedOutput(type_error)
+ensures a == x + 1 && b == x - 1
+decreases
+verified
+func multiReturn(x int) (a int, b int) {
+	a = x + 1
+	b = x - 1
+	return a, b
+}

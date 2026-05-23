@@ -1,0 +1,40 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Three verified functions A -> B -> C, all usable in specs.
+
+requires x >= 0
+ensures ret == x + 1
+decreases
+verified
+func addOne(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+requires x >= 0
+ensures ret == x + 2
+decreases
+verified
+func addTwo(x int) (ret int) {
+	ret = addOne(addOne(x))
+	return ret
+}
+
+requires x >= 0
+ensures ret == x + 4
+decreases
+verified
+func addFour(x int) (ret int) {
+	ret = addTwo(addTwo(x))
+	return ret
+}
+
+requires addFour(n) > 10
+ensures result > 10
+func useChain(n int) (result int) {
+	result = addFour(n)
+	return result
+}

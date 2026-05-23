@@ -91,6 +91,7 @@ PREDICATE   : 'predicate';
 WRITEPERM   : 'writePerm' -> mode(NLSEMI);
 NOPERM      : 'noPerm' -> mode(NLSEMI);
 TRUSTED     : 'trusted' -> mode(NLSEMI);
+VERIFIED    : 'verified' -> mode(NLSEMI);
 OUTLINE     : 'outline';
 DUPLICABLE  : 'dup';
 PKG_INV     : 'pkgInvariant';

@@ -151,7 +151,7 @@ trait GhostMiscTyping extends BaseTyping { this: TypeInfoImpl =>
   }
 
   implicit lazy val wellDefSpec: WellDefinedness[PSpecification] = createWellDef {
-    case n@ PFunctionSpec(clauses, terminationMeasures, _, isPure, _, isOpaque, _) =>
+    case n@ PFunctionSpec(clauses, terminationMeasures, _, isPure, isTrusted, isVerified, isOpaque, _) =>
       clauses.map(_.exp).flatMap(assignableToSpec) ++
       n.pres.flatMap(e => allChildren(e).flatMap(illegalPreconditionNode)) ++
       terminationMeasures.flatMap(wellDefTerminationMeasure) ++
@@ -160,7 +160,9 @@ trait GhostMiscTyping extends BaseTyping { this: TypeInfoImpl =>
       error(n, "Specifications can either contain one non-conditional termination measure or multiple conditional-termination measures.", terminationMeasures.length > 1 && !terminationMeasures.forall(isConditional)) ++
       // measures must have the same type
       error(n, "Termination measures must all have the same type.", !hasSameMeasureType(terminationMeasures)) ++
-      error(n, "Opaque can only be used in combination with pure.", isOpaque && !isPure)
+      error(n, "Opaque can only be used in combination with pure.", isOpaque && !isPure) ++
+      error(n, "function cannot have both \"pure\" and \"verified\" annotations", isVerified && isPure) ++
+      error(n, "function cannot have both \"trusted\" and \"verified\" annotations", isVerified && isTrusted)
 
     case n@ PLoopSpec(invariants, terminationMeasure) =>
       invariants.flatMap(assignableToSpec) ++ terminationMeasure.toVector.flatMap(wellDefTerminationMeasure) ++

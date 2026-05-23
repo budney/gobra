@@ -1,0 +1,23 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Mutually recursive verified functions form a cycle — type error.
+
+ensures ret == x
+decreases
+verified
+func cyclicA(x int) (ret int) {
+	ret = cyclicB(x)
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+ensures ret == x
+decreases
+verified
+func cyclicB(x int) (ret int) {
+	ret = cyclicA(x)
+	return ret
+}

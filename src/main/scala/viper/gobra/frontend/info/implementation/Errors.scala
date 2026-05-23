@@ -40,7 +40,9 @@ trait Errors { this: TypeInfoImpl =>
       }
 
       if (partialRes.isEmpty) {
-        wellImplementationProofs match {
+        val recursionMsgs = wellVerifiedRecursionCheck
+        if (recursionMsgs.nonEmpty) (recursionMsgs, Vector.empty)
+        else wellImplementationProofs match {
           case Left(msgs) => (msgs, Vector.empty)
           case Right(missing) => (Vector.empty, missing)
         }

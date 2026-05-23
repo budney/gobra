@@ -24,6 +24,7 @@ trait MemberTyping extends BaseTyping { this: TypeInfoImpl =>
     case n: PFunctionDecl =>
       wellDefVariadicArgs(n.args) ++
         wellDefIfPureFunction(n) ++
+        wellDefIfVerifiedFunction(n) ++
         wellDefIfInitBlock(n) ++
         wellDefIfMain(n) ++
         wellFoundedIfNeeded(n) ++
@@ -32,6 +33,7 @@ trait MemberTyping extends BaseTyping { this: TypeInfoImpl =>
       wellDefVariadicArgs(m.args) ++
         isReceiverType.errors(miscType(m.receiver))(member) ++
         wellDefIfPureMethod(m) ++
+        wellDefIfVerifiedMethod(m) ++
         wellFoundedIfNeeded(m) ++
         noConditionalMeasureIfGhostOrPure(m)
     case b: PConstDecl =>

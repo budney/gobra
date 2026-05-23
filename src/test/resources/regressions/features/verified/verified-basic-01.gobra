@@ -1,0 +1,24 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with a multi-statement body. Its postcondition
+// becomes a domain axiom usable in other functions' specs.
+
+requires x > 0
+ensures ret == x + 1
+decreases
+verified
+func increment(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+// The caller can use increment in its precondition because increment is verified.
+requires increment(n) > 5
+ensures result > 5
+func useIncrement(n int) (result int) {
+	result = increment(n)
+	return result
+}

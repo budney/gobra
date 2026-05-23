@@ -1,0 +1,14 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function without a decreases clause should be a type error.
+
+//:: ExpectedOutput(type_error)
+ensures ret == x + 1
+verified
+func missingDecrease(x int) (ret int) {
+	ret = x + 1
+	return ret
+}

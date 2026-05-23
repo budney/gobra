@@ -1,0 +1,32 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified functions where the second calls the first in its body.
+// Both are usable in spec expressions of a third function.
+
+requires x >= 0
+ensures ret == x * 2
+decreases
+verified
+func double(x int) (ret int) {
+	ret = x + x
+	return ret
+}
+
+requires x >= 0
+ensures ret == x * 4
+decreases
+verified
+func quadruple(x int) (ret int) {
+	ret = double(double(x))
+	return ret
+}
+
+requires quadruple(n) > 20
+ensures result > 20
+func useQuadruple(n int) (result int) {
+	result = quadruple(n)
+	return result
+}

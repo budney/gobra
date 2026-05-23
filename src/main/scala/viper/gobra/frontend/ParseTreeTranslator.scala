@@ -928,6 +928,7 @@ class ParseTreeTranslator(pom: PositionManager, source: Source, specOnly : Boole
       annotations,
       isPure = ctx.pure,
       isTrusted = ctx.trusted,
+      isVerified = ctx.verified,
       isOpaque = ctx.opaque,
       mayBeUsedInInit = ctx.mayInit,
     )

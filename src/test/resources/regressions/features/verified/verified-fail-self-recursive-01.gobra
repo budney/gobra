@@ -1,0 +1,19 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A self-recursive verified function — type error because recursive domain axioms are unsound.
+
+//:: ExpectedOutput(type_error)
+ensures ret == x
+decreases x
+verified
+func selfRecursive(x int) (ret int) {
+	if x <= 0 {
+		ret = 0
+	} else {
+		ret = selfRecursive(x - 1) + 1
+	}
+	return ret
+}

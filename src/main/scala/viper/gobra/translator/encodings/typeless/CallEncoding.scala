@@ -30,7 +30,16 @@ class CallEncoding extends Encoding {
 
       for {
         vArgs <- sequence(args map ctx.expression)
-        app = vpr.FuncApp(func.name, vArgs)(pos, annotatedInfo, resultType, errT)
+        app = ctx.lookup(func) match {
+          case f: in.Function if f.isVerified =>
+            vpr.DomainFuncApp(
+              funcname = func.name + "_spec",
+              args = vArgs,
+              typVarMap = Map.empty
+            )(pos, annotatedInfo, resultType, func.name + "_domain", errT)
+          case _ =>
+            vpr.FuncApp(func.name, vArgs)(pos, annotatedInfo, resultType, errT)
+        }
       } yield app
 
     case x@in.PureMethodCall(recv, meth, args, typ, reveal) =>

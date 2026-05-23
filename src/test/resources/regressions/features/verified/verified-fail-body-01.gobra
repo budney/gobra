@@ -1,0 +1,16 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// The body does not satisfy the postcondition — Gobra should report an error.
+
+requires x > 0
+//:: ExpectedOutput(postcondition_error:assertion_error)
+ensures ret == x + 2
+decreases
+verified
+func badIncrement(x int) (ret int) {
+	ret = x + 1  // wrong: should be x + 2
+	return ret
+}

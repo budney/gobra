@@ -1,0 +1,29 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A pure helper used inside a verified function.
+
+pure
+ensures ret == x + 1
+func pureIncrement(x int) (ret int) {
+	return x + 1
+}
+
+requires x > 0
+ensures ret == pureIncrement(x)
+decreases
+verified
+func verifiedUsesPure(x int) (ret int) {
+	ret = pureIncrement(x)
+	return ret
+}
+
+// verifiedUsesPure is usable in spec positions
+requires verifiedUsesPure(n) > 5
+ensures result > 5
+func caller(n int) (result int) {
+	result = verifiedUsesPure(n)
+	return result
+}

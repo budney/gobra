@@ -576,7 +576,8 @@ object Desugar extends LazyLogging {
       val functionInfo = functionMemberOrLitD(decl, fsrc, new FunctionContext(_ => _ => in.Seqn(Vector.empty)(fsrc)))
 
       in.Function(name, functionInfo.args, functionInfo.results, functionInfo.pres, functionInfo.posts,
-        functionInfo.terminationMeasures, functionInfo.backendAnnotations, functionInfo.body)(fsrc)
+        functionInfo.terminationMeasures, functionInfo.backendAnnotations, functionInfo.body,
+        isVerified = decl.spec.isVerified)(fsrc)
     }
 
     private case class FunctionInfo(args: Vector[in.Parameter.In],
@@ -2207,9 +2208,9 @@ object Desugar extends LazyLogging {
 
       val isPure = p.callee match {
         case base: ap.Symbolic => base.symb match {
-          case f: st.Function => f.isPure
+          case f: st.Function => f.isPure || f.isVerified
           case c: st.Closure => c.isPure
-          case m: st.Method => m.isPure
+          case m: st.Method => m.isPure || m.isVerified
           case _: st.DomainFunction => true
           case f: st.BuiltInFunction => f.isPure
           case m: st.BuiltInMethod => m.isPure
