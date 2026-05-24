@@ -3,18 +3,18 @@
 
 package pkg
 
-// A verified method with old() in a preserves clause is a type error.
-// The preserves postcondition side appears in the domain axiom body, and
+// A verified method with old() in an ensures clause is a type error.
+// The postcondition is promoted verbatim to the body of a Viper domain axiom.
 // Viper domain axioms do not support state-snapshot (old) expressions.
 
 type Counter struct{ n int }
 
 ensures ret == c.n + 1
 //:: ExpectedOutput(type_error)
-preserves old(c.n) >= 0
+ensures old(c.n) >= 0
 decreases
 verified
-func (c Counter) withOldPreserves() (ret int) {
+func (c Counter) withOldInEnsures() (ret int) {
 	ret = c.n + 1
 	return ret
 }

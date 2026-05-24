@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -99,78 +99,65 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
   private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
     if (member.spec.isVerified) {
+      val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String)
       error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void functions produce a dead axiom and are not meaningful as verified.",
             member.result.outs.size != 1) ++
-      member.spec.posts.flatMap(p =>
-        if (allChildren(p).exists(_.isInstanceOf[POld]))
-          error(p, s"\"verified\" function \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
-        else noMessages
-      ) ++
-      // Viper domain axioms cannot contain heap-permission assertions (acc(...)).
-      // Such assertions in requires/ensures would appear verbatim in the axiom body,
-      // crashing the backend or producing unsound axioms.
-      (member.spec.pres ++ member.spec.preserves).flatMap(p =>
-        if (containsHeapPermission(p))
-          error(p, s"\"verified\" function \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its precondition. Viper domain axioms cannot contain resource assertions.")
-        else noMessages
-      ) ++
-      (member.spec.posts ++ member.spec.preserves).flatMap(p =>
-        if (containsHeapPermission(p))
-          error(p, s"\"verified\" function \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its postcondition. Viper domain axioms cannot contain resource assertions.")
-        else noMessages
-      ) ++
+      member.spec.pres.flatMap(check(_, "precondition")) ++
+      member.spec.posts.flatMap(check(_, "postcondition")) ++
+      member.spec.preserves.flatMap(check(_, "preserves clause")) ++
       member.body.toVector.flatMap { case (_, block) =>
-        allChildren(block).collect { case a: PAssume => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten
+        allChildren(block).collect {
+          case a: PAssume => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.")
+          case a: PInhale => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain inhale statements. Axioms from verified functions must be earned, not assumed.")
+        }.flatten
       }
     } else noMessages
   }
 
   private[typing] def wellDefIfVerifiedMethod(member: PMethodDecl): Messages = {
     if (member.spec.isVerified) {
+      val isPtr = member.receiver.typ.isInstanceOf[PMethodReceivePointer]
+      val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, isPtr)
       error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void methods produce a dead axiom and are not meaningful as verified.",
             member.result.outs.size != 1) ++
-      member.spec.posts.flatMap(p =>
-        if (allChildren(p).exists(_.isInstanceOf[POld]))
-          error(p, s"\"verified\" method \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
-        else noMessages
-      ) ++
-      (member.spec.pres ++ member.spec.preserves).flatMap(p =>
-        if (containsHeapPermission(p))
-          error(p, s"\"verified\" method \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its precondition. Viper domain axioms cannot contain resource assertions.")
-        else noMessages
-      ) ++
-      (member.spec.posts ++ member.spec.preserves).flatMap(p =>
-        if (containsHeapPermission(p))
-          error(p, s"\"verified\" method \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its postcondition. Viper domain axioms cannot contain resource assertions.")
-        else noMessages
-      ) ++
-      // Viper domain axioms cannot contain heap (location) accesses.
-      // A pointer receiver method whose spec reads a field through the pointer would
-      // produce such an access in the axiom body or antecedent — detect this early.
-      (if (member.receiver.typ.isInstanceOf[PMethodReceivePointer]) {
-        def hasFieldRead(clauses: Seq[PNode]): Boolean =
-          clauses.exists(p =>
-            allChildren(p).exists {
-              case dot: PDot => resolve(dot) match {
-                case Some(ap.FieldSelection(_, _, _, _)) => true
-                case _                                   => false
-              }
-              case _ => false
-            }
-          )
-        val heapReadInPost = hasFieldRead(member.spec.posts)
-        val heapReadInPre  = hasFieldRead(member.spec.pres ++ member.spec.preserves)
-        error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its postcondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the postcondition.", heapReadInPost) ++
-        error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its precondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the precondition.", heapReadInPre)
-      } else noMessages) ++
+      member.spec.pres.flatMap(check(_, "precondition")) ++
+      member.spec.posts.flatMap(check(_, "postcondition")) ++
+      member.spec.preserves.flatMap(check(_, "preserves clause")) ++
       member.body.toVector.flatMap { case (_, block) =>
-        allChildren(block).collect { case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten
+        allChildren(block).collect {
+          case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.")
+          case a: PInhale => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain inhale statements. Axioms from verified functions must be earned, not assumed.")
+        }.flatten
       }
     } else noMessages
+  }
+
+  /** Check one spec clause for constructs incompatible with verified domain axioms.
+    * clauseKind is "precondition", "postcondition", or "preserves clause".
+    * checkFieldRead should be true for pointer-receiver methods. */
+  private def validateVerifiedSpecClause(
+      memberKind: String, memberName: String,
+      p: PNode, clauseKind: String, checkFieldRead: Boolean = false
+  ): Messages = {
+    (if ((p +: allChildren(p)).exists(_.isInstanceOf[POld]))
+      error(p, s"\"verified\" $memberKind \"$memberName\" uses old(...) in its $clauseKind. State-snapshotting for verified axioms is not yet supported.")
+    else noMessages) ++
+    (if (containsHeapPermission(p))
+      error(p, s"\"verified\" $memberKind \"$memberName\" has a heap-permission assertion (acc(...)) in its $clauseKind. Viper domain axioms cannot contain resource assertions.")
+    else noMessages) ++
+    (if (checkFieldRead && (p +: allChildren(p)).exists {
+      case dot: PDot => resolve(dot) match {
+        case Some(ap.FieldSelection(_, _, _, _)) => true
+        case _                                   => false
+      }
+      case _ => false
+    })
+      error(p, s"\"verified\" $memberKind \"$memberName\" has a pointer receiver and its $clauseKind reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the $clauseKind.")
+    else noMessages)
   }
 
   /** True if the expression tree rooted at `p` contains any heap-permission assertion
@@ -226,15 +213,9 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       case _                => n.toString
     }
 
-    // Collect edges: which verified members does this member call in its body?
-    // Body-position calls resolve to ap.FunctionCall wrapping the method/function kind.
-    def calleesInBody(n: PNode): Set[PNode] = {
-      val bodyNodes: Vector[PNode] = n match {
-        case f: PFunctionDecl => f.body.toVector.flatMap { case (_, block) => allChildren(block) }
-        case m: PMethodDecl   => m.body.toVector.flatMap { case (_, block) => allChildren(block) }
-        case _                => Vector.empty
-      }
-      bodyNodes.collect {
+    // Resolve a vector of AST nodes to the set of verified member declarations they call.
+    def resolveVerifiedCallees(nodes: Vector[PNode]): Set[PNode] =
+      nodes.collect {
         case invoke: PInvoke => resolve(invoke) match {
           case Some(ap.FunctionCall(ap.Function(_, symb: FuncSymbol), _))
               if symb.isVerified && verifiedFuncDecls.contains(symb.decl) =>
@@ -248,9 +229,34 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
           case _ => None
         }
       }.flatten.toSet
+
+    // Collect edges from verified member body calls to other verified members.
+    def calleesInBody(n: PNode): Set[PNode] = {
+      val bodyNodes: Vector[PNode] = n match {
+        case f: PFunctionDecl => f.body.toVector.flatMap { case (_, block) => allChildren(block) }
+        case m: PMethodDecl   => m.body.toVector.flatMap { case (_, block) => allChildren(block) }
+        case _                => Vector.empty
+      }
+      resolveVerifiedCallees(bodyNodes)
     }
 
-    val callGraph: Map[PNode, Set[PNode]] = allVerified.map(n => n -> calleesInBody(n)).toMap
+    // Collect edges from verified member spec (pre/post/preserves) calls to other verified members.
+    // Spec-level mutual references create circular domain axioms and must be rejected.
+    // We include each spec expression itself (not just its children) in case a bare PInvoke
+    // is used directly as a spec expression (e.g. `requires g(x)` where g returns bool).
+    def calleesInSpec(n: PNode): Set[PNode] = {
+      val specNodes: Vector[PNode] = n match {
+        case f: PFunctionDecl =>
+          (f.spec.pres ++ f.spec.posts ++ f.spec.preserves).flatMap(p => p +: allChildren(p))
+        case m: PMethodDecl =>
+          (m.spec.pres ++ m.spec.posts ++ m.spec.preserves).flatMap(p => p +: allChildren(p))
+        case _ => Vector.empty
+      }
+      resolveVerifiedCallees(specNodes)
+    }
+
+    val callGraph: Map[PNode, Set[PNode]] =
+      allVerified.map(n => n -> (calleesInBody(n) ++ calleesInSpec(n))).toMap
 
     // Tarjan's SCC algorithm over PNode keys (reference identity via `eq` for stack termination)
     var index = 0
@@ -290,8 +296,12 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
           val decl  = cycle.head
           if (cycle.size == 1)
             msgs ++= error(decl, s"\"verified\" ${nodeName(decl)} calls itself. Recursive domain axioms are unsound.")
-          else
-            msgs ++= error(decl, s"\"verified\" members form a recursion cycle: ${cycle.map(nodeName).mkString(" -> ")} -> ${nodeName(cycle.head)}. Recursive domain axioms are unsound.")
+          else {
+            // Tarjan pops SCC members in reverse discovery order; reversing restores call order
+            // so the cycle reads A -> B -> C -> A rather than C -> B -> A -> C.
+            val ordered = cycle.reverse
+            msgs ++= error(decl, s"\"verified\" members form a recursion cycle: ${ordered.map(nodeName).mkString(" -> ")} -> ${nodeName(ordered.head)}. Recursive domain axioms are unsound.")
+          }
         }
       }
     }

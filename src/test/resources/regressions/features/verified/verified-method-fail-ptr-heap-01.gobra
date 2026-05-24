@@ -11,6 +11,7 @@ type Cell struct{ v int }
 
 //:: ExpectedOutput(type_error)
 requires c.v >= 0
+//:: ExpectedOutput(type_error)
 ensures ret == c.v + 1
 decreases
 verified

@@ -3,17 +3,16 @@
 
 package pkg
 
-// A verified function with old() in a preserves clause is a type error.
-// preserves is both a precondition and a postcondition; its postcondition side
-// is included verbatim in the domain axiom. Viper domain axioms cannot contain
-// state-snapshotting operators such as old().
+// A verified function with old() in an ensures clause is a type error.
+// The postcondition is promoted verbatim to the body of a Viper domain axiom.
+// Viper domain axioms cannot contain state-snapshotting operators such as old().
 
 ensures ret == x + 1
 //:: ExpectedOutput(type_error)
-preserves old(x) >= 0
+ensures old(x) >= 0
 decreases
 verified
-func withOldInPreserves(x int) (ret int) {
+func withOldInEnsures(x int) (ret int) {
 	ret = x + 1
 	return ret
 }
