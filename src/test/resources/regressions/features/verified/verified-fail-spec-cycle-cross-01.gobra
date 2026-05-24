@@ -1,0 +1,28 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function references a verified method in its postcondition, and
+// the verified method references the function in its precondition. The
+// spec-level cross-domain (func↔method) cycle must be caught.
+
+type Relay struct{ n int }
+
+ensures ret == r.relaySpec()
+decreases
+verified
+func bridgeSpec(r Relay) (ret int) {
+	ret = r.n  // body does NOT call relaySpec
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+requires bridgeSpec(nd) > 0
+ensures ret == nd.n
+decreases
+verified
+func (nd Relay) relaySpec() (ret int) {
+	ret = nd.n  // body does NOT call bridgeSpec
+	return ret
+}

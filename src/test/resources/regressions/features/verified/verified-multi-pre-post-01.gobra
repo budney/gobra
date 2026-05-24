@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with multiple preconditions and multiple postconditions.
+// Each precondition contributes to the domain axiom antecedent (conjoined);
+// each postcondition generates its own domain axiom.
+
+requires x >= 0
+requires y >= 0
+requires x + y < 1000
+ensures ret >= x
+ensures ret == x + y
+decreases
+verified
+func addBounded(x int, y int) (ret int) {
+	ret = x + y
+	return ret
+}
+
+// All three preconditions of addBounded are required by the caller, and both
+// postcondition axioms fire once the preconditions are established.
+requires a >= 0 && b >= 0 && a+b < 1000
+ensures result == a + b
+ensures result >= a
+func useAddBounded(a int, b int) (result int) {
+	result = addBounded(a, b)
+	return result
+}

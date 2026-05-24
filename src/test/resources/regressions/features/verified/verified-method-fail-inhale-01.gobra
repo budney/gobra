@@ -1,0 +1,21 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method that contains an inhale statement is a type error.
+// inhale adds assertions to the proof state without verification, exactly as
+// assume does. Both undermine the "earned" axiom guarantee of verified.
+
+type Box struct{ v int }
+
+requires b.v > 0
+ensures ret == 42
+decreases
+verified
+func (b Box) withInhale() (ret int) {
+	ret = b.v
+	//:: ExpectedOutput(type_error)
+	inhale ret == 42
+	return ret
+}

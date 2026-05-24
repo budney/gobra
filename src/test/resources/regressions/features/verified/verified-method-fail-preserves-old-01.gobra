@@ -1,0 +1,20 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with old() in a preserves clause is a type error.
+// The preserves postcondition side appears in the domain axiom body, and
+// Viper domain axioms do not support state-snapshot (old) expressions.
+
+type Counter struct{ n int }
+
+ensures ret == c.n + 1
+//:: ExpectedOutput(type_error)
+preserves old(c.n) >= 0
+decreases
+verified
+func (c Counter) withOldPreserves() (ret int) {
+	ret = c.n + 1
+	return ret
+}

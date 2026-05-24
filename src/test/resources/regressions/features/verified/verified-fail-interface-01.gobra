@@ -7,8 +7,8 @@ package pkg
 // Interface methods have no body to verify; the annotation is meaningless
 // and would be silently ignored without this check.
 
-//:: ExpectedOutput(type_error)
 type Getter interface {
+	//:: ExpectedOutput(type_error)
 	requires x > 0
 	ensures  ret > 0
 	decreases

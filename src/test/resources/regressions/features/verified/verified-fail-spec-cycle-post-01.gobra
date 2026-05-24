@@ -1,0 +1,26 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified functions that reference each other only in their postconditions
+// (no body calls) form a spec-level cycle. The resulting domain axioms are
+// circular and would cause Z3 quantifier matching loops at backend time.
+// The cycle check must scan specs, not only bodies.
+
+ensures ret == g(x)
+decreases
+verified
+func f(x int) (ret int) {
+	ret = x  // body does NOT call g
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+ensures ret == f(x)
+decreases
+verified
+func g(x int) (ret int) {
+	ret = x  // body does NOT call f
+	return ret
+}

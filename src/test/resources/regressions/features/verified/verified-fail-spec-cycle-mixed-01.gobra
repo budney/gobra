@@ -1,0 +1,25 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// f references g in its postcondition; g references f in its precondition.
+// This asymmetric (mixed pre/post) spec-level cycle must also be caught.
+
+ensures ret == gMix(x)
+decreases
+verified
+func fMix(x int) (ret int) {
+	ret = x  // body does NOT call g
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+requires fMix(x) > 0
+ensures ret == x + 1
+decreases
+verified
+func gMix(x int) (ret int) {
+	ret = x + 1  // body does NOT call f
+	return ret
+}

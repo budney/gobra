@@ -1,0 +1,27 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified functions that reference each other only in their preconditions
+// form a spec-level cycle. The precondition becomes the antecedent of the
+// domain axiom, so circular precondition references create circular axioms.
+
+requires gPre(x) > 0
+ensures ret == x + 1
+decreases
+verified
+func fPre(x int) (ret int) {
+	ret = x + 1  // body does NOT call gPre
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+requires fPre(x) > 0
+ensures ret == x + 1
+decreases
+verified
+func gPre(x int) (ret int) {
+	ret = x + 1  // body does NOT call fPre
+	return ret
+}

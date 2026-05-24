@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose precondition references itself forms a
+// spec-level self-cycle. The domain axiom's antecedent contains the
+// axiom's own trigger, making the axiom impossible to activate.
+
+//:: ExpectedOutput(type_error)
+requires fSelf(x) > 0
+ensures ret == x + 1
+decreases
+verified
+func fSelf(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
