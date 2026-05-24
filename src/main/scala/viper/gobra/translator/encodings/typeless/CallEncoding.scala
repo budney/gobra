@@ -30,15 +30,21 @@ class CallEncoding extends Encoding {
 
       for {
         vArgs <- sequence(args map ctx.expression)
-        app = scala.util.Try(ctx.lookup(func)).toOption match {
-          case Some(f: in.Function) if f.isVerified =>
+        // Closure-derived proxies may not appear in the function lookup table; treat
+        // a missing-key exception the same as a non-verified lookup result.  All other
+        // exceptions are unexpected and are re-thrown.
+        app = scala.util.Try(ctx.lookup(func)) match {
+          case scala.util.Success(f: in.Function) if f.isVerified =>
             vpr.DomainFuncApp(
               funcname = func.name + "_spec",
               args = vArgs,
               typVarMap = Map.empty
             )(pos, annotatedInfo, resultType, func.name + "_domain", errT)
-          case _ =>
+          case scala.util.Success(_) =>
             vpr.FuncApp(func.name, vArgs)(pos, annotatedInfo, resultType, errT)
+          case scala.util.Failure(_: java.util.NoSuchElementException) =>
+            vpr.FuncApp(func.name, vArgs)(pos, annotatedInfo, resultType, errT)
+          case scala.util.Failure(ex) => throw ex
         }
       } yield app
 
@@ -51,15 +57,18 @@ class CallEncoding extends Encoding {
       for {
         vRecv <- ctx.expression(recv)
         vArgs <- sequence(args map ctx.expression)
-        app = scala.util.Try(ctx.lookup(meth)).toOption match {
-          case Some(m: in.Method) if m.isVerified =>
+        app = scala.util.Try(ctx.lookup(meth)) match {
+          case scala.util.Success(m: in.Method) if m.isVerified =>
             vpr.DomainFuncApp(
               funcname  = meth.uniqueName + "_spec",
               args      = vRecv +: vArgs,
               typVarMap = Map.empty
             )(pos, annotatedInfo, resultType, meth.uniqueName + "_domain", errT)
-          case _ =>
+          case scala.util.Success(_) =>
             vpr.FuncApp(meth.uniqueName, vRecv +: vArgs)(pos, annotatedInfo, resultType, errT)
+          case scala.util.Failure(_: java.util.NoSuchElementException) =>
+            vpr.FuncApp(meth.uniqueName, vRecv +: vArgs)(pos, annotatedInfo, resultType, errT)
+          case scala.util.Failure(ex) => throw ex
         }
       } yield app
   }

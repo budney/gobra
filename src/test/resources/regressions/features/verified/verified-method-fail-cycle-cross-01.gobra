@@ -8,6 +8,7 @@ package pkg
 
 type Node struct{ v int }
 
+//:: ExpectedOutput(type_error)
 requires x >= 0
 ensures ret == x
 decreases

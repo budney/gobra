@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with no ensures clauses is a type error.
+// Without postconditions the domain function is unconstrained and
+// the method cannot serve as a useful spec term.
+
+type Box struct{ v int }
+
+//:: ExpectedOutput(type_error)
+decreases
+verified
+func (b Box) noPost() (ret int) {
+	ret = b.v
+	return ret
+}

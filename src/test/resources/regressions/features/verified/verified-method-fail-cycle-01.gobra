@@ -7,6 +7,7 @@ package pkg
 
 type Ring struct{ n int }
 
+//:: ExpectedOutput(type_error)
 ensures ret == r.n
 decreases
 verified

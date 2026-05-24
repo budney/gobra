@@ -13,5 +13,7 @@ type Holder struct{ p *int }
 ensures acc(h.p)
 decreases
 verified
-func allocHolder(h *Holder) {
+func allocHolder(h *Holder) (ret int) {
+	ret = 0
+	return ret
 }

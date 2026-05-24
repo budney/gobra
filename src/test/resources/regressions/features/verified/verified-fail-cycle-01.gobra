@@ -5,6 +5,7 @@ package pkg
 
 // Mutually recursive verified functions form a cycle — type error.
 
+//:: ExpectedOutput(type_error)
 ensures ret == x
 decreases
 verified

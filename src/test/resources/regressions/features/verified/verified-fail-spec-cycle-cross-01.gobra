@@ -9,6 +9,7 @@ package pkg
 
 type Relay struct{ n int }
 
+//:: ExpectedOutput(type_error)
 ensures ret == r.relaySpec()
 decreases
 verified

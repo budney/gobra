@@ -6,6 +6,7 @@ package pkg
 // f references g in its postcondition; g references f in its precondition.
 // This asymmetric (mixed pre/post) spec-level cycle must also be caught.
 
+//:: ExpectedOutput(type_error)
 ensures ret == gMix(x)
 decreases
 verified

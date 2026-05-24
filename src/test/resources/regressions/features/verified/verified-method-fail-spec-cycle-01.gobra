@@ -8,6 +8,7 @@ package pkg
 
 type Pair struct{ a, b int }
 
+//:: ExpectedOutput(type_error)
 requires p.a >= 0
 ensures ret == p.pingM()
 decreases

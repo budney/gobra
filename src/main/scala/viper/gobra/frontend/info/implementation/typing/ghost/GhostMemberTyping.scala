@@ -104,8 +104,12 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
             member.body.isEmpty) ++
       error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void functions produce a dead axiom and are not meaningful as verified.",
-            member.result.outs.size != 1) ++
+      error(member, s"\"verified\" function \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void function produces no usable trigger and is not meaningful as verified.",
+            member.result.outs.size == 0) ++
+      error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value (the domain encoding does not yet support multiple return values).",
+            member.result.outs.size > 1) ++
+      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the function cannot be used as a useful spec term.",
+            member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
       member.spec.posts.flatMap(check(_, "postcondition")) ++
       member.spec.preserves.flatMap(check(_, "preserves clause")) ++
@@ -126,8 +130,12 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
             member.body.isEmpty) ++
       error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void methods produce a dead axiom and are not meaningful as verified.",
-            member.result.outs.size != 1) ++
+      error(member, s"\"verified\" method \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void method produces no usable trigger and is not meaningful as verified.",
+            member.result.outs.size == 0) ++
+      error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value (the domain encoding does not yet support multiple return values).",
+            member.result.outs.size > 1) ++
+      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the method cannot be used as a useful spec term.",
+            member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
       member.spec.posts.flatMap(check(_, "postcondition")) ++
       member.spec.preserves.flatMap(check(_, "preserves clause")) ++
@@ -307,14 +315,15 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
         }
         if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
           val cycle = scc.toVector
-          val decl  = cycle.head
           if (cycle.size == 1)
-            msgs ++= error(decl, s"\"verified\" ${nodeName(decl)} calls itself. Recursive domain axioms are unsound.")
+            msgs ++= error(cycle.head, s"\"verified\" ${nodeName(cycle.head)} calls itself. Recursive domain axioms are unsound.")
           else {
             // Tarjan pops SCC members in reverse discovery order; reversing restores call order
             // so the cycle reads A -> B -> C -> A rather than C -> B -> A -> C.
             val ordered = cycle.reverse
-            msgs ++= error(decl, s"\"verified\" members form a recursion cycle: ${ordered.map(nodeName).mkString(" -> ")} -> ${nodeName(ordered.head)}. Recursive domain axioms are unsound.")
+            val cycleDesc = s"${ordered.map(nodeName).mkString(" -> ")} -> ${nodeName(ordered.head)}"
+            // Report on every member so users see the full cycle without chasing one error at a time.
+            msgs ++= ordered.flatMap(n => error(n, s"\"verified\" members form a recursion cycle: $cycleDesc. Recursive domain axioms are unsound."))
           }
         }
       }

@@ -7,6 +7,7 @@ package pkg
 // form a spec-level cycle. The precondition becomes the antecedent of the
 // domain axiom, so circular precondition references create circular axioms.
 
+//:: ExpectedOutput(type_error)
 requires gPre(x) > 0
 ensures ret == x + 1
 decreases

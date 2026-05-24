@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with no ensures clauses is a type error.
+// "verified" promotes postconditions to Viper domain axioms; without any
+// postcondition the domain function is unconstrained and the function
+// cannot serve as a useful spec term.
+
+//:: ExpectedOutput(type_error)
+decreases
+verified
+func noPost(x int) (ret int) {
+	ret = x + 1
+	return ret
+}

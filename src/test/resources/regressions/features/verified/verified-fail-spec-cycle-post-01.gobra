@@ -8,6 +8,7 @@ package pkg
 // circular and would cause Z3 quantifier matching loops at backend time.
 // The cycle check must scan specs, not only bodies.
 
+//:: ExpectedOutput(type_error)
 ensures ret == g(x)
 decreases
 verified
