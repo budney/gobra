@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// "verified" on an interface method signature is a type error.
+// Interface methods have no body to verify; the annotation is meaningless
+// and would be silently ignored without this check.
+
+//:: ExpectedOutput(type_error)
+type Getter interface {
+	requires x > 0
+	ensures  ret > 0
+	decreases
+	verified
+	fetch(x int) (ret int)
+}

@@ -1,0 +1,21 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with a pointer receiver whose precondition reads a field
+// through the heap is a type error.  The precondition appears in the axiom
+// antecedent — a heap location access there is equally illegal in a Viper
+// domain axiom.
+
+type Cell struct{ v int }
+
+//:: ExpectedOutput(type_error)
+requires c.v >= 0
+ensures  ret > 0
+decreases
+verified
+func (c *Cell) isNonNeg() (ret int) {
+	ret = 1
+	return ret
+}

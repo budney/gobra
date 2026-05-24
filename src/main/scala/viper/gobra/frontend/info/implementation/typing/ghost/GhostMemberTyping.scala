@@ -149,21 +149,23 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
         else noMessages
       ) ++
       // Viper domain axioms cannot contain heap (location) accesses.
-      // A pointer receiver method whose postcondition reads a field through the
-      // pointer would produce such an access in the axiom — detect this early.
+      // A pointer receiver method whose spec reads a field through the pointer would
+      // produce such an access in the axiom body or antecedent — detect this early.
       (if (member.receiver.typ.isInstanceOf[PMethodReceivePointer]) {
-        val heapReadInPost = member.spec.posts.exists(p =>
-          allChildren(p).exists {
-            case dot: PDot => resolve(dot) match {
-              case Some(ap.FieldSelection(_, _, _, _)) => true
-              case _                                   => false
+        def hasFieldRead(clauses: Seq[PNode]): Boolean =
+          clauses.exists(p =>
+            allChildren(p).exists {
+              case dot: PDot => resolve(dot) match {
+                case Some(ap.FieldSelection(_, _, _, _)) => true
+                case _                                   => false
+              }
+              case _ => false
             }
-            case _ => false
-          }
-        )
-        if (heapReadInPost)
-          error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its postcondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the postcondition.")
-        else noMessages
+          )
+        val heapReadInPost = hasFieldRead(member.spec.posts)
+        val heapReadInPre  = hasFieldRead(member.spec.pres ++ member.spec.preserves)
+        error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its postcondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the postcondition.", heapReadInPost) ++
+        error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its precondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the precondition.", heapReadInPre)
       } else noMessages) ++
       member.body.toVector.flatMap { case (_, block) =>
         allChildren(block).collect { case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten

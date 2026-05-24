@@ -89,10 +89,15 @@ trait TypeTyping extends BaseTyping { this: TypeInfoImpl =>
             noConditionalMeasureErrors(sig.spec.terminationMeasures)
           else noMessages
         }
+        // Interface method signatures have no body; "verified" requires a body to prove.
+        val sigsWithVerifiedErrors = t.methSpecs.flatMap { sig =>
+          error(sig, s"\"verified\" annotation is not allowed on interface method signatures: \"${sig.id.name}\" has no body to verify. Use a concrete method implementation instead.", sig.spec.isVerified)
+        }
         methodSet.errors(t) ++
           error(t, "Interface declaration contains methods annotated with 'mayInit'.", methodsContainMayInit) ++
           sigsWithWildcardMeasuresErrors ++
           sigsWithConditionalMeasuresErrors ++
+          sigsWithVerifiedErrors ++
           containsRedeclarations(t) // temporary check
       } else {
         isRecursiveInterface
