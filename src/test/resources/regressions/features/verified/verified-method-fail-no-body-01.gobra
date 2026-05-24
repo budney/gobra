@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method without a body is a type error.
+// "verified" promotes the postcondition to a domain axiom, which must be
+// earned by actual verification of the body. A bodyless declaration has
+// nothing to verify against, so the axiom would be unproven — unsound.
+
+type Box struct{ v int }
+
+//:: ExpectedOutput(type_error)
+ensures ret > 0
+decreases
+verified
+func (b Box) falseAxiom() (ret int)

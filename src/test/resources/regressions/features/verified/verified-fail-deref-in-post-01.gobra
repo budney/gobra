@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose postcondition dereferences a pointer is a type
+// error. The postcondition is promoted verbatim to a Viper domain axiom body.
+// Viper domain axioms cannot contain heap accesses, including pointer
+// dereferences (*ptr), which require heap state to evaluate.
+
+//:: ExpectedOutput(type_error)
+ensures ret == *ptr
+decreases
+verified
+func readPtr(ptr *int) (ret int) {
+	ret = *ptr
+	return ret
+}

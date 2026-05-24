@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDeref, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -100,6 +100,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
   private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
     if (member.spec.isVerified) {
       val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String)
+      error(member, s"\"verified\" function \"${member.id.name}\" must have a body. The postcondition is promoted to a domain axiom that must be earned by verifying the body; a bodyless declaration would produce an unproven axiom.",
+            member.body.isEmpty) ++
       error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void functions produce a dead axiom and are not meaningful as verified.",
@@ -120,6 +122,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     if (member.spec.isVerified) {
       val isPtr = member.receiver.typ.isInstanceOf[PMethodReceivePointer]
       val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, isPtr)
+      error(member, s"\"verified\" method \"${member.id.name}\" must have a body. The postcondition is promoted to a domain axiom that must be earned by verifying the body; a bodyless declaration would produce an unproven axiom.",
+            member.body.isEmpty) ++
       error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void methods produce a dead axiom and are not meaningful as verified.",
@@ -149,6 +153,9 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     (if (containsHeapPermission(p))
       error(p, s"\"verified\" $memberKind \"$memberName\" has a heap-permission assertion (acc(...)) in its $clauseKind. Viper domain axioms cannot contain resource assertions.")
     else noMessages) ++
+    (if (containsPointerDereference(p))
+      error(p, s"\"verified\" $memberKind \"$memberName\" dereferences a pointer in its $clauseKind. Viper domain axioms cannot contain heap accesses; consider passing the dereferenced value as a plain parameter instead.")
+    else noMessages) ++
     (if (checkFieldRead && (p +: allChildren(p)).exists {
       case dot: PDot => resolve(dot) match {
         case Some(ap.FieldSelection(_, _, _, _)) => true
@@ -167,6 +174,13 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
   private def containsHeapPermission(p: PNode): Boolean =
     p.isInstanceOf[PAccess] || p.isInstanceOf[PPredicateAccess] ||
       allChildren(p).exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess])
+
+  /** True if the expression tree rooted at `p` contains any pointer dereference (`*ptr`).
+    * Pointer dereferences require heap state to evaluate and are therefore illegal inside
+    * Viper domain axioms for the same reason as acc() assertions. */
+  private def containsPointerDereference(p: PNode): Boolean =
+    p.isInstanceOf[PDeref] ||
+      allChildren(p).exists(_.isInstanceOf[PDeref])
 
   private def isSingleResultArg(member: PCodeRootWithResult): Messages = {
     error(member, "For now, pure methods and pure functions must have exactly one result argument", member.result.outs.size != 1)
