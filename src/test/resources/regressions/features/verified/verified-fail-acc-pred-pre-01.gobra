@@ -1,0 +1,21 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with acc(pred(...)) in its precondition is a type error.
+// Predicate access is a heap-permission assertion; domain axioms cannot
+// contain resource assertions.
+
+pred cellOk(p *int) { acc(p) }
+
+//:: ExpectedOutput(type_error)
+requires acc(cellOk(p))
+ensures  ret > 0
+decreases
+verified
+func usesPred(p *int) (ret int) {
+	unfold cellOk(p)
+	ret = *p + 1
+	return ret
+}

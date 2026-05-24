@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -101,11 +101,24 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     if (member.spec.isVerified) {
       error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" has multiple return values. Multi-return encoding is not yet supported.",
-            member.result.outs.size > 1) ++
+      error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void functions produce a dead axiom and are not meaningful as verified.",
+            member.result.outs.size != 1) ++
       member.spec.posts.flatMap(p =>
         if (allChildren(p).exists(_.isInstanceOf[POld]))
           error(p, s"\"verified\" function \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
+        else noMessages
+      ) ++
+      // Viper domain axioms cannot contain heap-permission assertions (acc(...)).
+      // Such assertions in requires/ensures would appear verbatim in the axiom body,
+      // crashing the backend or producing unsound axioms.
+      (member.spec.pres ++ member.spec.preserves).flatMap(p =>
+        if (containsHeapPermission(p))
+          error(p, s"\"verified\" function \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its precondition. Viper domain axioms cannot contain resource assertions.")
+        else noMessages
+      ) ++
+      (member.spec.posts ++ member.spec.preserves).flatMap(p =>
+        if (containsHeapPermission(p))
+          error(p, s"\"verified\" function \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its postcondition. Viper domain axioms cannot contain resource assertions.")
         else noMessages
       ) ++
       member.body.toVector.flatMap { case (_, block) =>
@@ -118,11 +131,21 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     if (member.spec.isVerified) {
       error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" has multiple return values. Multi-return encoding is not yet supported.",
-            member.result.outs.size > 1) ++
+      error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value. The postcondition is promoted to a Viper domain axiom whose conclusion must be an expression over the return value; void methods produce a dead axiom and are not meaningful as verified.",
+            member.result.outs.size != 1) ++
       member.spec.posts.flatMap(p =>
         if (allChildren(p).exists(_.isInstanceOf[POld]))
           error(p, s"\"verified\" method \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
+        else noMessages
+      ) ++
+      (member.spec.pres ++ member.spec.preserves).flatMap(p =>
+        if (containsHeapPermission(p))
+          error(p, s"\"verified\" method \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its precondition. Viper domain axioms cannot contain resource assertions.")
+        else noMessages
+      ) ++
+      (member.spec.posts ++ member.spec.preserves).flatMap(p =>
+        if (containsHeapPermission(p))
+          error(p, s"\"verified\" method \"${member.id.name}\" has a heap-permission assertion (acc(...)) in its postcondition. Viper domain axioms cannot contain resource assertions.")
         else noMessages
       ) ++
       // Viper domain axioms cannot contain heap (location) accesses.
@@ -147,6 +170,14 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       }
     } else noMessages
   }
+
+  /** True if the expression tree rooted at `p` contains any heap-permission assertion
+    * (`acc(...)` or `acc(pred(...))`).  Such assertions are illegal inside Viper domain
+    * axioms, so any `verified` function/method whose spec contains them would either
+    * crash the backend or produce a silently unsound axiom. */
+  private def containsHeapPermission(p: PNode): Boolean =
+    p.isInstanceOf[PAccess] || p.isInstanceOf[PPredicateAccess] ||
+      allChildren(p).exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess])
 
   private def isSingleResultArg(member: PCodeRootWithResult): Messages = {
     error(member, "For now, pure methods and pure functions must have exactly one result argument", member.result.outs.size != 1)

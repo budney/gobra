@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with acc(...) in its postcondition is a type error.
+// The postcondition appears in the axiom conclusion — a permission assertion
+// there is equally illegal in a Viper domain.
+
+type Holder struct{ p *int }
+
+//:: ExpectedOutput(type_error)
+ensures acc(h.p)
+decreases
+verified
+func allocHolder(h *Holder) {
+}

@@ -1,0 +1,20 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with acc(...) in its precondition is a type error.
+// Viper domain axioms cannot contain heap-permission assertions — the axiom
+// would crash the backend or silently produce an unsound result.
+
+type Cell struct{ v *int }
+
+//:: ExpectedOutput(type_error)
+requires acc(c.v)
+ensures  ret > 0
+decreases
+verified
+func readPtr(c *Cell) (ret int) {
+	ret = *c.v + 1
+	return ret
+}

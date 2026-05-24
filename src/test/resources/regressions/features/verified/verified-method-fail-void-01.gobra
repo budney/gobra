@@ -1,0 +1,19 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with no return value is a type error.
+// The postcondition is promoted to a Viper domain axiom whose conclusion
+// must be an expression over the return value.  Void methods would produce
+// a dead axiom (the trigger can never fire because void methods cannot
+// appear in spec expressions) and are therefore not meaningful as verified.
+
+type Counter struct{ n int }
+
+//:: ExpectedOutput(type_error)
+requires c.n >= 0
+ensures  c.n >= 0
+decreases
+verified
+func (c Counter) checkNonNeg() {}
