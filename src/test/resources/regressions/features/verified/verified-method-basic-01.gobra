@@ -1,0 +1,28 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method whose postcondition is promoted to a domain axiom.
+// Another function uses that method in its requires clause.
+
+type Counter struct {
+	val int
+}
+
+requires c.val >= 0
+ensures  ret == c.val + 1
+decreases
+verified
+func (c Counter) increment() (ret int) {
+	ret = c.val + 1
+	return ret
+}
+
+// The requires uses increment in spec position — legal because increment is verified.
+requires c.val >= 0 && c.increment() > 5
+ensures  result > 5
+func useIncrement(c Counter) (result int) {
+	result = c.increment()
+	return result
+}

@@ -899,7 +899,7 @@ object Desugar extends LazyLogging {
 
       val annotations = desugarBackendAnnotations(decl.spec.backendAnnotations)
 
-      in.Method(recv, name, args, returns, pres, posts, terminationMeasure, annotations, bodyOpt)(fsrc)
+      in.Method(recv, name, args, returns, pres, posts, terminationMeasure, annotations, bodyOpt, isVerified = decl.spec.isVerified)(fsrc)
     }
 
     def pureMethodD(decl: PMethodDecl): in.PureMethod = {

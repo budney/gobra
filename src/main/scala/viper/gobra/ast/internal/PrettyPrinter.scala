@@ -157,7 +157,7 @@ class DefaultPrettyPrinter extends PrettyPrinter with kiama.output.PrettyPrinter
   }
 
   def showMethod(m: Method): Doc = m match {
-    case Method(receiver, name, args, results, pres, posts, measures, backendAnnotations, body) =>
+    case Method(receiver, name, args, results, pres, posts, measures, backendAnnotations, body, _) =>
       "func" <+> parens(showVarDecl(receiver)) <+> name.name <> parens(showFormalArgList(args)) <+> parens(showVarDeclList(results)) <>
         spec(showPreconditions(pres) <> showPostconditions(posts) <> showTerminationMeasures(measures) <> showBackendAnnotations(backendAnnotations)) <> opt(body)(b => block(showStmt(b)))
   }
@@ -718,7 +718,7 @@ class ShortPrettyPrinter extends DefaultPrettyPrinter {
   }
 
   override def showMethod(m: Method): Doc = m match {
-    case Method(receiver, name, args, results, pres, posts, measures, backendAnnotations, _) =>
+    case Method(receiver, name, args, results, pres, posts, measures, backendAnnotations, _, _) =>
       "func" <+> parens(showVarDecl(receiver)) <+> name.name <> parens(showFormalArgList(args)) <+> parens(showVarDeclList(results)) <>
         spec(showPreconditions(pres) <> showPostconditions(posts) <> showTerminationMeasures(measures) <>
           showBackendAnnotations(backendAnnotations))

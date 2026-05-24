@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method without a decreases clause is a type error.
+
+type Box struct {
+	x int
+}
+
+//:: ExpectedOutput(type_error)
+ensures ret == b.x
+verified
+func (b Box) fetch() (ret int) {
+	ret = b.x
+	return ret
+}

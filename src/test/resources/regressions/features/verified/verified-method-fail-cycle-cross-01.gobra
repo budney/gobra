@@ -1,0 +1,29 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function and a verified method that call each other form a cycle.
+// The unified recursion check must catch cross-domain (function↔method) cycles.
+
+type Node struct{ v int }
+
+requires x >= 0
+ensures ret == x
+decreases
+verified
+func bridge(x int) (ret int) {
+	n := Node{v: x}
+	ret = n.relay()
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+requires nd.v >= 0
+ensures ret == nd.v
+decreases
+verified
+func (nd Node) relay() (ret int) {
+	ret = bridge(nd.v)
+	return ret
+}

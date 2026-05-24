@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with a pointer receiver.
+// The domain is keyed on uniqueName which includes the pointer type,
+// so this exercises a different naming path from the value-receiver test.
+//
+// Note: pointer receiver methods whose postconditions reference fields through
+// the heap cannot be verified yet (Viper domain axioms may not contain heap
+// accesses). This test uses a field-free postcondition to cover the naming path.
+
+type Tag struct{}
+
+ensures ret == 1
+decreases
+verified
+func (t *Tag) kind() (ret int) {
+	ret = 1
+	return ret
+}
+
+// The axiom fires unconditionally (no precondition, no field access).
+requires t.kind() == 1
+ensures  result == 1
+func useKind(t *Tag) (result int) {
+	result = t.kind()
+	return result
+}

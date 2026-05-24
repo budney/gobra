@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method that calls itself is a type error.
+// Self-recursion in a domain axiom is unsound.
+
+type Loop struct{ n int }
+
+//:: ExpectedOutput(type_error)
+ensures ret == l.n
+decreases
+verified
+func (l Loop) spin() (ret int) {
+	ret = l.spin()
+	return ret
+}

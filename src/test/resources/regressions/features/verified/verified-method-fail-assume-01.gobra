@@ -1,0 +1,19 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method that contains an assume statement is a type error.
+// Axioms must be earned through proof; assume introduces an unverified premise.
+
+type Num struct{ v int }
+
+ensures ret > 0
+decreases
+verified
+func (n Num) positive() (ret int) {
+	//:: ExpectedOutput(type_error)
+	assume n.v > 0
+	ret = n.v
+	return ret
+}

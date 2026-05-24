@@ -29,8 +29,8 @@ object OverflowChecksTransform extends InternalTransform {
       Function(name, args, results, pres, posts, terminationMeasure, annotations, body map computeNewBody, isVerified)(f.info)
 
     // same as functions
-    case m@Method(receiver, name, args, results, pres, posts, terminationMeasure, annotations, body) =>
-      Method(receiver, name, args, results, pres, posts, terminationMeasure, annotations, body map computeNewBody)(m.info)
+    case m@Method(receiver, name, args, results, pres, posts, terminationMeasure, annotations, body, isVerified) =>
+      Method(receiver, name, args, results, pres, posts, terminationMeasure, annotations, body map computeNewBody, isVerified)(m.info)
 
     // Adds pre-conditions stating the bounds of each argument and a post-condition to check if the body expression
     // overflows

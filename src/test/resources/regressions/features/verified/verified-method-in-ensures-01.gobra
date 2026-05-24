@@ -1,0 +1,25 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method used in the ensures clause of another function.
+// Confirms the domain axiom is visible in postcondition position, not just precondition.
+
+type Score struct{ pts int }
+
+requires s.pts >= 0
+ensures  ret == s.pts * 2
+decreases
+verified
+func (s Score) doubled() (ret int) {
+	ret = s.pts * 2
+	return ret
+}
+
+requires s.pts >= 0
+ensures  result == s.doubled()
+func computeDouble(s Score) (result int) {
+	result = s.doubled()
+	return result
+}

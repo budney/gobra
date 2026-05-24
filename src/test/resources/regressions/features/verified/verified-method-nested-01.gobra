@@ -1,0 +1,34 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// One verified method calls another verified method in its body.
+// Both postconditions become domain axioms; a caller may use both in specs.
+
+type Chain struct{ n int }
+
+requires c.n >= 0
+ensures  ret == c.n + 1
+decreases
+verified
+func (c Chain) step() (ret int) {
+	ret = c.n + 1
+	return ret
+}
+
+requires c.n >= 0
+ensures  ret == c.n + 2
+decreases
+verified
+func (c Chain) twoSteps() (ret int) {
+	ret = c.step() + 1
+	return ret
+}
+
+requires c.n >= 0 && c.twoSteps() > 5
+ensures  result > 5
+func useBoth(c Chain) (result int) {
+	result = c.twoSteps()
+	return result
+}

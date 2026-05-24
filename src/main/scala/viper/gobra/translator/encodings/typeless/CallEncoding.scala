@@ -51,7 +51,16 @@ class CallEncoding extends Encoding {
       for {
         vRecv <- ctx.expression(recv)
         vArgs <- sequence(args map ctx.expression)
-        app = vpr.FuncApp(meth.uniqueName, vRecv +: vArgs)(pos, annotatedInfo, resultType, errT)
+        app = scala.util.Try(ctx.lookup(meth)).toOption match {
+          case Some(m: in.Method) if m.isVerified =>
+            vpr.DomainFuncApp(
+              funcname  = meth.uniqueName + "_spec",
+              args      = vRecv +: vArgs,
+              typVarMap = Map.empty
+            )(pos, annotatedInfo, resultType, meth.uniqueName + "_domain", errT)
+          case _ =>
+            vpr.FuncApp(meth.uniqueName, vRecv +: vArgs)(pos, annotatedInfo, resultType, errT)
+        }
       } yield app
   }
 

@@ -1,0 +1,39 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// One verified method used in the specs of multiple independent callers.
+// Confirms the method's domain is globally visible, not scoped to one call site.
+
+type Base struct{ x int }
+
+requires b.x >= 0
+ensures  ret == b.x + 5
+decreases
+verified
+func (b Base) addFive() (ret int) {
+	ret = b.x + 5
+	return ret
+}
+
+requires b.addFive() > 10
+ensures  result > 10
+func callerA(b Base) (result int) {
+	result = b.addFive()
+	return result
+}
+
+requires b.addFive() < 100
+ensures  result < 100
+func callerB(b Base) (result int) {
+	result = b.addFive()
+	return result
+}
+
+requires b.addFive() == 15
+ensures  result == 15
+func callerC(b Base) (result int) {
+	result = b.addFive()
+	return result
+}

@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method that uses old(...) in its postcondition is a type error.
+// Domain axioms cannot encode heap state snapshots.
+
+type Wrapper struct{ v int }
+
+//:: ExpectedOutput(type_error)
+ensures ret == old(w.v) + 1
+decreases
+verified
+func (w Wrapper) incOld() (ret int) {
+	ret = w.v + 1
+	return ret
+}

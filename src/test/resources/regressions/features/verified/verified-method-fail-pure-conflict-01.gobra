@@ -1,0 +1,18 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A method annotated with both pure and verified is a type error.
+// pure and verified are mutually exclusive.
+
+type Val struct{ x int }
+
+//:: ExpectedOutput(type_error)
+pure
+ensures ret == v.x
+decreases
+verified
+func (v Val) readPure() (ret int) {
+	return v.x
+}

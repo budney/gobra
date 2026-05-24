@@ -23,6 +23,7 @@ class DefaultMethodEncoding extends Encoding {
     val parent = super.member(ctx)
     val verifiedCase: in.Member ==> MemberWriter[Vector[vpr.Member]] = {
       case x: in.Function if x.isVerified => verifiedFunctionMembers(x)(ctx)
+      case x: in.Method   if x.isVerified => verifiedMethodMembers(x)(ctx)
     }
     verifiedCase.orElse(parent)
   }
@@ -108,6 +109,53 @@ class DefaultMethodEncoding extends Encoding {
       )(pos, annotatedInfo, errT)
 
     } yield method
+  }
+
+  private def verifiedMethodMembers(x: in.Method)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {
+    val (pos, info, errT) = x.vprMeta
+    val methodName = x.name.uniqueName
+    val domainName = methodName + "_domain"
+
+    val vRecv   = ctx.variable(x.receiver)
+    val vArgs   = x.args.map(ctx.variable)
+    val allArgs = vRecv +: vArgs          // receiver is the first domain-function argument
+    val vResults = x.results.map(ctx.variable)
+    val retType = if (vResults.nonEmpty) vResults.head.typ else vpr.Bool
+
+    val specFunc = vpr.DomainFunc(
+      name       = methodName + "_spec",
+      formalArgs = allArgs,
+      typ        = retType
+    )(pos, info, domainName, errT)
+
+    val specApp = vpr.DomainFuncApp(
+      funcname   = methodName + "_spec",
+      args       = allArgs.map(_.localVar),
+      typVarMap  = Map.empty
+    )(pos, info, retType, domainName, errT)
+
+    for {
+      method  <- methodDefault(x)(ctx)
+      vPres   <- sequence(x.pres.map(ctx.precondition))
+      vPosts  <- sequence(x.posts.map(ctx.postcondition))
+      axioms = vPosts.map { post =>
+        val resultVar  = if (vResults.nonEmpty) vResults.head.localVar else null
+        val substituted = if (resultVar != null) post.replace(Map(resultVar -> specApp)) else post
+        val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
+        val axiomExp: vpr.Exp = if (allArgs.isEmpty) {
+          body
+        } else {
+          val trigger = vpr.Trigger(Seq(specApp))(pos, info, errT)
+          vpr.Forall(allArgs, Seq(trigger), body)(pos, info, errT)
+        }
+        vpr.AnonymousDomainAxiom(axiomExp)(pos, info, domainName, errT): vpr.DomainAxiom
+      }
+      domain = vpr.Domain(
+        name      = domainName,
+        functions = Seq(specFunc),
+        axioms    = axioms
+      )(pos, info, errT)
+    } yield Vector(method, domain)
   }
 
   private def verifiedFunctionMembers(x: in.Function)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {

@@ -1,0 +1,19 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method whose body does not satisfy the postcondition.
+// Gobra must still verify the body — it is not simply trusted.
+
+type Adder struct{ n int }
+
+requires a.n >= 0
+//:: ExpectedOutput(postcondition_error:assertion_error)
+ensures ret == a.n + 10
+decreases
+verified
+func (a Adder) addTen() (ret int) {
+	ret = a.n + 9  // wrong: should be + 10
+	return ret
+}

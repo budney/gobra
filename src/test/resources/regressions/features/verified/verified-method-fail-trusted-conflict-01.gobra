@@ -1,0 +1,19 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A method annotated with both trusted and verified is a type error.
+// trusted bypasses verification; verified requires it — they are mutually exclusive.
+
+type Src struct{ x int }
+
+//:: ExpectedOutput(type_error)
+trusted
+ensures ret == s.x
+decreases
+verified
+func (s Src) readTrusted() (ret int) {
+	ret = s.x
+	return ret
+}

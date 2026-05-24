@@ -1,0 +1,25 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified methods that call each other form a cycle — type error.
+
+type Ring struct{ n int }
+
+ensures ret == r.n
+decreases
+verified
+func (r Ring) ping() (ret int) {
+	ret = r.pong()
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+ensures ret == r.n
+decreases
+verified
+func (r Ring) pong() (ret int) {
+	ret = r.ping()
+	return ret
+}

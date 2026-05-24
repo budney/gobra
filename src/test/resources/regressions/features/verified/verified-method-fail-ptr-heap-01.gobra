@@ -1,0 +1,20 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method with a pointer receiver whose postcondition reads a field
+// through the heap is a type error. Viper domain axioms cannot contain location
+// accesses, so Gobra must reject this before it reaches the backend.
+
+type Cell struct{ v int }
+
+//:: ExpectedOutput(type_error)
+requires c.v >= 0
+ensures ret == c.v + 1
+decreases
+verified
+func (c *Cell) inc() (ret int) {
+	ret = c.v + 1
+	return ret
+}

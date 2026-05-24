@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAssume, PBlock, PCodeRootWithResult, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, POld, PParameter, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAssume, PBlock, PCodeRootWithResult, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInvoke, PMPredicateDecl, PMember, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPreserves, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -125,6 +125,23 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
           error(p, s"\"verified\" method \"${member.id.name}\" uses old(...) in its postcondition. State-snapshotting for verified axioms is not yet supported.")
         else noMessages
       ) ++
+      // Viper domain axioms cannot contain heap (location) accesses.
+      // A pointer receiver method whose postcondition reads a field through the
+      // pointer would produce such an access in the axiom — detect this early.
+      (if (member.receiver.typ.isInstanceOf[PMethodReceivePointer]) {
+        val heapReadInPost = member.spec.posts.exists(p =>
+          allChildren(p).exists {
+            case dot: PDot => resolve(dot) match {
+              case Some(ap.FieldSelection(_, _, _, _)) => true
+              case _                                   => false
+            }
+            case _ => false
+          }
+        )
+        if (heapReadInPost)
+          error(member, s"\"verified\" method \"${member.id.name}\" has a pointer receiver and its postcondition reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the postcondition.")
+        else noMessages
+      } else noMessages) ++
       member.body.toVector.flatMap { case (_, block) =>
         allChildren(block).collect { case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.") }.flatten
       }
@@ -156,39 +173,63 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     p: PParameter => error(p, s"Pure members cannot have variadic arguments, but got $p", p.typ.isInstanceOf[PVariadicType])
   }
 
-  /** Check that no verified function is self-recursive or mutually recursive (v1 restriction). */
+  /** Check that no verified function or method is self-recursive or mutually recursive (v1 restriction). */
   def wellVerifiedRecursionCheck: Messages = {
     val verifiedFuncs: Vector[PFunctionDecl] =
       tree.root.programs.flatMap(_.declarations.collect { case f: PFunctionDecl if f.spec.isVerified => f })
+    val verifiedMethods: Vector[PMethodDecl] =
+      tree.root.programs.flatMap(_.declarations.collect { case m: PMethodDecl if m.spec.isVerified => m })
+    val allVerified: Vector[PNode] = verifiedFuncs ++ verifiedMethods
 
-    if (verifiedFuncs.isEmpty) return noMessages
+    if (allVerified.isEmpty) return noMessages
 
-    val funcByName: Map[String, PFunctionDecl] = verifiedFuncs.map(f => f.id.name -> f).toMap
+    val verifiedFuncDecls: Set[PFunctionDecl] = verifiedFuncs.toSet
+    val verifiedMethodDecls: Set[PMethodDecl]  = verifiedMethods.toSet
 
-    def calleeNamesInBody(f: PFunctionDecl): Set[String] = {
-      val bodyNodes = f.body.toVector.flatMap { case (_, block) => allChildren(block) }
+    // Display name used in error messages
+    def nodeName(n: PNode): String = n match {
+      case f: PFunctionDecl => s"func ${f.id.name}"
+      case m: PMethodDecl   => s"method ${m.id.name}"
+      case _                => n.toString
+    }
+
+    // Collect edges: which verified members does this member call in its body?
+    // Body-position calls resolve to ap.FunctionCall wrapping the method/function kind.
+    def calleesInBody(n: PNode): Set[PNode] = {
+      val bodyNodes: Vector[PNode] = n match {
+        case f: PFunctionDecl => f.body.toVector.flatMap { case (_, block) => allChildren(block) }
+        case m: PMethodDecl   => m.body.toVector.flatMap { case (_, block) => allChildren(block) }
+        case _                => Vector.empty
+      }
       bodyNodes.collect {
         case invoke: PInvoke => resolve(invoke) match {
-          case Some(ap.FunctionCall(ap.Function(_, symb: FuncSymbol), _)) if symb.isVerified => Some(symb.decl.id.name)
+          case Some(ap.FunctionCall(ap.Function(_, symb: FuncSymbol), _))
+              if symb.isVerified && verifiedFuncDecls.contains(symb.decl) =>
+            Some(symb.decl: PNode)
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, symb: MethodImpl), _))
+              if symb.isVerified && verifiedMethodDecls.contains(symb.decl) =>
+            Some(symb.decl: PNode)
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, symb: MethodImpl), _))
+              if symb.isVerified && verifiedMethodDecls.contains(symb.decl) =>
+            Some(symb.decl: PNode)
           case _ => None
         }
       }.flatten.toSet
     }
 
-    // Build adjacency list for verified functions
-    val callGraph: Map[String, Set[String]] = verifiedFuncs.map(f => f.id.name -> calleeNamesInBody(f)).toMap
+    val callGraph: Map[PNode, Set[PNode]] = allVerified.map(n => n -> calleesInBody(n)).toMap
 
-    // Tarjan's SCC algorithm
+    // Tarjan's SCC algorithm over PNode keys (reference identity via `eq` for stack termination)
     var index = 0
-    val indexMap = scala.collection.mutable.Map[String, Int]()
-    val lowlink = scala.collection.mutable.Map[String, Int]()
-    val onStack = scala.collection.mutable.Set[String]()
-    val stack = scala.collection.mutable.ArrayBuffer[String]()
+    val indexMap = scala.collection.mutable.Map[PNode, Int]()
+    val lowlink  = scala.collection.mutable.Map[PNode, Int]()
+    val onStack  = scala.collection.mutable.Set[PNode]()
+    val stack    = scala.collection.mutable.ArrayBuffer[PNode]()
     var msgs: Messages = noMessages
 
-    def strongconnect(v: String): Unit = {
+    def strongconnect(v: PNode): Unit = {
       indexMap(v) = index
-      lowlink(v) = index
+      lowlink(v)  = index
       index += 1
       stack.append(v)
       onStack.add(v)
@@ -203,26 +244,27 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       }
 
       if (lowlink(v) == indexMap(v)) {
-        val scc = scala.collection.mutable.ArrayBuffer[String]()
-        var w = ""
-        while (w != v) {
-          w = stack.remove(stack.size - 1)
+        val scc = scala.collection.mutable.ArrayBuffer[PNode]()
+        var continue = true
+        while (continue) {
+          val w = stack.remove(stack.size - 1)
           onStack.remove(w)
           scc.append(w)
+          if (w eq v) continue = false
         }
         if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
           val cycle = scc.toVector
-          val decl = funcByName(cycle.head)
+          val decl  = cycle.head
           if (cycle.size == 1)
-            msgs ++= error(decl, s"\"verified\" function \"${cycle.head}\" calls itself. Recursive domain axioms are unsound.")
+            msgs ++= error(decl, s"\"verified\" ${nodeName(decl)} calls itself. Recursive domain axioms are unsound.")
           else
-            msgs ++= error(decl, s"\"verified\" functions form a recursion cycle: ${cycle.mkString(" -> ")} -> ${cycle.head}. Recursive domain axioms are unsound.")
+            msgs ++= error(decl, s"\"verified\" members form a recursion cycle: ${cycle.map(nodeName).mkString(" -> ")} -> ${nodeName(cycle.head)}. Recursive domain axioms are unsound.")
         }
       }
     }
 
-    for (f <- verifiedFuncs if !indexMap.contains(f.id.name)) {
-      strongconnect(f.id.name)
+    for (n <- allVerified if !indexMap.contains(n)) {
+      strongconnect(n)
     }
     msgs
   }
