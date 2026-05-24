@@ -30,8 +30,8 @@ class CallEncoding extends Encoding {
 
       for {
         vArgs <- sequence(args map ctx.expression)
-        app = ctx.lookup(func) match {
-          case f: in.Function if f.isVerified =>
+        app = scala.util.Try(ctx.lookup(func)).toOption match {
+          case Some(f: in.Function) if f.isVerified =>
             vpr.DomainFuncApp(
               funcname = func.name + "_spec",
               args = vArgs,

@@ -1,0 +1,37 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// One verified function used in the specs of multiple independent callers.
+// Confirms the domain is globally visible, not scoped to a single method.
+
+requires x >= 0
+ensures ret == x + 10
+decreases
+verified
+func addTen(x int) (ret int) {
+	ret = x + 10
+	return ret
+}
+
+requires addTen(a) > 15
+ensures result > 15
+func callerA(a int) (result int) {
+	result = addTen(a)
+	return result
+}
+
+requires addTen(b) < 100
+ensures result < 100
+func callerB(b int) (result int) {
+	result = addTen(b)
+	return result
+}
+
+requires addTen(c) == 20
+ensures result == 20
+func callerC(c int) (result int) {
+	result = addTen(c)
+	return result
+}

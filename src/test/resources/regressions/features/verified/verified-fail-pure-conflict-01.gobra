@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A function annotated with both pure and verified is a type error.
+// pure requires a single-expression body; verified requires a provable body
+// and promotes postconditions to domain axioms — the two are incompatible.
+
+//:: ExpectedOutput(type_error)
+pure
+ensures ret == x + 1
+decreases
+verified
+func pureAndVerified(x int) (ret int) {
+	return x + 1
+}

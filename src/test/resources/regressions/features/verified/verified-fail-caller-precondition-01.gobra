@@ -1,0 +1,27 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function's body is fully verified. If it calls an ordinary
+// function with an argument that violates that function's precondition,
+// Gobra should report a precondition error inside the verified body.
+
+requires x >= 0
+ensures ret == x + 1
+decreases
+func safeHelper(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+// This verified function's body calls safeHelper(-1), violating
+// safeHelper's precondition x >= 0.
+ensures ret == 0
+decreases
+verified
+func badVerifiedBody() (ret int) {
+	//:: ExpectedOutput(precondition_error:assertion_error)
+	ret = safeHelper(-1)
+	return ret
+}

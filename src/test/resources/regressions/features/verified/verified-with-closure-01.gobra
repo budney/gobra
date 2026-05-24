@@ -1,0 +1,31 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function coexisting with a closure in the same package.
+// Guards against the ctx.lookup regression where closure proxies are
+// not in the function lookup table.
+
+requires x >= 0
+ensures ret == x + 2
+decreases
+verified
+func addTwo(x int) (ret int) {
+	ret = x + 2
+	return ret
+}
+
+// A function that defines a closure alongside use of the verified function.
+// Guards against ctx.lookup crashing on closure-generated proxies when encoding
+// the verified domain axiom.
+requires addTwo(n) > 5
+ensures result > 5
+func useAddTwoAndClosure(n int) (result int) {
+	// Define a closure; its proxy must not crash verified-function encoding.
+	_ = func(y int) int {
+		return y
+	}
+	result = addTwo(n)
+	return result
+}

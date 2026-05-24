@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with no preconditions.
+// The axiom has no premise: forall args :: {f_spec(args)} post.
+
+ensures ret == 42
+decreases
+verified
+func theAnswer() (ret int) {
+	ret = 42
+	return ret
+}
+
+// The axiom fires unconditionally, so the caller's postcondition is trivially provable.
+ensures result == 42
+func getAnswer() (result int) {
+	result = theAnswer()
+	return result
+}
+
+// Using it in a precondition also works unconditionally.
+requires theAnswer() == 42
+ensures result > 0
+func requiresAnswer() (result int) {
+	result = 1
+	return result
+}

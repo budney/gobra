@@ -139,9 +139,14 @@ class DefaultMethodEncoding extends Encoding {
         val resultVar = if (vResults.nonEmpty) vResults.head.localVar else null
         val substituted = if (resultVar != null) post.replace(Map(resultVar -> specApp)) else post
         val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
-        val trigger = vpr.Trigger(Seq(specApp))(pos, info, errT)
-        val forall = vpr.Forall(vArgs, Seq(trigger), body)(pos, info, errT)
-        vpr.AnonymousDomainAxiom(forall)(pos, info, domainName, errT): vpr.DomainAxiom
+        val axiomExp: vpr.Exp = if (vArgs.isEmpty) {
+          // vpr.Forall requires at least one quantified variable; for zero-arg functions emit a bare axiom
+          body
+        } else {
+          val trigger = vpr.Trigger(Seq(specApp))(pos, info, errT)
+          vpr.Forall(vArgs, Seq(trigger), body)(pos, info, errT)
+        }
+        vpr.AnonymousDomainAxiom(axiomExp)(pos, info, domainName, errT): vpr.DomainAxiom
       }
       domain = vpr.Domain(
         name = domainName,

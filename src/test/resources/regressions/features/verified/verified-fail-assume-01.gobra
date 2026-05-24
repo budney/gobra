@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function that contains an assume statement is a type error.
+// The axiom must be earned through proof; assume would introduce an unverified premise.
+
+ensures ret > 0
+decreases
+verified
+func withAssume(x int) (ret int) {
+	//:: ExpectedOutput(type_error)
+	assume x > 0
+	ret = x
+	return ret
+}
