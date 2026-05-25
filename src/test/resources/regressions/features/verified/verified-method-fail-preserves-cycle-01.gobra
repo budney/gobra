@@ -1,0 +1,32 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified methods on the same type whose preserves clauses reference each
+// other form a spec-level cycle: mA's preserves calls mB, and mB's preserves
+// calls mA.  This exercises the PMethodDecl branch of calleesInSpec, which
+// includes spec.preserves alongside spec.pres and spec.posts.
+// Neither method's body calls the other — the cycle is spec-only.
+
+type Box struct{ n int }
+
+//:: ExpectedOutput(type_error)
+preserves b.mB() > 0
+ensures   ret == 1
+decreases
+verified
+func (b Box) mA() (ret int) {
+	ret = 1  // body does NOT call mB
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+preserves b.mA() > 0
+ensures   ret == 1
+decreases
+verified
+func (b Box) mB() (ret int) {
+	ret = 1  // body does NOT call mA
+	return ret
+}

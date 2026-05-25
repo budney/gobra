@@ -1,0 +1,37 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function used inside another verified function's preserves clause.
+// The call graph has one edge (incPositive -> positive) with no back-edge,
+// so no cycle exists and both functions should verify successfully.
+// A caller may then use incPositive in its own spec via the domain axiom.
+
+requires x > 0
+ensures  ret == 1
+decreases
+verified
+func positive(x int) (ret int) {
+	ret = 1
+	return ret
+}
+
+// The preserves clause calls positive; positive does not reference incPositive.
+// calleesInSpec(incPositive) = {positive}; calleesInSpec(positive) = {}. No cycle.
+preserves positive(n) == 1
+ensures   ret == n + 1
+decreases
+verified
+func incPositive(n int) (ret int) {
+	ret = n + 1
+	return ret
+}
+
+// Caller uses incPositive in its precondition via the domain axiom.
+requires n > 0 && incPositive(n) > 3
+ensures  result > 3
+func useIncPositive(n int) (result int) {
+	result = incPositive(n)
+	return result
+}

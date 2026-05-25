@@ -1,0 +1,33 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose preserves clause references a verified method, and
+// that verified method whose preserves clause references the function.  This is
+// a cross-kind (func <-> method) spec-level cycle through preserves clauses,
+// exercising the branch of the SCC detection that mixes PFunctionDecl and
+// PMethodDecl nodes in the same strongly-connected component.
+// Neither body calls the other — the cycle is entirely in the specs.
+
+type Relay struct{ n int }
+
+//:: ExpectedOutput(type_error)
+preserves r.relayM() > 0
+ensures   ret == 1
+decreases
+verified
+func bridgeF(r Relay) (ret int) {
+	ret = 1  // body does NOT call relayM
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+preserves bridgeF(nd) > 0
+ensures   ret == 1
+decreases
+verified
+func (nd Relay) relayM() (ret int) {
+	ret = 1  // body does NOT call bridgeF
+	return ret
+}

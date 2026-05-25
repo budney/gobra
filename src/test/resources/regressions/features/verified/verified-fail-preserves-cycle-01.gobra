@@ -1,0 +1,32 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified functions whose preserves clauses reference each other form a
+// spec-level cycle: fPres's preserves calls gPres, and gPres's preserves calls
+// fPres.  A preserves clause desugars into both a precondition and a
+// postcondition, so the cycle is present in both the requires and ensures of
+// each function.  Circular domain axioms are unsound; the recursion check must
+// catch this via calleesInSpec, which includes spec.preserves.
+// Neither function's body calls the other — the cycle is spec-only.
+
+//:: ExpectedOutput(type_error)
+preserves gPres(x) > 0
+ensures   ret == x + 1
+decreases
+verified
+func fPres(x int) (ret int) {
+	ret = x + 1  // body does NOT call gPres
+	return ret
+}
+
+//:: ExpectedOutput(type_error)
+preserves fPres(x) > 0
+ensures   ret == x + 1
+decreases
+verified
+func gPres(x int) (ret int) {
+	ret = x + 1  // body does NOT call fPres
+	return ret
+}
