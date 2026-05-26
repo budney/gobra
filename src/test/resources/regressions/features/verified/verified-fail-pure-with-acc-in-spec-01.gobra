@@ -1,0 +1,26 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A pure function whose precondition requires heap access via acc(p) is safe
+// to declare, but calling it from a verified function's spec is rejected.
+// The domain axiom would reference a Silver function that carries a heap
+// precondition, which is outside Silver's design contract for domain axioms.
+
+requires acc(p)
+pure
+ensures ret > 0
+func readPtr(p *int) (ret int) {
+	return *p + 1
+}
+
+//:: ExpectedOutput(type_error)
+requires readPtr(q) > 0
+ensures  ret == 1
+decreases
+verified
+func useReadPtr(q *int) (ret int) {
+	ret = 1
+	return ret
+}

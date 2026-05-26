@@ -172,7 +172,67 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       case _ => false
     })
       error(p, s"\"verified\" $memberKind \"$memberName\" has a pointer receiver and its $clauseKind reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the $clauseKind.")
-    else noMessages)
+    else noMessages) ++
+    {
+      // Walk every pure function/method called (directly or transitively) from this spec
+      // clause and reject any whose own spec contains heap-permission or pointer-deref
+      // nodes.  A single visited set prevents redundant re-traversal within one clause.
+      val visited = scala.collection.mutable.Set[PNode]()
+      (p +: allChildren(p)).collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
+        val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolve(invoke) match {
+          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isPure => Some(Left(cs))
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isPure => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isPure => Some(Right(cs))
+          case _ => None
+        }
+        calleeOpt
+          .flatMap(cs => pureCallTransitivelySafe(cs, visited, Vector.empty))
+          .fold(noMessages: Messages) { chain =>
+            error(p,
+              s""""verified" $memberKind "$memberName" has a transitively heap-dependent call """ +
+              s"""in its $clauseKind: $chain. Viper domain axioms cannot contain heap """ +
+              s"""accesses, even through intermediate pure functions.""")
+          }
+      }
+    }
+  }
+
+  /** Walk the transitive closure of pure function/method calls reachable from `symb`
+    * (including its own spec and body) and return a description of the first heap-dependent
+    * spec found, or None if the closure is clean.
+    *
+    * `visited` prevents re-traversal of already-checked nodes (handles mutual recursion).
+    * `chain` accumulates the call path for error messages. */
+  private def pureCallTransitivelySafe(
+      symb: Either[FuncSymbol, MethodImpl],
+      visited: scala.collection.mutable.Set[PNode],
+      chain: Vector[String]
+  ): Option[String] = {
+    val (decl, spec, body, symbName) = symb match {
+      case Left(f)  => (f.decl: PNode, f.decl.spec, f.decl.body, s"func ${f.decl.id.name}")
+      case Right(m) => (m.decl: PNode, m.decl.spec, m.decl.body, s"method ${m.decl.id.name}")
+    }
+    if (visited.contains(decl)) return None
+    visited.add(decl)
+
+    val chainToHere = chain :+ symbName
+    val specNodes = (spec.pres ++ spec.posts ++ spec.preserves).flatMap(p => p +: allChildren(p))
+    val bodyNodes = body.toVector.flatMap { case (_, block) => block +: allChildren(block) }
+
+    if (specNodes.exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess]))
+      return Some(s"${chainToHere.mkString(" -> ")} has acc(...) in its spec")
+    if (specNodes.exists(_.isInstanceOf[PDeref]))
+      return Some(s"${chainToHere.mkString(" -> ")} dereferences a pointer in its spec")
+
+    (specNodes ++ bodyNodes).iterator.collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
+      val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolve(invoke) match {
+        case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))             if cs.isPure => Some(Left(cs))
+        case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _)) if cs.isPure => Some(Right(cs))
+        case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))     if cs.isPure => Some(Right(cs))
+        case _ => None
+      }
+      calleeOpt.flatMap(cs => pureCallTransitivelySafe(cs, visited, chainToHere))
+    }.nextOption()
   }
 
   /** True if the expression tree rooted at `p` contains any heap-permission assertion

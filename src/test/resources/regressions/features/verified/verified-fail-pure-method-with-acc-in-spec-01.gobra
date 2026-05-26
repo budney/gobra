@@ -1,0 +1,28 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A pure METHOD whose precondition requires acc(p) is safe to declare, but
+// calling it from a verified function's spec must be rejected — the same rule
+// that applies to pure functions.  This test exercises the MethodImpl branch
+// of the transitive-closure check.
+
+type Box struct{ n *int }
+
+requires acc(b.n)
+pure
+ensures ret > 0
+func (b *Box) getN() (ret int) {
+	return *b.n + 1
+}
+
+//:: ExpectedOutput(type_error)
+requires b.getN() > 0
+ensures  ret == 1
+decreases
+verified
+func useGetN(b *Box) (ret int) {
+	ret = 1
+	return ret
+}

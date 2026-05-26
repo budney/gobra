@@ -1,0 +1,26 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A pure function whose precondition contains a pointer dereference (*p) is safe
+// to declare, but calling it from a verified function's spec must be rejected.
+// Domain axioms cannot evaluate heap-dependent expressions.
+
+requires *ptr > 0
+pure
+ensures ret > 0
+decreases
+func posVal(ptr *int) (ret int) {
+	return *ptr
+}
+
+//:: ExpectedOutput(type_error)
+requires posVal(p) > 0
+ensures  ret == 1
+decreases
+verified
+func usePosVal(p *int) (ret int) {
+	ret = 1
+	return ret
+}

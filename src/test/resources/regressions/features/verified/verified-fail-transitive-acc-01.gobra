@@ -1,0 +1,33 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// The verified function's spec calls pure "wrapper", whose own spec is clean.
+// wrapper's body calls pure "readPtr", which has acc(p) in its precondition.
+// The transitive-closure check must follow the call through wrapper's body,
+// discover readPtr, and reject the verified spec.
+
+requires acc(p)
+pure
+ensures ret > 0
+func readPtr(p *int) (ret int) {
+	return *p + 1
+}
+
+// wrapper has no heap permission in its own spec, but calls readPtr in its body.
+pure
+ensures ret > 0
+func wrapper(p *int) (ret int) {
+	return readPtr(p) + 1
+}
+
+//:: ExpectedOutput(type_error)
+requires wrapper(q) > 0
+ensures  ret == 1
+decreases
+verified
+func useWrapper(q *int) (ret int) {
+	ret = 1
+	return ret
+}
