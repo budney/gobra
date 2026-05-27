@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with three return values — exercises the n-ary tuple projector
+// generation and verifies that the encoding is not hardcoded to pairs.
+
+ensures r1 == x + 1 && r2 == x * 2 && r3 == x - 1
+decreases
+verified
+func threeReturns(x int) (r1 int, r2 int, r3 int) {
+	r1 = x + 1
+	r2 = x * 2
+	r3 = x - 1
+	return r1, r2, r3
+}

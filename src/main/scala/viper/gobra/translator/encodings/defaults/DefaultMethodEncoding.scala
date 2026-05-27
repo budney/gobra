@@ -120,7 +120,10 @@ class DefaultMethodEncoding extends Encoding {
     val vArgs   = x.args.map(ctx.variable)
     val allArgs = vRecv +: vArgs          // receiver is the first domain-function argument
     val vResults = x.results.map(ctx.variable)
-    val retType = if (vResults.nonEmpty) vResults.head.typ else vpr.Bool
+    val retType: vpr.Type = vResults.size match {
+      case 1 => vResults.head.typ
+      case _ => ctx.tuple.typ(vResults.map(_.typ))
+    }
 
     val specFunc = vpr.DomainFunc(
       name       = methodName + "_spec",
@@ -134,13 +137,19 @@ class DefaultMethodEncoding extends Encoding {
       typVarMap  = Map.empty
     )(pos, info, retType, domainName, errT)
 
+    val resultSubst: Map[vpr.LocalVar, vpr.Exp] = vResults.size match {
+      case 1 => Map(vResults.head.localVar -> specApp)
+      case n => vResults.zipWithIndex.map { case (rv, i) =>
+        rv.localVar -> ctx.tuple.get(specApp, i, n)(pos, info, errT)
+      }.toMap
+    }
+
     for {
       method  <- methodDefault(x)(ctx)
       vPres   <- sequence(x.pres.map(ctx.precondition))
       vPosts  <- sequence(x.posts.map(ctx.postcondition))
       axioms = vPosts.map { post =>
-        val resultVar  = if (vResults.nonEmpty) vResults.head.localVar else null
-        val substituted = if (resultVar != null) post.replace(Map(resultVar -> specApp)) else post
+        val substituted = post.replace(resultSubst)
         val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
         val axiomExp: vpr.Exp = if (allArgs.isEmpty) {
           body
@@ -165,7 +174,10 @@ class DefaultMethodEncoding extends Encoding {
 
     val vArgs = x.args.map(ctx.variable)
     val vResults = x.results.map(ctx.variable)
-    val retType = if (vResults.nonEmpty) vResults.head.typ else vpr.Bool
+    val retType: vpr.Type = vResults.size match {
+      case 1 => vResults.head.typ
+      case _ => ctx.tuple.typ(vResults.map(_.typ))
+    }
 
     val specFunc = vpr.DomainFunc(
       name = funcName + "_spec",
@@ -179,13 +191,19 @@ class DefaultMethodEncoding extends Encoding {
       typVarMap = Map.empty
     )(pos, info, retType, domainName, errT)
 
+    val resultSubst: Map[vpr.LocalVar, vpr.Exp] = vResults.size match {
+      case 1 => Map(vResults.head.localVar -> specApp)
+      case n => vResults.zipWithIndex.map { case (rv, i) =>
+        rv.localVar -> ctx.tuple.get(specApp, i, n)(pos, info, errT)
+      }.toMap
+    }
+
     for {
       method <- functionDefault(x)(ctx)
       vPres <- sequence(x.pres.map(ctx.precondition))
       vPosts <- sequence(x.posts.map(ctx.postcondition))
       axioms = vPosts.map { post =>
-        val resultVar = if (vResults.nonEmpty) vResults.head.localVar else null
-        val substituted = if (resultVar != null) post.replace(Map(resultVar -> specApp)) else post
+        val substituted = post.replace(resultSubst)
         val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
         val axiomExp: vpr.Exp = if (vArgs.isEmpty) {
           // vpr.Forall requires at least one quantified variable; for zero-arg functions emit a bare axiom

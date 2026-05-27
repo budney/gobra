@@ -106,8 +106,6 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void function produces no usable trigger and is not meaningful as verified.",
             member.result.outs.size == 0) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have exactly one return value (the domain encoding does not yet support multiple return values).",
-            member.result.outs.size > 1) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the function cannot be used as a useful spec term.",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
@@ -132,8 +130,6 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void method produces no usable trigger and is not meaningful as verified.",
             member.result.outs.size == 0) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have exactly one return value (the domain encoding does not yet support multiple return values).",
-            member.result.outs.size > 1) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the method cannot be used as a useful spec term.",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++

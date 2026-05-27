@@ -3,12 +3,10 @@
 
 package pkg
 
-// A verified method with multiple return values is a type error (v1 restriction).
-// The domain encoding only supports a single return value.
+// A verified method with multiple return values — now supported via tuple encoding.
 
 type Pair struct{ x int }
 
-//:: ExpectedOutput(type_error)
 ensures a == p.x + 1 && b == p.x - 1
 decreases
 verified

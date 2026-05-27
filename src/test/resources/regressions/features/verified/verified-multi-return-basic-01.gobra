@@ -3,9 +3,8 @@
 
 package pkg
 
-// A verified function with multiple return values — type error (v1 restriction).
+// A verified function with multiple return values — now supported via tuple encoding.
 
-//:: ExpectedOutput(type_error)
 ensures a == x + 1 && b == x - 1
 decreases
 verified
