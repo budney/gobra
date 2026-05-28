@@ -92,7 +92,7 @@ class InterfaceEncoding extends LeafTypeEncoding {
   }
 
   override def method(ctx: Context): in.Member ==> MemberWriter[vpr.Method] = {
-    case p: in.Method if p.receiver.typ.isInstanceOf[in.InterfaceT] =>
+    case p: in.Method if p.receiver.typ.isInstanceOf[in.InterfaceT] && !p.isVerified =>
       // adds the precondition that the receiver is not equal to the nil interface
       val (pos, info: Source.Verifier.Info, errT) = p.vprMeta
       for {

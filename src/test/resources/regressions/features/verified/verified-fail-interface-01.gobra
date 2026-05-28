@@ -3,12 +3,10 @@
 
 package pkg
 
-// "verified" on an interface method signature is a type error.
-// Interface methods have no body to verify; the annotation is meaningless
-// and would be silently ignored without this check.
+// "verified" on an interface method signature is now accepted.
+// The interface earns a domain axiom that callers can use in spec position.
 
 type Getter interface {
-	//:: ExpectedOutput(type_error)
 	requires x > 0
 	ensures  ret > 0
 	decreases

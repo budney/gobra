@@ -1,0 +1,22 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified interface method signatures mutually reference each other in
+// their postconditions — forming a spec-level cycle. This must be rejected
+// because the resulting domain axioms would be mutually recursive and unsound.
+
+type I interface {
+	//:: ExpectedOutput(type_error)
+	ensures ret == bar(x)
+	decreases
+	verified
+	foo(x int) (ret int)
+
+	//:: ExpectedOutput(type_error)
+	ensures ret == foo(x)
+	decreases
+	verified
+	bar(x int) (ret int)
+}

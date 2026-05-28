@@ -1,0 +1,27 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified interface method with two return values exercises the tuple
+// encoding in verifiedMethodMembers for interface-typed receivers.
+
+type Splitter interface {
+	ensures a == x + 1 && b == x - 1
+	decreases
+	verified
+	Split(x int) (a int, b int)
+}
+
+type MySplitter struct{}
+
+ensures a == x + 1 && b == x - 1
+decreases
+verified
+func (s MySplitter) Split(x int) (a int, b int) {
+	a = x + 1
+	b = x - 1
+	return a, b
+}
+
+MySplitter implements Splitter

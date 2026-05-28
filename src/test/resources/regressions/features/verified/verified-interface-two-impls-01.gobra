@@ -1,0 +1,42 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two types both implement the same verified interface method.
+// Both implementations must be verified, and callers through the interface
+// can use the domain axiom regardless of which concrete type is held.
+
+type Doubler interface {
+	ensures ret == x * 2
+	decreases
+	verified
+	Double(x int) (ret int)
+}
+
+type IntDoubler struct{}
+
+ensures ret == x * 2
+decreases
+verified
+func (d IntDoubler) Double(x int) (ret int) {
+	ret = x * 2
+	return ret
+}
+
+type SlowDoubler struct{}
+
+ensures ret == x * 2
+decreases
+verified
+func (s SlowDoubler) Double(x int) (ret int) {
+	ret = x + x
+	return ret
+}
+
+requires d.Double(n) > 10
+ensures  result > 10
+func useDoubler(d Doubler, n int) (result int) {
+	result = d.Double(n)
+	return result
+}

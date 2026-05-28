@@ -1,0 +1,13 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified interface method without a decreases clause is a type error.
+
+type I interface {
+	//:: ExpectedOutput(type_error)
+	ensures ret == x + 1
+	verified
+	Add(x int) (ret int)
+}

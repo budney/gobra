@@ -3303,7 +3303,7 @@ object Desugar extends LazyLogging {
           val mem = if (m.spec.isPure) {
             in.PureMethod(recv, proxy, args, returns, pres, posts, terminationMeasures, annotations, None, isOpaque)(src)
           } else {
-            in.Method(recv, proxy, args, returns, pres, posts, terminationMeasures, annotations, None)(src)
+            in.Method(recv, proxy, args, returns, pres, posts, terminationMeasures, annotations, None, isVerified = m.spec.isVerified)(src)
           }
           definedMethods += (proxy -> mem)
           AdditionalMembers.addMember(mem)

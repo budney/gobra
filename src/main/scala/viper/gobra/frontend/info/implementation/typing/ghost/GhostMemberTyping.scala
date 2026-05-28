@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDeref, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDeref, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PMethodSig, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -144,6 +144,21 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     } else noMessages
   }
 
+  private[typing] def wellDefIfVerifiedInterfaceMethod(sig: PMethodSig): Messages = {
+    if (sig.spec.isVerified) {
+      val check = validateVerifiedSpecClause("interface method", sig.id.name, _: PNode, _: String)
+      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have a decreases clause",
+            sig.spec.terminationMeasures.isEmpty) ++
+      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void method produces no usable trigger and is not meaningful as verified.",
+            sig.result.outs.size == 0) ++
+      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the method cannot be used as a useful spec term.",
+            sig.spec.posts.isEmpty) ++
+      sig.spec.pres.flatMap(check(_, "precondition")) ++
+      sig.spec.posts.flatMap(check(_, "postcondition")) ++
+      sig.spec.preserves.flatMap(check(_, "preserves clause"))
+    } else noMessages
+  }
+
   /** Check one spec clause for constructs incompatible with verified domain axioms.
     * clauseKind is "precondition", "postcondition", or "preserves clause".
     * checkFieldRead should be true for pointer-receiver methods. */
@@ -277,17 +292,22 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       tree.root.programs.flatMap(_.declarations.collect { case f: PFunctionDecl if f.spec.isVerified => f })
     val verifiedMethods: Vector[PMethodDecl] =
       tree.root.programs.flatMap(_.declarations.collect { case m: PMethodDecl if m.spec.isVerified => m })
-    val allVerified: Vector[PNode] = verifiedFuncs ++ verifiedMethods
+    val verifiedSigs: Vector[PMethodSig] =
+      tree.root.programs.flatMap(p => allChildren(p))
+        .collect { case ms: PMethodSig if ms.spec.isVerified => ms }
+    val allVerified: Vector[PNode] = verifiedFuncs ++ verifiedMethods ++ verifiedSigs
 
     if (allVerified.isEmpty) return noMessages
 
     val verifiedFuncDecls: Set[PFunctionDecl] = verifiedFuncs.toSet
     val verifiedMethodDecls: Set[PMethodDecl]  = verifiedMethods.toSet
+    val verifiedSigDecls: Set[PMethodSig]      = verifiedSigs.toSet
 
     // Display name used in error messages
     def nodeName(n: PNode): String = n match {
       case f: PFunctionDecl => s"func ${f.id.name}"
       case m: PMethodDecl   => s"method ${m.id.name}"
+      case s: PMethodSig    => s"interface method ${s.id.name}"
       case _                => n.toString
     }
 
@@ -304,6 +324,15 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
           case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, symb: MethodImpl), _))
               if symb.isVerified && verifiedMethodDecls.contains(symb.decl) =>
             Some(symb.decl: PNode)
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, symb: MethodSpec), _))
+              if symb.isVerified && verifiedSigDecls.contains(symb.spec) =>
+            Some(symb.spec: PNode)
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, symb: MethodSpec), _))
+              if symb.isVerified && verifiedSigDecls.contains(symb.spec) =>
+            Some(symb.spec: PNode)
+          case Some(ap.FunctionCall(ap.ImplicitlyReceivedInterfaceMethod(_, symb: MethodSpec), _))
+              if symb.isVerified && verifiedSigDecls.contains(symb.spec) =>
+            Some(symb.spec: PNode)
           case _ => None
         }
       }.flatten.toSet
@@ -313,7 +342,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       val bodyNodes: Vector[PNode] = n match {
         case f: PFunctionDecl => f.body.toVector.flatMap { case (_, block) => allChildren(block) }
         case m: PMethodDecl   => m.body.toVector.flatMap { case (_, block) => allChildren(block) }
-        case _                => Vector.empty
+        case _                => Vector.empty  // PMethodSig has no body
       }
       resolveVerifiedCallees(bodyNodes)
     }
@@ -328,6 +357,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
           (f.spec.pres ++ f.spec.posts ++ f.spec.preserves).flatMap(p => p +: allChildren(p))
         case m: PMethodDecl =>
           (m.spec.pres ++ m.spec.posts ++ m.spec.preserves).flatMap(p => p +: allChildren(p))
+        case s: PMethodSig =>
+          (s.spec.pres ++ s.spec.posts ++ s.spec.preserves).flatMap(p => p +: allChildren(p))
         case _ => Vector.empty
       }
       resolveVerifiedCallees(specNodes)
@@ -505,10 +536,18 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
   // Syntactically determine if a method implementation mImpl cannot possibly implement a specification mSpec.
   // This is useful to provide feedback quickly, before we verify the program.
   private def methodImplMightImplementSpec(mImpl: MethodImpl, mSpec: MethodSpec): Messages = {
-    if (mSpec.spec.spec.terminationMeasures.nonEmpty && mImpl.decl.spec.terminationMeasures.isEmpty)
+    (if (mSpec.spec.spec.terminationMeasures.nonEmpty && mImpl.decl.spec.terminationMeasures.isEmpty)
       error(mImpl.decl.spec, s"This method tries to implement a terminating interface method, " +
         s"but it does not provide a termination measure.")
     else
-      noMessages
+      noMessages) ++
+    (if (mSpec.isVerified && !mImpl.isVerified)
+      error(mImpl.decl.spec,
+        s"""Method "${mImpl.decl.id.name}" implements interface method "${mSpec.spec.id.name}" """ +
+        s"""which is marked "verified". The implementation must also be marked "verified" """ +
+        s"""(and include a "decreases" clause) to earn the domain axiom that callers of the """ +
+        s"""interface method depend on.""")
+    else
+      noMessages)
   }
 }

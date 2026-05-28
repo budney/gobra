@@ -1,0 +1,29 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// An implementation whose postcondition is weaker than the interface
+// specification violates Liskov substitutability. The generated subtype-proof
+// method tries to establish the interface's stronger postcondition from the
+// implementation's weaker one, and fails.
+
+type Adder interface {
+	ensures  ret == x + 1
+	decreases
+	verified
+	Add(x int) (ret int)
+}
+
+type WeakAdder struct{}
+
+//:: ExpectedOutput(generated_implementation_proof:postcondition_error)
+ensures  ret >= x
+decreases
+verified
+func (w WeakAdder) Add(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+WeakAdder implements Adder

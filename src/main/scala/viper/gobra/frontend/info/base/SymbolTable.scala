@@ -198,7 +198,7 @@ object SymbolTable extends Environments[Entity] {
   case class MethodSpec(spec: PMethodSig, itfDef: PInterfaceType, ghost: Boolean, context: ExternalTypeInfo) extends Method {
     override def rep: PNode = spec
     override def isPure: Boolean = spec.spec.isPure
-    override def isVerified: Boolean = false
+    override def isVerified: Boolean = spec.spec.isVerified
     override val args: Vector[PParameter] = spec.args
     override def result: PResult = spec.result
     val itfType: Type.InterfaceT = Type.InterfaceT(itfDef, context)

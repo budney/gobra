@@ -1,0 +1,34 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Basic: one verified interface method, one verified implementation.
+// A caller through the interface uses the domain axiom in its requires clause.
+
+type Adder interface {
+	requires x > 0
+	ensures  ret == x + 1
+	decreases
+	verified
+	Add(x int) (ret int)
+}
+
+type MyAdder struct{}
+
+requires x > 0
+ensures  ret == x + 1
+decreases
+verified
+func (a MyAdder) Add(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+// The requires uses Add in spec position — legal because Add is verified on Adder.
+requires x > 0 && ad.Add(x) > 5
+ensures  result > 5
+func useAdder(ad Adder, x int) (result int) {
+	result = ad.Add(x)
+	return result
+}

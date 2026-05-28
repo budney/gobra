@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified interface method with no precondition — the domain axiom fires
+// unconditionally for all callers, mirroring verified-no-precondition-01.gobra.
+
+type Incrementer interface {
+	ensures ret == x + 1
+	decreases
+	verified
+	Inc(x int) (ret int)
+}
+
+type SimpleIncrementer struct{}
+
+ensures ret == x + 1
+decreases
+verified
+func (s SimpleIncrementer) Inc(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+ensures result == n + 1
+func callInc(i Incrementer, n int) (result int) {
+	result = i.Inc(n)
+	return result
+}

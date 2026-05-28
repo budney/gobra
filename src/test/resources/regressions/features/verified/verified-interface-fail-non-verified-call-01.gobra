@@ -1,0 +1,20 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Calling a non-verified, non-pure interface method in spec position is a type
+// error. Only pure or verified interface methods may appear in spec expressions.
+
+type Unverified interface {
+	// No verified annotation — callers cannot use Foo in spec position.
+	Foo(x int) (ret int)
+}
+
+//:: ExpectedOutput(type_error)
+requires u.Foo(n) > 0
+ensures  result > 0
+func bar(u Unverified, n int) (result int) {
+	result = u.Foo(n)
+	return result
+}

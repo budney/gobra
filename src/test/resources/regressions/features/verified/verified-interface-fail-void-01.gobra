@@ -1,0 +1,15 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified interface method that is void is a type error.
+// The spec function needs a return type to serve as a trigger.
+
+type I interface {
+	//:: ExpectedOutput(type_error)
+	ensures true
+	decreases
+	verified
+	DoNothing()
+}

@@ -1,0 +1,25 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// An implementation of a verified interface method that is not itself verified
+// must be rejected with a clear error message.
+
+type Adder interface {
+	ensures  ret == x + 1
+	decreases
+	verified
+	Add(x int) (ret int)
+}
+
+type BadAdder struct{}
+
+//:: ExpectedOutput(type_error)
+ensures ret == x + 1
+func (b BadAdder) Add(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+BadAdder implements Adder

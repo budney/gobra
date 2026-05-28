@@ -1,0 +1,14 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified interface method without an ensures clause is a type error.
+// Without a postcondition there is nothing to promote to a domain axiom.
+
+type I interface {
+	//:: ExpectedOutput(type_error)
+	decreases
+	verified
+	Foo(x int) (ret int)
+}
