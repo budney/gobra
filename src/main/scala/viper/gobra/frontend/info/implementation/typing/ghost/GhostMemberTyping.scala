@@ -191,13 +191,19 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       val visited = scala.collection.mutable.Set[PNode]()
       (p +: allChildren(p)).collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
         val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolve(invoke) match {
-          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isPure => Some(Left(cs))
-          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isPure => Some(Right(cs))
-          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isPure => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isPure     => Some(Left(cs))
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isPure     => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isPure     => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isVerified => Some(Left(cs))
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isVerified => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isVerified => Some(Right(cs))
           case _ => None
         }
         calleeOpt
-          .flatMap(cs => pureCallTransitivelySafe(cs, visited, Vector.empty))
+          .flatMap { cs =>
+            val nextSpecOnly = cs.fold(_.isVerified, _.isVerified)
+            pureCallTransitivelySafe(cs, visited, Vector.empty, nextSpecOnly)
+          }
           .fold(noMessages: Messages) { chain =>
             error(p,
               s""""verified" $memberKind "$memberName" has a transitively heap-dependent call """ +
@@ -208,16 +214,18 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     }
   }
 
-  /** Walk the transitive closure of pure function/method calls reachable from `symb`
-    * (including its own spec and body) and return a description of the first heap-dependent
-    * spec found, or None if the closure is clean.
+  /** Walk the transitive closure of pure/verified function/method calls reachable from `symb`
+    * and return a description of the first heap-dependent spec found, or None if clean.
     *
+    * `specOnly` is true when following a verified callee: verified function bodies may freely
+    * access the heap, so only the spec (pre/post/preserves) is checked, not the body.
     * `visited` prevents re-traversal of already-checked nodes (handles mutual recursion).
     * `chain` accumulates the call path for error messages. */
   private def pureCallTransitivelySafe(
       symb: Either[FuncSymbol, MethodImpl],
       visited: scala.collection.mutable.Set[PNode],
-      chain: Vector[String]
+      chain: Vector[String],
+      specOnly: Boolean
   ): Option[String] = {
     val (decl, spec, body, symbName) = symb match {
       case Left(f)  => (f.decl: PNode, f.decl.spec, f.decl.body, s"func ${f.decl.id.name}")
@@ -228,7 +236,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
     val chainToHere = chain :+ symbName
     val specNodes = (spec.pres ++ spec.posts ++ spec.preserves).flatMap(p => p +: allChildren(p))
-    val bodyNodes = body.toVector.flatMap { case (_, block) => block +: allChildren(block) }
+    val bodyNodes = if (specOnly) Vector.empty else body.toVector.flatMap { case (_, block) => block +: allChildren(block) }
 
     if (specNodes.exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess]))
       return Some(s"${chainToHere.mkString(" -> ")} has acc(...) in its spec")
@@ -236,13 +244,16 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       return Some(s"${chainToHere.mkString(" -> ")} dereferences a pointer in its spec")
 
     (specNodes ++ bodyNodes).iterator.collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
-      val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolve(invoke) match {
-        case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))             if cs.isPure => Some(Left(cs))
-        case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _)) if cs.isPure => Some(Right(cs))
-        case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))     if cs.isPure => Some(Right(cs))
+      val calleeOpt: Option[(Either[FuncSymbol, MethodImpl], Boolean)] = resolve(invoke) match {
+        case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))             if cs.isPure     => Some((Left(cs),  false))
+        case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _)) if cs.isPure     => Some((Right(cs), false))
+        case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))     if cs.isPure     => Some((Right(cs), false))
+        case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))             if cs.isVerified => Some((Left(cs),  true))
+        case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _)) if cs.isVerified => Some((Right(cs), true))
+        case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))     if cs.isVerified => Some((Right(cs), true))
         case _ => None
       }
-      calleeOpt.flatMap(cs => pureCallTransitivelySafe(cs, visited, chainToHere))
+      calleeOpt.flatMap { case (cs, nextSpecOnly) => pureCallTransitivelySafe(cs, visited, chainToHere, nextSpecOnly) }
     }.nextOption()
   }
 

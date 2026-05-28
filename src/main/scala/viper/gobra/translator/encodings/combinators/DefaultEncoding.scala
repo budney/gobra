@@ -26,4 +26,6 @@ trait DefaultEncoding {
   def fpredicate(x: in.FPredicate)(ctx: Context): MemberWriter[vpr.Predicate]
 
   def globalVarDeclaration(x: in.GlobalVarDecl)(ctx: Context): MemberWriter[Vector[vpr.Function]]
+
+  def member(x: in.Member)(ctx: Context): MemberWriter[Vector[vpr.Member]]
 }

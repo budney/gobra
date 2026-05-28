@@ -73,6 +73,15 @@ class InterfaceEncoding extends LeafTypeEncoding {
     // predicate encoding is overwritten because different predicates are encoded to the same Viper predicate.
     case p: in.FPredicate if hasFamily(p.name)(ctx) => ctx.predicate(p); ml.unit(Vector.empty)
     case p: in.MPredicate if hasFamily(p.name)(ctx) => ctx.predicate(p); ml.unit(Vector.empty)
+    case p: in.Method if p.receiver.typ.isInstanceOf[in.InterfaceT] && p.isVerified =>
+      // Mirror the receiver-not-nil precondition that non-verified interface methods receive.
+      val (pos, info: Source.Verifier.Info, errT) = p.vprMeta
+      for {
+        members   <- ctx.defaultEncoding.member(p)(ctx)
+        method     = members.head.asInstanceOf[vpr.Method]
+        recv       = method.formalArgs.head.localVar
+        notNilPre  = utils.receiverNotNil(recv)(pos, info, errT)(ctx)
+      } yield method.copy(pres = notNilPre +: method.pres)(pos, info, errT) +: members.tail
   }
 
   override def predicate(ctx: Context): in.Member ==> MemberWriter[vpr.Predicate] = {
@@ -844,6 +853,16 @@ class InterfaceEncoding extends LeafTypeEncoding {
     val matchingFuncs = itfFuncs.map(f => (f, ctx.table.lookup(impl, f.name).get))
     val nameMap = matchingFuncs.map{ case (itfProxy, implProxy) => (itfProxy.uniqueName, proofName(recv.typ, implProxy, itfProxy)) }.toMap
 
+    // Verified methods appear as DomainFuncApp("{uniqueName}_spec", ...) in spec conditions.
+    // Substitute the interface's spec function with the concrete implementation's spec function.
+    val itfVerifiedMethods = ctx.table.lookupMembers(itfT).collect {
+      case x: in.MethodProxy if (ctx.lookup(x) match { case m: in.Method if m.isVerified => true; case _ => false }) => x
+    }
+    val verifiedSpecNameMap = itfVerifiedMethods.flatMap(itfProxy =>
+      ctx.table.lookup(impl, itfProxy.name).map(implProxy =>
+        (itfProxy.uniqueName + "_spec") -> (implProxy.uniqueName + "_spec", implProxy.uniqueName + "_domain"))
+    ).toMap
+
     val newRecv = boxInterface(vRecv, types.typeToExpr(impl)()(ctx))()(ctx)
     val changedFormals = vpr.utility.Expressions.instantiateVariables(exp, variablesOfExpression, newRecv +: vArgs, Set.empty)
     val changedFuncs = changedFormals.transform{
@@ -851,6 +870,9 @@ class InterfaceEncoding extends LeafTypeEncoding {
       case call: vpr.FuncApp if nameMap.isDefinedAt(call.funcname) && call.args.head == newRecv =>
         val recv = vRecv
         call.copy(funcname = nameMap(call.funcname), args = recv +: call.args.tail)(call.pos, call.info, call.typ, call.errT)
+      case domainCall: vpr.DomainFuncApp if verifiedSpecNameMap.isDefinedAt(domainCall.funcname) && domainCall.args.head == newRecv =>
+        val (newFuncName, newDomainName) = verifiedSpecNameMap(domainCall.funcname)
+        domainCall.copy(funcname = newFuncName, args = vRecv +: domainCall.args.tail)(domainCall.pos, domainCall.info, domainCall.typ, newDomainName, domainCall.errT)
     }
 
 

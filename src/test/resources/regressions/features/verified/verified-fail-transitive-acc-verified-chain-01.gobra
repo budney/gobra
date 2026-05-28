@@ -1,0 +1,46 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose spec calls another verified function, whose spec
+// calls a pure function that accesses the heap transitively through its body.
+// The transitive heap-dependency check must cross the verified boundary and
+// reject both the intermediate and the outer verified function.
+
+type Cell struct{ v int }
+
+requires acc(p)
+pure func readPtr(p *int) (ret int) {
+	return *p + 1
+}
+
+// pureWrapper's spec is clean; its body calls readPtr which has acc(p).
+pure func pureWrapper(p *int) (ret int) {
+	return readPtr(p) + 1
+}
+
+// vg's spec calls pureWrapper. The transitive check follows pureWrapper's body
+// and discovers readPtr's acc requirement. vg must be rejected.
+//:: ExpectedOutput(type_error)
+requires pureWrapper(p) > 0
+ensures  ret == 1
+decreases
+verified
+func vg(p *int) (ret int) {
+	ret = 1
+	return ret
+}
+
+// vf's spec calls vg (a verified function). After crossing the verified boundary,
+// the check follows vg's spec, finds pureWrapper, follows its body to readPtr,
+// and rejects vf as well.
+//:: ExpectedOutput(type_error)
+requires vg(p) == 1
+ensures  ret == 1
+decreases
+verified
+func vf(p *int) (ret int) {
+	ret = 1
+	return ret
+}

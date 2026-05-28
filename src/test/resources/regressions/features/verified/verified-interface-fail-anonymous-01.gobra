@@ -1,0 +1,17 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified method on an anonymous (unnamed) interface type must be validated
+// through the PInterfaceType path rather than the PTypeDef path. Here the
+// decreases clause is missing, so a type error must be reported.
+
+func usesAnonymousInterface(a interface {
+	//:: ExpectedOutput(type_error)
+	verified
+	ensures  ret == x + 1
+	Add(x int) (ret int)
+}) (result int) {
+	return 0
+}

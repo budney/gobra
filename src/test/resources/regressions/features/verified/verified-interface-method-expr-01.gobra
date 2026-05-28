@@ -1,0 +1,38 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Calling a verified interface method via method-expression syntax in spec
+// position is allowed: Adder.Add(ad, x) passes the receiver explicitly.
+// This exercises the ap.MethodExpr(MethodSpec) path in GhostExprTyping and
+// the resolveVerifiedCallees case added for cycle detection.
+
+type Adder interface {
+	requires x > 0
+	ensures  ret == x + 1
+	decreases
+	verified
+	Add(x int) (ret int)
+}
+
+type MyAdder struct{}
+
+requires x > 0
+ensures  ret == x + 1
+decreases
+verified
+func (a MyAdder) Add(x int) (ret int) {
+	ret = x + 1
+	return ret
+}
+
+MyAdder implements Adder
+
+// Method-expression form Adder.Add(ad, x) used in a requires clause.
+requires x > 0 && Adder.Add(ad, x) > 0
+ensures  result > 0
+func useMethodExpr(ad Adder, x int) (result int) {
+	result = ad.Add(x)
+	return result
+}

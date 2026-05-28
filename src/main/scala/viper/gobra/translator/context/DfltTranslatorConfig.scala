@@ -87,5 +87,6 @@ class DfltTranslatorConfig(
     override def mpredicate(x: in.MPredicate)(ctx: Context): MemberWriter[vpr.Predicate] = predicateEncoding.mpredicateDefault(x)(ctx)
     override def fpredicate(x: in.FPredicate)(ctx: Context): MemberWriter[vpr.Predicate] = predicateEncoding.fpredicateDefault(x)(ctx)
     override def globalVarDeclaration(x: GlobalVarDecl)(ctx: Context): MemberWriter[Vector[vpr.Function]] = globalVarEncoding.globalVarDeclarationDefault(x)(ctx)
+    override def member(x: in.Member)(ctx: Context): MemberWriter[Vector[vpr.Member]] = methodEncoding.member(ctx)(x)
   }
 }

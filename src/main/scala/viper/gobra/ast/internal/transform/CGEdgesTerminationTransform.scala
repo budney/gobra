@@ -138,7 +138,7 @@ object CGEdgesTerminationTransform extends InternalTransform {
                   }
                   val stmts = optCallsToImpls :+ assumeFalse
                   val newBody = in.Block(decls = Vector.empty, stmts = stmts)(src)
-                  val newMember = in.Method(m.receiver, m.name, m.args, m.results, m.pres, m.posts, m.terminationMeasures, Vector.empty, Some(newBody.toMethodBody))(src)
+                  val newMember = in.Method(m.receiver, m.name, m.args, m.results, m.pres, m.posts, m.terminationMeasures, Vector.empty, Some(newBody.toMethodBody), isVerified = m.isVerified)(src)
                   methodsToRemove += m
                   methodsToAdd += newMember
                   definedMethodsDelta += proxy -> newMember
