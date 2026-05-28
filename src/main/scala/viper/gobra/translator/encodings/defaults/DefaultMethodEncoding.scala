@@ -113,112 +113,73 @@ class DefaultMethodEncoding extends Encoding {
 
   private def verifiedMethodMembers(x: in.Method)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {
     val (pos, info, errT) = x.vprMeta
-    val methodName = x.name.uniqueName
-    val domainName = methodName + "_domain"
-
-    val vRecv   = ctx.variable(x.receiver)
-    val vArgs   = x.args.map(ctx.variable)
-    val allArgs = vRecv +: vArgs          // receiver is the first domain-function argument
+    val vRecv    = ctx.variable(x.receiver)
+    val vArgs    = x.args.map(ctx.variable)
     val vResults = x.results.map(ctx.variable)
-    val retType: vpr.Type = vResults.size match {
-      case 1 => vResults.head.typ
-      case _ => ctx.tuple.typ(vResults.map(_.typ))
-    }
-
-    val specFunc = vpr.DomainFunc(
-      name       = methodName + "_spec",
-      formalArgs = allArgs,
-      typ        = retType
-    )(pos, info, domainName, errT)
-
-    val specApp = vpr.DomainFuncApp(
-      funcname   = methodName + "_spec",
-      args       = allArgs.map(_.localVar),
-      typVarMap  = Map.empty
-    )(pos, info, retType, domainName, errT)
-
-    val resultSubst: Map[vpr.LocalVar, vpr.Exp] = vResults.size match {
-      case 1 => Map(vResults.head.localVar -> specApp)
-      case n => vResults.zipWithIndex.map { case (rv, i) =>
-        rv.localVar -> ctx.tuple.get(specApp, i, n)(pos, info, errT)
-      }.toMap
-    }
-
     for {
-      method  <- methodDefault(x)(ctx)
-      vPres   <- sequence(x.pres.map(ctx.precondition))
-      vPosts  <- sequence(x.posts.map(ctx.postcondition))
-      axioms = vPosts.map { post =>
-        val substituted = post.replace(resultSubst)
-        val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
-        val axiomExp: vpr.Exp = if (allArgs.isEmpty) {
-          body
-        } else {
-          val trigger = vpr.Trigger(Seq(specApp))(pos, info, errT)
-          vpr.Forall(allArgs, Seq(trigger), body)(pos, info, errT)
-        }
-        vpr.AnonymousDomainAxiom(axiomExp)(pos, info, domainName, errT): vpr.DomainAxiom
-      }
-      domain = vpr.Domain(
-        name      = domainName,
-        functions = Seq(specFunc),
-        axioms    = axioms
-      )(pos, info, errT)
+      method <- methodDefault(x)(ctx)
+      vPres  <- sequence(x.pres.map(ctx.precondition))
+      vPosts <- sequence(x.posts.map(ctx.postcondition))
+      domain  = buildVerifiedDomain(x.name.uniqueName, vRecv +: vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
     } yield Vector(method, domain)
   }
 
   private def verifiedFunctionMembers(x: in.Function)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {
     val (pos, info, errT) = x.vprMeta
-    val funcName = x.name.name
-    val domainName = funcName + "_domain"
-
-    val vArgs = x.args.map(ctx.variable)
+    val vArgs    = x.args.map(ctx.variable)
     val vResults = x.results.map(ctx.variable)
+    for {
+      method <- functionDefault(x)(ctx)
+      vPres  <- sequence(x.pres.map(ctx.precondition))
+      vPosts <- sequence(x.posts.map(ctx.postcondition))
+      domain  = buildVerifiedDomain(x.name.name, vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
+    } yield Vector(method, domain)
+  }
+
+  // Builds the Viper domain that backs a verified function or method:
+  //   - a spec domain function {memberName}_spec(allArgs) : retType
+  //   - one anonymous axiom per postcondition: ∀ allArgs :: pre → post[result ↦ spec(allArgs)]
+  // allArgs includes the receiver for methods and is empty-safe (bare axiom for zero-arg functions).
+  private def buildVerifiedDomain(
+      memberName: String,
+      allArgs:    Vector[vpr.LocalVarDecl],
+      vResults:   Vector[vpr.LocalVarDecl],
+      vPres:      Vector[vpr.Exp],
+      vPosts:     Vector[vpr.Exp]
+  )(pos: vpr.Position, info: vpr.Info, errT: vpr.ErrorTrafo)(ctx: Context): vpr.Domain = {
+    val domainName = memberName + "_domain"
     val retType: vpr.Type = vResults.size match {
       case 1 => vResults.head.typ
       case _ => ctx.tuple.typ(vResults.map(_.typ))
     }
-
     val specFunc = vpr.DomainFunc(
-      name = funcName + "_spec",
-      formalArgs = vArgs,
-      typ = retType
+      name       = memberName + "_spec",
+      formalArgs = allArgs,
+      typ        = retType
     )(pos, info, domainName, errT)
-
     val specApp = vpr.DomainFuncApp(
-      funcname = funcName + "_spec",
-      args = vArgs.map(_.localVar),
+      funcname  = memberName + "_spec",
+      args      = allArgs.map(_.localVar),
       typVarMap = Map.empty
     )(pos, info, retType, domainName, errT)
-
     val resultSubst: Map[vpr.LocalVar, vpr.Exp] = vResults.size match {
       case 1 => Map(vResults.head.localVar -> specApp)
       case n => vResults.zipWithIndex.map { case (rv, i) =>
         rv.localVar -> ctx.tuple.get(specApp, i, n)(pos, info, errT)
       }.toMap
     }
-
-    for {
-      method <- functionDefault(x)(ctx)
-      vPres <- sequence(x.pres.map(ctx.precondition))
-      vPosts <- sequence(x.posts.map(ctx.postcondition))
-      axioms = vPosts.map { post =>
-        val substituted = post.replace(resultSubst)
-        val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
-        val axiomExp: vpr.Exp = if (vArgs.isEmpty) {
-          // vpr.Forall requires at least one quantified variable; for zero-arg functions emit a bare axiom
-          body
-        } else {
-          val trigger = vpr.Trigger(Seq(specApp))(pos, info, errT)
-          vpr.Forall(vArgs, Seq(trigger), body)(pos, info, errT)
-        }
-        vpr.AnonymousDomainAxiom(axiomExp)(pos, info, domainName, errT): vpr.DomainAxiom
-      }
-      domain = vpr.Domain(
-        name = domainName,
-        functions = Seq(specFunc),
-        axioms = axioms
-      )(pos, info, errT)
-    } yield Vector(method, domain)
+    val axioms = vPosts.map { post =>
+      val substituted = post.replace(resultSubst)
+      val body = if (vPres.nonEmpty) vpr.Implies(vu.bigAnd(vPres)(pos, info, errT), substituted)(pos, info, errT) else substituted
+      // vpr.Forall requires ≥1 quantified variable; for zero-arg functions emit a bare axiom.
+      val axiomExp: vpr.Exp = if (allArgs.isEmpty) body
+        else vpr.Forall(allArgs, Seq(vpr.Trigger(Seq(specApp))(pos, info, errT)), body)(pos, info, errT)
+      vpr.AnonymousDomainAxiom(axiomExp)(pos, info, domainName, errT): vpr.DomainAxiom
+    }
+    vpr.Domain(
+      name      = domainName,
+      functions = Seq(specFunc),
+      axioms    = axioms
+    )(pos, info, errT)
   }
 }

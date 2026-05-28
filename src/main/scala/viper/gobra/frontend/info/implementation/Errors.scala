@@ -39,12 +39,12 @@ trait Errors { this: TypeInfoImpl =>
         wellDef ++ ghostSeparated
       }
 
+      val recursionMsgs = wellVerifiedRecursionCheck
       if (partialRes.isEmpty) {
-        val recursionMsgs = wellVerifiedRecursionCheck
         wellImplementationProofs match {
           case Left(implMsgs) => (recursionMsgs ++ implMsgs, Vector.empty)
           case Right(missing)  => (recursionMsgs, missing)
         }
-      } else (partialRes, Vector.empty)
+      } else (partialRes ++ recursionMsgs, Vector.empty)
     }
 }

@@ -100,21 +100,21 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
   private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
     if (member.spec.isVerified) {
       val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String)
-      error(member, s"\"verified\" function \"${member.id.name}\" must have a body. The postcondition is promoted to a domain axiom that must be earned by verifying the body; a bodyless declaration would produce an unproven axiom.",
+      error(member, s"\"verified\" function \"${member.id.name}\" must have a body",
             member.body.isEmpty) ++
-      error(member, s"function \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
+      error(member, s"\"verified\" function \"${member.id.name}\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void function produces no usable trigger and is not meaningful as verified.",
+      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one result",
             member.result.outs.size == 0) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the function cannot be used as a useful spec term.",
+      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
       member.spec.posts.flatMap(check(_, "postcondition")) ++
       member.spec.preserves.flatMap(check(_, "preserves clause")) ++
       member.body.toVector.flatMap { case (_, block) =>
         allChildren(block).collect {
-          case a: PAssume => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.")
-          case a: PInhale => error(a, s"function \"${member.id.name}\" annotated with \"verified\" must not contain inhale statements. Axioms from verified functions must be earned, not assumed.")
+          case a: PAssume => error(a, s"\"verified\" function \"${member.id.name}\" must not contain assume")
+          case a: PInhale => error(a, s"\"verified\" function \"${member.id.name}\" must not contain inhale")
         }.flatten
       }
     } else noMessages
@@ -124,21 +124,21 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     if (member.spec.isVerified) {
       val isPtr = member.receiver.typ.isInstanceOf[PMethodReceivePointer]
       val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, isPtr)
-      error(member, s"\"verified\" method \"${member.id.name}\" must have a body. The postcondition is promoted to a domain axiom that must be earned by verifying the body; a bodyless declaration would produce an unproven axiom.",
+      error(member, s"\"verified\" method \"${member.id.name}\" must have a body",
             member.body.isEmpty) ++
-      error(member, s"method \"${member.id.name}\" annotated with \"verified\" must have a decreases clause",
+      error(member, s"\"verified\" method \"${member.id.name}\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void method produces no usable trigger and is not meaningful as verified.",
+      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one result",
             member.result.outs.size == 0) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the method cannot be used as a useful spec term.",
+      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
       member.spec.posts.flatMap(check(_, "postcondition")) ++
       member.spec.preserves.flatMap(check(_, "preserves clause")) ++
       member.body.toVector.flatMap { case (_, block) =>
         allChildren(block).collect {
-          case a: PAssume => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain assume statements. Axioms from verified functions must be earned, not assumed.")
-          case a: PInhale => error(a, s"method \"${member.id.name}\" annotated with \"verified\" must not contain inhale statements. Axioms from verified functions must be earned, not assumed.")
+          case a: PAssume => error(a, s"\"verified\" method \"${member.id.name}\" must not contain assume")
+          case a: PInhale => error(a, s"\"verified\" method \"${member.id.name}\" must not contain inhale")
         }.flatten
       }
     } else noMessages
@@ -149,9 +149,9 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       val check = validateVerifiedSpecClause("interface method", sig.id.name, _: PNode, _: String)
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have a decreases clause",
             sig.spec.terminationMeasures.isEmpty) ++
-      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must not be void. The postcondition is promoted to a Viper domain axiom triggered by a spec function; a void method produces no usable trigger and is not meaningful as verified.",
+      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one result",
             sig.result.outs.size == 0) ++
-      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one ensures clause. Without postconditions the generated domain axiom makes no claims and the method cannot be used as a useful spec term.",
+      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one ensures clause",
             sig.spec.posts.isEmpty) ++
       sig.spec.pres.flatMap(check(_, "precondition")) ++
       sig.spec.posts.flatMap(check(_, "postcondition")) ++
@@ -185,30 +185,39 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       error(p, s"\"verified\" $memberKind \"$memberName\" has a pointer receiver and its $clauseKind reads a field through the heap. Viper domain axioms cannot contain location accesses. Consider using a value receiver or removing field reads from the $clauseKind.")
     else noMessages) ++
     {
-      // Walk every pure function/method called (directly or transitively) from this spec
-      // clause and reject any whose own spec contains heap-permission or pointer-deref
+      // Walk every pure/verified function/method called (directly or transitively) from this
+      // spec clause and reject any whose own spec contains heap-permission or pointer-deref
       // nodes.  A single visited set prevents redundant re-traversal within one clause.
       val visited = scala.collection.mutable.Set[PNode]()
       (p +: allChildren(p)).collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
-        val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolve(invoke) match {
-          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isPure     => Some(Left(cs))
-          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isPure     => Some(Right(cs))
-          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isPure     => Some(Right(cs))
-          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isVerified => Some(Left(cs))
-          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isVerified => Some(Right(cs))
-          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isVerified => Some(Right(cs))
+        val resolved = resolve(invoke)
+        // For interface methods called via implicit receiver, check the MethodSpec spec
+        // directly since there is no body and pureCallTransitivelySafe only handles impls.
+        val ifaceMethodMsgs: Messages = resolved match {
+          case Some(ap.FunctionCall(ap.ImplicitlyReceivedInterfaceMethod(_, symb: MethodSpec), _))
+              if symb.isPure || symb.isVerified =>
+            val specNodes = (symb.spec.spec.pres ++ symb.spec.spec.posts ++ symb.spec.spec.preserves)
+              .flatMap(q => q +: allChildren(q))
+            if (specNodes.exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess]))
+              error(p, s""""verified" $memberKind "$memberName" transitively calls interface method "${symb.spec.id.name}" which has acc() in its spec (in the $clauseKind)""")
+            else if (specNodes.exists(_.isInstanceOf[PDeref]))
+              error(p, s""""verified" $memberKind "$memberName" transitively calls interface method "${symb.spec.id.name}" which dereferences a pointer in its spec (in the $clauseKind)""")
+            else noMessages
+          case _ => noMessages
+        }
+        val calleeOpt: Option[Either[FuncSymbol, MethodImpl]] = resolved match {
+          case Some(ap.FunctionCall(ap.Function(_, cs: FuncSymbol), _))               if cs.isPure || cs.isVerified => Some(Left(cs))
+          case Some(ap.FunctionCall(ap.ReceivedMethod(_, _, _, cs: MethodImpl), _))   if cs.isPure || cs.isVerified => Some(Right(cs))
+          case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))       if cs.isPure || cs.isVerified => Some(Right(cs))
           case _ => None
         }
-        calleeOpt
+        ifaceMethodMsgs ++ calleeOpt
           .flatMap { cs =>
             val nextSpecOnly = cs.fold(_.isVerified, _.isVerified)
             pureCallTransitivelySafe(cs, visited, Vector.empty, nextSpecOnly)
           }
           .fold(noMessages: Messages) { chain =>
-            error(p,
-              s""""verified" $memberKind "$memberName" has a transitively heap-dependent call """ +
-              s"""in its $clauseKind: $chain. Viper domain axioms cannot contain heap """ +
-              s"""accesses, even through intermediate pure functions.""")
+            error(p, s""""verified" $memberKind "$memberName" has a transitively heap-dependent call in its $clauseKind: $chain""")
           }
       }
     }
@@ -257,20 +266,11 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     }.nextOption()
   }
 
-  /** True if the expression tree rooted at `p` contains any heap-permission assertion
-    * (`acc(...)` or `acc(pred(...))`).  Such assertions are illegal inside Viper domain
-    * axioms, so any `verified` function/method whose spec contains them would either
-    * crash the backend or produce a silently unsound axiom. */
   private def containsHeapPermission(p: PNode): Boolean =
-    p.isInstanceOf[PAccess] || p.isInstanceOf[PPredicateAccess] ||
-      allChildren(p).exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess])
+    (p +: allChildren(p)).exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess])
 
-  /** True if the expression tree rooted at `p` contains any pointer dereference (`*ptr`).
-    * Pointer dereferences require heap state to evaluate and are therefore illegal inside
-    * Viper domain axioms for the same reason as acc() assertions. */
   private def containsPointerDereference(p: PNode): Boolean =
-    p.isInstanceOf[PDeref] ||
-      allChildren(p).exists(_.isInstanceOf[PDeref])
+    (p +: allChildren(p)).exists(_.isInstanceOf[PDeref])
 
   private def isSingleResultArg(member: PCodeRootWithResult): Messages = {
     error(member, "For now, pure methods and pure functions must have exactly one result argument", member.result.outs.size != 1)
@@ -378,59 +378,62 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     val callGraph: Map[PNode, Set[PNode]] =
       allVerified.map(n => n -> (calleesInBody(n) ++ calleesInSpec(n))).toMap
 
-    // Tarjan's SCC algorithm over PNode keys (reference identity via `eq` for stack termination)
-    var index = 0
-    val indexMap = scala.collection.mutable.Map[PNode, Int]()
-    val lowlink  = scala.collection.mutable.Map[PNode, Int]()
-    val onStack  = scala.collection.mutable.Set[PNode]()
-    val stack    = scala.collection.mutable.ArrayBuffer[PNode]()
-    var msgs: Messages = noMessages
+    // Tarjan's SCC algorithm, implemented with immutable state passed through the recursion.
+    case class TarjanState(
+      idx:      Int             = 0,
+      indexMap: Map[PNode, Int] = Map.empty,
+      lowlink:  Map[PNode, Int] = Map.empty,
+      onStack:  Set[PNode]      = Set.empty,
+      stack:    Vector[PNode]   = Vector.empty,
+      msgs:     Messages        = noMessages
+    )
 
-    def strongconnect(v: PNode): Unit = {
-      indexMap(v) = index
-      lowlink(v)  = index
-      index += 1
-      stack.append(v)
-      onStack.add(v)
-
-      for (w <- callGraph.getOrElse(v, Set.empty)) {
-        if (!indexMap.contains(w)) {
-          strongconnect(w)
-          lowlink(v) = math.min(lowlink(v), lowlink(w))
-        } else if (onStack.contains(w)) {
-          lowlink(v) = math.min(lowlink(v), indexMap(w))
-        }
+    def strongconnect(v: PNode, s: TarjanState): TarjanState = {
+      val s1 = s.copy(
+        idx      = s.idx + 1,
+        indexMap = s.indexMap + (v -> s.idx),
+        lowlink  = s.lowlink  + (v -> s.idx),
+        onStack  = s.onStack  + v,
+        stack    = s.stack    :+ v
+      )
+      val s2 = callGraph.getOrElse(v, Set.empty).foldLeft(s1) { (acc, w) =>
+        if (!acc.indexMap.contains(w)) {
+          val acc2 = strongconnect(w, acc)
+          acc2.copy(lowlink = acc2.lowlink + (v -> math.min(acc2.lowlink(v), acc2.lowlink(w))))
+        } else if (acc.onStack.contains(w)) {
+          acc.copy(lowlink = acc.lowlink + (v -> math.min(acc.lowlink(v), acc.indexMap(w))))
+        } else acc
       }
-
-      if (lowlink(v) == indexMap(v)) {
-        val scc = scala.collection.mutable.ArrayBuffer[PNode]()
-        var continue = true
-        while (continue) {
-          val w = stack.remove(stack.size - 1)
-          onStack.remove(w)
-          scc.append(w)
-          if (w eq v) continue = false
+      if (s2.lowlink(v) == s2.indexMap(v)) {
+        // Pop the SCC. Uses reference identity (`eq`) to identify the root, matching the
+        // original algorithm's requirement that the stack is a true call stack.
+        @scala.annotation.tailrec
+        def popScc(stk: Vector[PNode], os: Set[PNode], acc: Vector[PNode]): (Vector[PNode], Vector[PNode], Set[PNode]) = {
+          val w = stk.last
+          val acc2 = acc :+ w
+          if (w eq v) (acc2, stk.init, os - w)
+          else         popScc(stk.init, os - w, acc2)
         }
-        if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
-          val cycle = scc.toVector
-          if (cycle.size == 1)
-            msgs ++= error(cycle.head, s"\"verified\" ${nodeName(cycle.head)} calls itself. Recursive domain axioms are unsound.")
-          else {
-            // Tarjan pops SCC members in reverse discovery order; reversing restores call order
-            // so the cycle reads A -> B -> C -> A rather than C -> B -> A -> C.
-            val ordered = cycle.reverse
-            val cycleDesc = s"${ordered.map(nodeName).mkString(" -> ")} -> ${nodeName(ordered.head)}"
-            // Report on every member so users see the full cycle without chasing one error at a time.
-            msgs ++= ordered.flatMap(n => error(n, s"\"verified\" members form a recursion cycle: $cycleDesc. Recursive domain axioms are unsound."))
-          }
-        }
-      }
+        val (scc, stackTail, onStackRem) = popScc(s2.stack, s2.onStack, Vector.empty)
+        val s3 = s2.copy(stack = stackTail, onStack = onStackRem)
+        val cycleMsgs: Messages =
+          if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
+            if (scc.size == 1)
+              error(scc.head, s"\"verified\" ${nodeName(scc.head)} calls itself. Recursive domain axioms are unsound.")
+            else {
+              // Tarjan pops in reverse discovery order; reversing restores call order.
+              val ordered   = scc.reverse
+              val cycleDesc = s"${ordered.map(nodeName).mkString(" -> ")} -> ${nodeName(ordered.head)}"
+              ordered.flatMap(n => error(n, s"\"verified\" members form a recursion cycle: $cycleDesc. Recursive domain axioms are unsound."))
+            }
+          } else noMessages
+        s3.copy(msgs = s3.msgs ++ cycleMsgs)
+      } else s2
     }
 
-    for (n <- allVerified if !indexMap.contains(n)) {
-      strongconnect(n)
-    }
-    msgs
+    allVerified.foldLeft(TarjanState()) { (s, n) =>
+      if (s.indexMap.contains(n)) s else strongconnect(n, s)
+    }.msgs
   }
 
   override lazy val localImplementationProofs: Vector[(Type, InterfaceT, Vector[String], Vector[String])] = {
@@ -554,10 +557,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       noMessages) ++
     (if (mSpec.isVerified && !mImpl.isVerified)
       error(mImpl.decl.spec,
-        s"""Method "${mImpl.decl.id.name}" implements interface method "${mSpec.spec.id.name}" """ +
-        s"""which is marked "verified". The implementation must also be marked "verified" """ +
-        s"""(and include a "decreases" clause) to earn the domain axiom that callers of the """ +
-        s"""interface method depend on.""")
+        s"""method "${mImpl.decl.id.name}" implements verified interface method "${mSpec.spec.id.name}" but is not marked "verified" (must also include a "decreases" clause)""")
     else
       noMessages)
   }

@@ -77,10 +77,13 @@ class InterfaceEncoding extends LeafTypeEncoding {
       // Mirror the receiver-not-nil precondition that non-verified interface methods receive.
       val (pos, info: Source.Verifier.Info, errT) = p.vprMeta
       for {
-        members   <- ctx.defaultEncoding.member(p)(ctx)
-        method     = members.head.asInstanceOf[vpr.Method]
-        recv       = method.formalArgs.head.localVar
-        notNilPre  = utils.receiverNotNil(recv)(pos, info, errT)(ctx)
+        members <- ctx.defaultEncoding.member(p)(ctx)
+        method = members.head match {
+          case m: vpr.Method => m
+          case other => Violation.violation(s"expected vpr.Method as first member of verified method encoding, got ${other.getClass.getSimpleName}")
+        }
+        recv      = method.formalArgs.head.localVar
+        notNilPre = utils.receiverNotNil(recv)(pos, info, errT)(ctx)
       } yield method.copy(pres = notNilPre +: method.pres)(pos, info, errT) +: members.tail
   }
 
