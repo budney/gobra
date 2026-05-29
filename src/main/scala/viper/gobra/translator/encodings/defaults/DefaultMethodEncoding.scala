@@ -9,6 +9,7 @@ package viper.gobra.translator.encodings.defaults
 import org.bitbucket.inkytonik.kiama.==>
 import viper.gobra.ast.{internal => in}
 import viper.gobra.translator.encodings.combinators.Encoding
+import viper.gobra.translator.encodings.combinators.DefaultEncoding.VerifiedMemberEncoding
 import viper.gobra.translator.context.Context
 import viper.gobra.translator.util.{VprInfo, ViperUtil => vu}
 import viper.silver.ast.Method
@@ -22,8 +23,8 @@ class DefaultMethodEncoding extends Encoding {
   override def member(ctx: Context): in.Member ==> MemberWriter[Vector[vpr.Member]] = {
     val parent = super.member(ctx)
     val verifiedCase: in.Member ==> MemberWriter[Vector[vpr.Member]] = {
-      case x: in.Function if x.isVerified => verifiedFunctionMembers(x)(ctx)
-      case x: in.Method   if x.isVerified => verifiedMethodMembers(x)(ctx)
+      case x: in.Function if x.isVerified => verifiedFunctionMembers(x)(ctx).map(e => Vector(e.method, e.domain))
+      case x: in.Method   if x.isVerified => verifiedMethodMembers(x)(ctx).map(e => Vector(e.method, e.domain))
     }
     verifiedCase.orElse(parent)
   }
@@ -111,30 +112,36 @@ class DefaultMethodEncoding extends Encoding {
     } yield method
   }
 
-  private def verifiedMethodMembers(x: in.Method)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {
+  private def verifiedMethodMembers(x: in.Method)(ctx: Context): MemberWriter[VerifiedMemberEncoding] = {
     val (pos, info, errT) = x.vprMeta
     val vRecv    = ctx.variable(x.receiver)
     val vArgs    = x.args.map(ctx.variable)
     val vResults = x.results.map(ctx.variable)
     for {
       method <- methodDefault(x)(ctx)
-      vPres  <- sequence(x.pres.map(ctx.precondition))
+      // Reuse pres from the already-encoded method to avoid double error-transformer registration.
+      // methodDefault builds pres as (varPres ++ userPres) ++ measures; drop the measures suffix.
+      // This also includes varPrecondition type bounds that the old code omitted from the domain antecedent.
+      vPres   = method.pres.dropRight(x.terminationMeasures.size).toVector
       vPosts <- sequence(x.posts.map(ctx.postcondition))
       domain  = buildVerifiedDomain(x.name.uniqueName, vRecv +: vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
-    } yield Vector(method, domain)
+    } yield VerifiedMemberEncoding(method, domain)
   }
 
-  private def verifiedFunctionMembers(x: in.Function)(ctx: Context): MemberWriter[Vector[vpr.Member]] = {
+  private def verifiedFunctionMembers(x: in.Function)(ctx: Context): MemberWriter[VerifiedMemberEncoding] = {
     val (pos, info, errT) = x.vprMeta
     val vArgs    = x.args.map(ctx.variable)
     val vResults = x.results.map(ctx.variable)
     for {
       method <- functionDefault(x)(ctx)
-      vPres  <- sequence(x.pres.map(ctx.precondition))
+      vPres   = method.pres.dropRight(x.terminationMeasures.size).toVector
       vPosts <- sequence(x.posts.map(ctx.postcondition))
       domain  = buildVerifiedDomain(x.name.name, vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
-    } yield Vector(method, domain)
+    } yield VerifiedMemberEncoding(method, domain)
   }
+
+  def verifiedInterfaceMethodMembers(x: in.Method)(ctx: Context): MemberWriter[VerifiedMemberEncoding] =
+    verifiedMethodMembers(x)(ctx)
 
   // Builds the Viper domain that backs a verified function or method:
   //   - a spec domain function {memberName}_spec(allArgs) : retType

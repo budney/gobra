@@ -74,17 +74,31 @@ class InterfaceEncoding extends LeafTypeEncoding {
     case p: in.FPredicate if hasFamily(p.name)(ctx) => ctx.predicate(p); ml.unit(Vector.empty)
     case p: in.MPredicate if hasFamily(p.name)(ctx) => ctx.predicate(p); ml.unit(Vector.empty)
     case p: in.Method if p.receiver.typ.isInstanceOf[in.InterfaceT] && p.isVerified =>
-      // Mirror the receiver-not-nil precondition that non-verified interface methods receive.
+      // Mirror the receiver-not-nil precondition that non-verified interface methods receive,
+      // and guard the domain axioms so they cannot fire for nil receivers (soundness fix).
       val (pos, info: Source.Verifier.Info, errT) = p.vprMeta
       for {
-        members <- ctx.defaultEncoding.member(p)(ctx)
-        method = members.head match {
-          case m: vpr.Method => m
-          case other => Violation.violation(s"expected vpr.Method as first member of verified method encoding, got ${other.getClass.getSimpleName}")
+        enc           <- ctx.defaultEncoding.verifiedInterfaceMethodMembers(p)(ctx)
+        recv           = enc.method.formalArgs.head.localVar
+        notNilPre      = utils.receiverNotNil(recv)(pos, info, errT)(ctx)
+        patchedMethod  = enc.method.copy(pres = notNilPre +: enc.method.pres)(pos, info, errT)
+        // Patch the forall body inside each domain axiom, using the domain's own quantified receiver
+        // variable (not the method's formal argument), so the guard is properly in scope.
+        patchedAxioms  = enc.domain.axioms.map { ax =>
+          val forall = ax.exp.asInstanceOf[vpr.Forall]
+          val domainRecv = forall.variables.head.localVar
+          val domainNotNilGuard = utils.receiverNotNil(domainRecv)(pos, info, errT)(ctx)
+          val guardedForall = vpr.Forall(
+            forall.variables, forall.triggers,
+            vpr.Implies(domainNotNilGuard, forall.exp)(pos, info, errT)
+          )(forall.pos, forall.info, forall.errT)
+          ax match {
+            case a: vpr.AnonymousDomainAxiom => a.copy(exp = guardedForall)(a.pos, a.info, a.domainName, a.errT)
+            case a: vpr.NamedDomainAxiom     => a.copy(exp = guardedForall)(a.pos, a.info, a.domainName, a.errT)
+          }
         }
-        recv      = method.formalArgs.head.localVar
-        notNilPre = utils.receiverNotNil(recv)(pos, info, errT)(ctx)
-      } yield method.copy(pres = notNilPre +: method.pres)(pos, info, errT) +: members.tail
+        patchedDomain  = enc.domain.copy(axioms = patchedAxioms)(pos, info, errT)
+      } yield Vector(patchedMethod, patchedDomain)
   }
 
   override def predicate(ctx: Context): in.Member ==> MemberWriter[vpr.Predicate] = {

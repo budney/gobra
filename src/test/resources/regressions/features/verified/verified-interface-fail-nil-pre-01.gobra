@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Calling a verified interface method through a nil receiver must be rejected.
+// The nil-guard precondition must appear on the method AND in the domain axiom.
+
+type Counter interface {
+	ensures ret > 0
+	decreases
+	verified
+	Next() (ret int)
+}
+
+type SimpleCounter struct{ val int }
+
+ensures ret > 0
+decreases
+verified
+func (c SimpleCounter) Next() (ret int) {
+	ret = 1
+	return ret
+}
+
+func callNilCounter() {
+	var c Counter
+	//:: ExpectedOutput(precondition_error:receiver_is_nil_error)
+	_ = c.Next()
+}

@@ -11,7 +11,13 @@ import viper.gobra.ast.{internal => in}
 import viper.gobra.translator.context.Context
 import viper.silver.{ast => vpr}
 
+object DefaultEncoding {
+  case class VerifiedMemberEncoding(method: vpr.Method, domain: vpr.Domain)
+}
+
 trait DefaultEncoding {
+
+  import DefaultEncoding.VerifiedMemberEncoding
 
   def method(x: in.Method)(ctx: Context): MemberWriter[vpr.Method]
 
@@ -28,4 +34,6 @@ trait DefaultEncoding {
   def globalVarDeclaration(x: in.GlobalVarDecl)(ctx: Context): MemberWriter[Vector[vpr.Function]]
 
   def member(x: in.Member)(ctx: Context): MemberWriter[Vector[vpr.Member]]
+
+  def verifiedInterfaceMethodMembers(x: in.Method)(ctx: Context): MemberWriter[VerifiedMemberEncoding]
 }

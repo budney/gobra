@@ -15,6 +15,7 @@ import viper.gobra.translator.encodings.arrays.ArrayEncoding
 import viper.gobra.translator.encodings.channels.ChannelEncoding
 import viper.gobra.translator.encodings.closures.ClosureEncoding
 import viper.gobra.translator.encodings.combinators.{DefaultEncoding, FinalTypeEncoding, SafeTypeEncodingCombiner, TypeEncoding}
+import viper.gobra.translator.encodings.combinators.DefaultEncoding.VerifiedMemberEncoding
 import viper.gobra.translator.encodings.interfaces.InterfaceEncoding
 import viper.gobra.translator.encodings.maps.{MapEncoding, MathematicalMapEncoding}
 import viper.gobra.translator.encodings.defaults.{DefaultGlobalVarEncoding, DefaultMethodEncoding, DefaultPredicateEncoding, DefaultPureMethodEncoding, DefaultTriggerExprEncoding}
@@ -88,5 +89,6 @@ class DfltTranslatorConfig(
     override def fpredicate(x: in.FPredicate)(ctx: Context): MemberWriter[vpr.Predicate] = predicateEncoding.fpredicateDefault(x)(ctx)
     override def globalVarDeclaration(x: GlobalVarDecl)(ctx: Context): MemberWriter[Vector[vpr.Function]] = globalVarEncoding.globalVarDeclarationDefault(x)(ctx)
     override def member(x: in.Member)(ctx: Context): MemberWriter[Vector[vpr.Member]] = methodEncoding.member(ctx)(x)
+    override def verifiedInterfaceMethodMembers(x: in.Method)(ctx: Context): MemberWriter[VerifiedMemberEncoding] = methodEncoding.verifiedInterfaceMethodMembers(x)(ctx)
   }
 }
