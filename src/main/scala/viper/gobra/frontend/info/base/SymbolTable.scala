@@ -73,6 +73,7 @@ object SymbolTable extends Environments[Entity] {
     override val result: PResult = decl.result
     def isPure: Boolean = decl.spec.isPure
     def isVerified: Boolean = decl.spec.isVerified
+    def isSpecCallable: Boolean = isPure || isVerified
     def isOpaque: Boolean = decl.spec.isOpaque
   }
 
@@ -184,6 +185,7 @@ object SymbolTable extends Environments[Entity] {
   sealed trait Method extends MethodLike with ActualTypeMember with WithResult {
     def isPure: Boolean
     def isVerified: Boolean
+    def isSpecCallable: Boolean = isPure || isVerified
   }
 
   case class MethodImpl(decl: PMethodDecl, ghost: Boolean, context: ExternalTypeInfo) extends Method {

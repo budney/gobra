@@ -34,7 +34,7 @@ func (s SlowDoubler) Double(x int) (ret int) {
 	return ret
 }
 
-requires d.Double(n) > 10
+requires d != nil && d.Double(n) > 10
 ensures  result > 10
 func useDoubler(d Doubler, n int) (result int) {
 	result = d.Double(n)

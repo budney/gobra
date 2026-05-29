@@ -417,12 +417,12 @@ trait GhostExprTyping extends BaseTyping { this: TypeInfoImpl =>
         case (Right(_), Some(p: ap.Conversion)) =>
           !isEffectfulConversion(p) && go(p.arg)
         case (Left(callee), Some(p@ap.FunctionCall(f, _))) => go(callee) && p.args.forall(go) && (f match {
-          case ap.Function(_, symb) => symb.isPure || symb.isVerified
+          case ap.Function(_, symb) => symb.isSpecCallable
           case ap.Closure(_, symb) => symb.isPure
           case ap.DomainFunction(_, _) => true
-          case ap.ReceivedMethod(_, _, _, symb) => symb.isPure || symb.isVerified
-          case ap.ImplicitlyReceivedInterfaceMethod(_, symb) => symb.isPure || symb.isVerified
-          case ap.MethodExpr(_, _, _, symb) => symb.isPure || symb.isVerified
+          case ap.ReceivedMethod(_, _, _, symb) => symb.isSpecCallable
+          case ap.ImplicitlyReceivedInterfaceMethod(_, symb) => symb.isSpecCallable
+          case ap.MethodExpr(_, _, _, symb) => symb.isSpecCallable
           case ap.BuiltInReceivedMethod(_, _, _, symb) => symb.isPure
           case ap.BuiltInMethodExpr(_, _, _, symb) => symb.isPure
           case ap.BuiltInFunction(_, symb) => symb.isPure

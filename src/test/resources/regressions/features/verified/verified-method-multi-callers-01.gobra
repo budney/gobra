@@ -17,21 +17,21 @@ func (b Base) addFive() (ret int) {
 	return ret
 }
 
-requires b.addFive() > 10
+requires b.x >= 0 && b.addFive() > 10
 ensures  result > 10
 func callerA(b Base) (result int) {
 	result = b.addFive()
 	return result
 }
 
-requires b.addFive() < 100
+requires b.x >= 0 && b.addFive() < 100
 ensures  result < 100
 func callerB(b Base) (result int) {
 	result = b.addFive()
 	return result
 }
 
-requires b.addFive() == 15
+requires b.x >= 0 && b.addFive() == 15
 ensures  result == 15
 func callerC(b Base) (result int) {
 	result = b.addFive()

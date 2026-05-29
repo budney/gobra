@@ -24,6 +24,7 @@ class DeferEncoding extends Encoding {
   case class Defer(
                     activationVar: vpr.LocalVarDecl,
                     temporaryVars: Vector[vpr.LocalVarDecl],
+                    targetVars: Vector[vpr.LocalVarDecl],
                     stmt: MemberWriter[vpr.Stmt]
                   ) extends ViperWriter.CodeCollectible
 
@@ -45,6 +46,13 @@ class DeferEncoding extends Encoding {
     *      if (active) { C(temp1, ..., tempN) }
     *
     * */
+  private def targetsOf(x: in.Deferrable): Vector[in.BodyVar] = x match {
+    case x: in.FunctionCall => x.targets
+    case x: in.MethodCall   => x.targets
+    case x: in.ClosureCall  => x.targets
+    case _                  => Vector.empty
+  }
+
   override def statement(ctx: Context): in.Stmt ==> CodeWriter[vpr.Stmt] = {
     case n: in.Defer =>
       val (pos, info, errT) = n.vprMeta
@@ -54,7 +62,8 @@ class DeferEncoding extends Encoding {
       val vars = args.zipWithIndex map { case (v, idx) => in.LocalVar(s"${name}_$idx", v.typ.withAddressability(Addressability.Exclusive))(v.info) }
       val appliedCore = Core.core(n.stmt).run(vars)
 
-      val vprVars = vars map ctx.variable // temporary variables
+      val vprVars = vars map ctx.variable // temporary variables for arguments
+      val vprTargetVars = targetsOf(n.stmt) map ctx.variable // return-value targets (result discarded in defer)
       val activationVar = vpr.LocalVarDecl(s"${name}_activation", vpr.Bool)(pos,info,errT) // activation variable
 
       val w = ml.block(ctx.statement(appliedCore))
@@ -64,7 +73,7 @@ class DeferEncoding extends Encoding {
           // temp1 = [e1]; ...; tempN = [eN]
           ctx.expression(r).flatMap(rv => bind(l.localVar, rv))
         })
-        _ <- collect(Defer(activationVar, vprVars, w))
+        _ <- collect(Defer(activationVar, vprVars, vprTargetVars, w))
         // active = true
       } yield vpr.LocalVarAssign(activationVar.localVar, vpr.BoolLit(b = true)(pos,info,errT))(): vpr.Stmt
   }
@@ -76,7 +85,7 @@ class DeferEncoding extends Encoding {
       def order(x: Defer): Int = -x.activationVar.pos.asInstanceOf[vpr.HasLineColumn].line
       val sortedDefers = defers.sortBy(order)
 
-      val defersExec = sortedDefers map { case Defer(active, temps, w) => (body: vpr.Stmt) =>
+      val defersExec = sortedDefers map { case Defer(active, temps, targetVars, w) => (body: vpr.Stmt) =>
         // var active = false
         // var temp1, ..., tempN
         // body
@@ -89,7 +98,7 @@ class DeferEncoding extends Encoding {
             vpr.Seqn(Vector(deferredStmt), Vector.empty)(active.pos, active.info, active.errT),
             vpr.Seqn(Vector.empty, Vector.empty)(active.pos, active.info, active.errT)
           )(active.pos, active.info, active.errT)
-        } yield vpr.Seqn(Vector(init, body, deferExec), active +: temps)(active.pos, active.info, active.errT)
+        } yield vpr.Seqn(Vector(init, body, deferExec), active +: (temps ++ targetVars))(active.pos, active.info, active.errT)
       }
 
       // performs transformation of body for each defer (in the reverse program order)

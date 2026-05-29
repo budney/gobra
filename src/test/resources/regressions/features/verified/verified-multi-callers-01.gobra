@@ -15,21 +15,21 @@ func addTen(x int) (ret int) {
 	return ret
 }
 
-requires addTen(a) > 15
+requires a >= 0 && addTen(a) > 15
 ensures result > 15
 func callerA(a int) (result int) {
 	result = addTen(a)
 	return result
 }
 
-requires addTen(b) < 100
+requires b >= 0 && addTen(b) < 100
 ensures result < 100
 func callerB(b int) (result int) {
 	result = addTen(b)
 	return result
 }
 
-requires addTen(c) == 20
+requires c >= 0 && addTen(c) == 20
 ensures result == 20
 func callerC(c int) (result int) {
 	result = addTen(c)

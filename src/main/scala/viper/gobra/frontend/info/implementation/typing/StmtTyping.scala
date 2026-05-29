@@ -172,24 +172,7 @@ trait StmtTyping extends BaseTyping { this: TypeInfoImpl =>
         } else noMessages // a return without arguments is always well-defined
       }
 
-    case n@PDeferStmt(exp: PExpression) => isExpr(exp).out ++ isExecutable.errors(exp)(n) ++ {
-      exp match {
-        case inv: PInvoke =>
-          resolve(inv) match {
-            case Some(ap.FunctionCall(callee, _)) =>
-              val isVerified = callee match {
-                case ap.Function(_, symb)                          => symb.isVerified
-                case ap.ReceivedMethod(_, _, _, symb)              => symb.isVerified
-                case ap.MethodExpr(_, _, _, symb)                  => symb.isVerified
-                case ap.ImplicitlyReceivedInterfaceMethod(_, symb) => symb.isVerified
-                case _                                             => false
-              }
-              error(n, s"cannot defer a call to a verified function", isVerified)
-            case _ => noMessages
-          }
-        case _ => noMessages
-      }
-    }
+    case n@PDeferStmt(exp: PExpression) => isExpr(exp).out ++ isExecutable.errors(exp)(n)
     case PDeferStmt(_: PUnfold | _: PFold) => noMessages
 
     case _: PBlock => noMessages

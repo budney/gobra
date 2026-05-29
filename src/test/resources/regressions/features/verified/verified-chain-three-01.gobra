@@ -32,7 +32,7 @@ func addFour(x int) (ret int) {
 	return ret
 }
 
-requires addFour(n) > 10
+requires n >= 0 && addFour(n) > 10
 ensures result > 10
 func useChain(n int) (result int) {
 	result = addFour(n)

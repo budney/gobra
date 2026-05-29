@@ -14,7 +14,7 @@ func goIncrement(x int) (ret int) {
 	return ret
 }
 
-//@ requires goIncrement(n) > 3
+//@ requires n >= 0 && goIncrement(n) > 3
 //@ ensures result > 3
 func useGoIncrement(n int) (result int) {
 	result = goIncrement(n)

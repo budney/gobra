@@ -16,7 +16,8 @@ func increment(x int) (ret int) {
 }
 
 // The caller can use increment in its precondition because increment is verified.
-requires increment(n) > 5
+// n > 0 is also required so the body call to increment passes its precondition.
+requires n > 0 && increment(n) > 5
 ensures result > 5
 func useIncrement(n int) (result int) {
 	result = increment(n)

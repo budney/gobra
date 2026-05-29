@@ -24,7 +24,7 @@ func quadruple(x int) (ret int) {
 	return ret
 }
 
-requires quadruple(n) > 20
+requires n >= 0 && quadruple(n) > 20
 ensures result > 20
 func useQuadruple(n int) (result int) {
 	result = quadruple(n)

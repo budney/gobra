@@ -476,7 +476,7 @@ object Desugar extends LazyLogging {
           freshGlobalVar(typ, scope, w.context)(src)
         case e => Violation.violation(s"Expected a global variable or wildcard, but instead got $e")
       }
-      val exps = decl.right.map(exprD(FunctionContext.empty(), info))
+      val exps = decl.right.map(exprD(FunctionContext.empty(), info, false))
       if (decl.right.isEmpty) {
         // assign to all variables its default value:
         val assignsToDefault =
@@ -2078,8 +2078,8 @@ object Desugar extends LazyLogging {
       }
     }
 
-    def functionLikeCallD(ctx: FunctionContext, info: TypeInfo)(p: ap.FunctionLikeCall, expr: PInvoke)(src: Meta): Writer[in.Expr] = {
-      functionLikeCallDAux(ctx, info)(p, expr)(src) flatMap {
+    def functionLikeCallD(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(p: ap.FunctionLikeCall, expr: PInvoke)(src: Meta): Writer[in.Expr] = {
+      functionLikeCallDAux(ctx, info, inSpecContext)(p, expr)(src) flatMap {
         case Right(exp) => unit(exp)
         case Left((targets, callStmt)) =>
           val res = if (targets.size == 1) targets.head else in.Tuple(targets)(src) // put returns into a tuple if necessary
@@ -2090,13 +2090,13 @@ object Desugar extends LazyLogging {
       }
     }
 
-    def functionLikeCallDAux(ctx: FunctionContext, info: TypeInfo)(p: ap.FunctionLikeCall, expr: PInvoke)(src: Meta): Writer[Either[(Vector[in.LocalVar], in.Stmt), in.Expr]] = p match {
-      case p: ap.FunctionCall => functionCallDAux(ctx, info)(p, expr)(src)
+    def functionLikeCallDAux(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(p: ap.FunctionLikeCall, expr: PInvoke)(src: Meta): Writer[Either[(Vector[in.LocalVar], in.Stmt), in.Expr]] = p match {
+      case p: ap.FunctionCall => functionCallDAux(ctx, info, inSpecContext)(p, expr)(src)
       case _: ap.ClosureCall => closureCallDAux(ctx, info)(expr)(src)
     }
 
     /** Returns either a tuple with targets and call statement or, if the call is pure, the call expression directly. */
-    def functionCallDAux(ctx: FunctionContext, info: TypeInfo)(p: ap.FunctionCall, expr: PInvoke)(src: Meta): Writer[Either[(Vector[in.LocalVar], in.Stmt), in.Expr]] = {
+    def functionCallDAux(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(p: ap.FunctionCall, expr: PInvoke)(src: Meta): Writer[Either[(Vector[in.LocalVar], in.Stmt), in.Expr]] = {
       def getBuiltInFuncType(f: ap.BuiltInFunctionKind): FunctionT = {
         val abstractType = info.typ(f.symb.tag)
         val argsForTyping = f match {
@@ -2208,9 +2208,9 @@ object Desugar extends LazyLogging {
 
       val isPure = p.callee match {
         case base: ap.Symbolic => base.symb match {
-          case f: st.Function => f.isPure || f.isVerified
+          case f: st.Function => f.isPure || (inSpecContext && f.isVerified)
           case c: st.Closure => c.isPure
-          case m: st.Method => m.isPure || m.isVerified
+          case m: st.Method => m.isPure || (inSpecContext && m.isVerified)
           case _: st.DomainFunction => true
           case f: st.BuiltInFunction => f.isPure
           case m: st.BuiltInMethod => m.isPure
@@ -2345,7 +2345,7 @@ object Desugar extends LazyLogging {
         case _ => None
       }
 
-      val wRes: Writer[Vector[in.Expr]] = sequence(args map exprD(ctx, info)).map {
+      val wRes: Writer[Vector[in.Expr]] = sequence(args map exprD(ctx, info, false)).map {
         // go function chaining feature
         case Vector(in.Tuple(targs)) if parameterCount > 1 => targs
         case dargs => dargs
@@ -2490,10 +2490,10 @@ object Desugar extends LazyLogging {
     def indexedExprD(expr : ap.IndexedExp)(ctx : FunctionContext, info : TypeInfo)(src : Meta) : Writer[in.IndexedExp] =
       indexedExprD(expr.base, expr.index)(ctx, info)(src)
 
-    def exprD(ctx: FunctionContext, info: TypeInfo)(expr: PExpression): Writer[in.Expr] = {
+    def exprD(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(expr: PExpression): Writer[in.Expr] = {
 
-      def go(e: PExpression): Writer[in.Expr] = exprD(ctx, info)(e)
-      def goTExpr(e: PExpressionOrType): Writer[in.Expr] = exprAndTypeAsExpr(ctx, info)(e)
+      def go(e: PExpression): Writer[in.Expr] = exprD(ctx, info, inSpecContext)(e)
+      def goTExpr(e: PExpressionOrType): Writer[in.Expr] = exprAndTypeAsExpr(ctx, info, inSpecContext)(e)
 
       val src: Meta = meta(expr, info)
 
@@ -2574,7 +2574,7 @@ object Desugar extends LazyLogging {
             case _ => Violation.violation(s"could not resolve $n")
           }
 
-          case n: PInvoke => invokeD(ctx, info)(n)
+          case n: PInvoke => invokeD(ctx, info, inSpecContext)(n)
 
           case n: PTypeAssertion =>
             for {
@@ -2597,8 +2597,8 @@ object Desugar extends LazyLogging {
               } yield in.EqCmp(l, r)(src)
             } else {
               for {
-                l <- exprAndTypeAsExpr(ctx, info)(left)
-                r <- exprAndTypeAsExpr(ctx, info)(right)
+                l <- exprAndTypeAsExpr(ctx, info, inSpecContext)(left)
+                r <- exprAndTypeAsExpr(ctx, info, inSpecContext)(right)
               } yield in.EqCmp(l, r)(src)
             }
 
@@ -2613,8 +2613,8 @@ object Desugar extends LazyLogging {
               } yield in.UneqCmp(l, r)(src)
             } else {
               for {
-                l <- exprAndTypeAsExpr(ctx, info)(left)
-                r <- exprAndTypeAsExpr(ctx, info)(right)
+                l <- exprAndTypeAsExpr(ctx, info, inSpecContext)(left)
+                r <- exprAndTypeAsExpr(ctx, info, inSpecContext)(right)
               } yield in.UneqCmp(l, r)(src)
             }
 
@@ -2779,7 +2779,7 @@ object Desugar extends LazyLogging {
 
           case PCapacity(op) => go(op).map(in.Capacity(_)(src))
 
-          case g: PGhostExpression => ghostExprD(ctx, info)(g)
+          case g: PGhostExpression => ghostExprD(ctx, info, inSpecContext)(g)
 
           case b: PBlankIdentifier =>
             val typ = typeD(info.typ(b), Addressability.exclusiveVariable)(src)
@@ -2872,7 +2872,7 @@ object Desugar extends LazyLogging {
                 case Some(_: ap.ReceivedPredicate) =>
                   handleBase(b, { case (baseT: in.PredT, dArgs: Vector[Option[in.Expr]]) =>
                     for {
-                      dRecv <- exprAndTypeAsExpr(ctx, info)(b.recv)
+                      dRecv <- exprAndTypeAsExpr(ctx, info, inSpecContext)(b.recv)
                       proxy = getMPredProxy(dRecv.typ, baseT.args)
                       idT = in.PredT(dRecv.typ +: baseT.args, Addressability.rValue)
                     } yield in.PredicateConstructor(proxy, idT, Some(dRecv) +: dArgs)(src)
@@ -2886,7 +2886,7 @@ object Desugar extends LazyLogging {
                 case Some(_: ap.PredicateExpr) =>
                   handleBase(b, { case (baseT: in.PredT, dArgs: Vector[Option[in.Expr]]) =>
                     for {
-                      dRecv <- exprAndTypeAsExpr(ctx, info)(b.recv)
+                      dRecv <- exprAndTypeAsExpr(ctx, info, inSpecContext)(b.recv)
                       proxy = getMPredProxy(dRecv.typ, baseT.args.tail) // args must include at least the receiver
                       idT = in.PredT(baseT.args, Addressability.rValue)
                     } yield in.PredicateConstructor(proxy, idT, dArgs)(src)
@@ -2901,10 +2901,10 @@ object Desugar extends LazyLogging {
       }
     }
 
-    def invokeD(ctx: FunctionContext, info: TypeInfo)(expr: PInvoke): Writer[in.Expr] = {
+    def invokeD(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(expr: PInvoke): Writer[in.Expr] = {
       val src: Meta = meta(expr, info)
       info.resolve(expr) match {
-        case Some(p: ap.FunctionLikeCall) => functionLikeCallD(ctx, info)(p, expr)(src)
+        case Some(p: ap.FunctionLikeCall) => functionLikeCallD(ctx, info, inSpecContext)(p, expr)(src)
         case Some(c@ap.Conversion(typ, arg)) =>
           val typType = info.symbType(typ)
           underlyingType(typType) match {
@@ -2942,9 +2942,9 @@ object Desugar extends LazyLogging {
       }}
     }
 
-    def exprAndTypeAsExpr(ctx: FunctionContext, info: TypeInfo)(expr: PExpressionOrType): Writer[in.Expr] = {
+    def exprAndTypeAsExpr(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(expr: PExpressionOrType): Writer[in.Expr] = {
 
-      def go(x: PExpressionOrType): Writer[in.Expr] = exprAndTypeAsExpr(ctx, info)(x)
+      def go(x: PExpressionOrType): Writer[in.Expr] = exprAndTypeAsExpr(ctx, info, inSpecContext)(x)
 
       val src: Meta = meta(expr, info)
 
@@ -2952,7 +2952,7 @@ object Desugar extends LazyLogging {
 
         case PTypeExpr(t) => go(t)
 
-        case e: PExpression => exprD(ctx, info)(e)
+        case e: PExpression => exprD(ctx, info, inSpecContext)(e)
 
         case PBoolType() => unit(in.BoolTExpr()(src))
 
@@ -4397,9 +4397,9 @@ object Desugar extends LazyLogging {
     }
 
     // Ghost Expression
-    def ghostExprD(ctx: FunctionContext, info: TypeInfo)(expr: PGhostExpression): Writer[in.Expr] = {
+    def ghostExprD(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(expr: PGhostExpression): Writer[in.Expr] = {
 
-      def go(e: PExpression): Writer[in.Expr] = exprD(ctx, info)(e)
+      def go(e: PExpression): Writer[in.Expr] = exprD(ctx, info, inSpecContext)(e)
 
       val src: Meta = meta(expr, info)
 
@@ -4427,11 +4427,11 @@ object Desugar extends LazyLogging {
           }))
 
         case PForall(vars, triggers, body) =>
-          for { (newVars, newTriggers, newBody) <- quantifierD(ctx, info)(vars, triggers, body)(ctx => exprD(ctx, info)) }
+          for { (newVars, newTriggers, newBody) <- quantifierD(ctx, info)(vars, triggers, body)(ctx => exprD(ctx, info, inSpecContext)) }
             yield in.PureForall(newVars, newTriggers, newBody)(src)
 
         case PExists(vars, triggers, body) =>
-          for { (newVars, newTriggers, newBody) <- quantifierD(ctx, info)(vars, triggers, body)(ctx => exprD(ctx, info)) }
+          for { (newVars, newTriggers, newBody) <- quantifierD(ctx, info)(vars, triggers, body)(ctx => exprD(ctx, info, inSpecContext)) }
             yield in.Exists(newVars, newTriggers, newBody)(src)
 
         case PImplication(left, right) => for {
@@ -4442,8 +4442,8 @@ object Desugar extends LazyLogging {
 
         case PTypeOf(exp) => for { wExp <- go(exp) } yield in.TypeOf(wExp)(src)
         case PIsComparable(exp) => underlyingType(info.typOfExprOrType(exp)) match {
-          case _: Type.InterfaceT => for { wExp <- exprAndTypeAsExpr(ctx, info)(exp) } yield in.IsComparableInterface(wExp)(src)
-          case Type.SortT => for { wExp <- exprAndTypeAsExpr(ctx, info)(exp) } yield in.IsComparableType(wExp)(src)
+          case _: Type.InterfaceT => for { wExp <- exprAndTypeAsExpr(ctx, info, inSpecContext)(exp) } yield in.IsComparableInterface(wExp)(src)
+          case Type.SortT => for { wExp <- exprAndTypeAsExpr(ctx, info, inSpecContext)(exp) } yield in.IsComparableType(wExp)(src)
           case t => Violation.violation(s"Expected interface or sort type, but got $t")
         }
 
@@ -4653,17 +4653,17 @@ object Desugar extends LazyLogging {
             for {
               pa <- predicateCallAccD(ctx, info)(x)(src)
             } yield in.Access(in.Accessible.Predicate(pa), in.FullPerm(pa.info))(pa.info)
-          case Some(_: ap.FunctionCall) => exprD(ctx, info)(p)
+          case Some(_: ap.FunctionCall) => exprD(ctx, info, true)(p)
           case _ => violation(s"Unexpected expression $expr")
         }
         case p: PAccess => assertionD(ctx, info)(p)
-        case _ => exprD(ctx, info)(expr)
+        case _ => exprD(ctx, info, true)(expr)
       }
 
       measure match {
         case PWildcardMeasure(cond) =>
           for {
-            c <- option(cond map exprD(ctx, info))
+            c <- option(cond map exprD(ctx, info, true))
             measure =
               if (occursInItfMethodSpec)
                 in.ItfMethodWildcardMeasure(c)(src)
@@ -4673,7 +4673,7 @@ object Desugar extends LazyLogging {
         case PTupleTerminationMeasure(tuple, cond) =>
           for {
             t <- sequence(tuple map goE)
-            c <- option(cond map exprD(ctx, info))
+            c <- option(cond map exprD(ctx, info, true))
             measure =
               if (occursInItfMethodSpec)
                 in.ItfTupleTerminationMeasure(t, c)(src)
@@ -4685,7 +4685,7 @@ object Desugar extends LazyLogging {
 
     def assertionD(ctx: FunctionContext, info: TypeInfo)(n: PExpression): Writer[in.Assertion] = {
 
-      def goE(e: PExpression): Writer[in.Expr] = exprD(ctx, info)(e)
+      def goE(e: PExpression): Writer[in.Expr] = exprD(ctx, info, true)(e)
       def goA(a: PExpression): Writer[in.Assertion] = assertionD(ctx, info)(a)
 
       val src: Meta = meta(n, info)
@@ -4757,7 +4757,7 @@ object Desugar extends LazyLogging {
               case _ => in.SepForall(newVars, newTriggers, newBody)(src)
             }
 
-        case _ => exprD(ctx, info)(n) map (in.ExprAssertion(_)(src)) // a boolean expression
+        case _ => exprD(ctx, info, true)(n) map (in.ExprAssertion(_)(src)) // a boolean expression
       }
     }
 
@@ -4774,14 +4774,14 @@ object Desugar extends LazyLogging {
 
         case Some(b: ap.PredExprInstance) =>
           for {
-            base <- exprD(ctx, info)(n.base.asInstanceOf[PExpression])
-            args <- sequence(n.args.map(exprD(ctx, info)(_)))
+            base <- exprD(ctx, info, true)(n.base.asInstanceOf[PExpression])
+            args <- sequence(n.args.map(exprD(ctx, info, true)(_)))
             implicitlyConvertedArgs = arguments(b.typ, args)
             predExprInstance = in.PredExprInstance(base, implicitlyConvertedArgs)(src)
             p <- permissionD(ctx, info)(perm)
           } yield in.Access(in.Accessible.PredExpr(predExprInstance), p)(src)
 
-        case _ => exprD(ctx, info)(n) map (in.ExprAssertion(_)(src)) // a boolean expression
+        case _ => exprD(ctx, info, true)(n) map (in.ExprAssertion(_)(src)) // a boolean expression
       }
     }
 

@@ -19,7 +19,7 @@ func addTwo(x int) (ret int) {
 // A function that defines a closure alongside use of the verified function.
 // Guards against ctx.lookup crashing on closure-generated proxies when encoding
 // the verified domain axiom.
-requires addTwo(n) > 5
+requires n >= 0 && addTwo(n) > 5
 ensures result > 5
 func useAddTwoAndClosure(n int) (result int) {
 	// Define a closure; its proxy must not crash verified-function encoding.

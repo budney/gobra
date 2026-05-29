@@ -21,7 +21,7 @@ func wrapsOrdinary(x int) (ret int) {
 	return ret
 }
 
-requires wrapsOrdinary(n) > 5
+requires n >= 0 && wrapsOrdinary(n) > 5
 ensures result > 5
 func useWrapped(n int) (result int) {
 	result = wrapsOrdinary(n)

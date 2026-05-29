@@ -20,8 +20,9 @@ func verifiedUsesPure(x int) (ret int) {
 	return ret
 }
 
-// verifiedUsesPure is usable in spec positions
-requires verifiedUsesPure(n) > 5
+// verifiedUsesPure is usable in spec positions.
+// n > 0 is also required so the body call to verifiedUsesPure passes its precondition.
+requires n > 0 && verifiedUsesPure(n) > 5
 ensures result > 5
 func caller(n int) (result int) {
 	result = verifiedUsesPure(n)

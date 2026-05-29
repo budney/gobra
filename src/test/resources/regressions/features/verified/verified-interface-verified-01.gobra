@@ -26,7 +26,8 @@ func (a MyAdder) Add(x int) (ret int) {
 }
 
 // The requires uses Add in spec position — legal because Add is verified on Adder.
-requires x > 0 && ad.Add(x) > 5
+// ad != nil is required so the body call ad.Add(x) passes the nil-receiver check.
+requires ad != nil && x > 0 && ad.Add(x) > 5
 ensures  result > 5
 func useAdder(ad Adder, x int) (result int) {
 	result = ad.Add(x)

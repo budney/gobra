@@ -23,6 +23,7 @@ func (s SimpleIncrementer) Inc(x int) (ret int) {
 	return ret
 }
 
+requires i != nil
 ensures result == n + 1
 func callInc(i Incrementer, n int) (result int) {
 	result = i.Inc(n)
