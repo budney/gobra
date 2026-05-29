@@ -105,7 +105,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       error(member, s"\"verified\" function \"${member.id.name}\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have at least one result",
-            member.result.outs.size == 0) ++
+            member.result.outs.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
@@ -129,7 +129,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       error(member, s"\"verified\" method \"${member.id.name}\" must have a decreases clause",
             member.spec.terminationMeasures.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have at least one result",
-            member.result.outs.size == 0) ++
+            member.result.outs.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause",
             member.spec.posts.isEmpty) ++
       member.spec.pres.flatMap(check(_, "precondition")) ++
@@ -150,7 +150,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have a decreases clause",
             sig.spec.terminationMeasures.isEmpty) ++
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one result",
-            sig.result.outs.size == 0) ++
+            sig.result.outs.isEmpty) ++
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one ensures clause",
             sig.spec.posts.isEmpty) ++
       sig.spec.pres.flatMap(check(_, "precondition")) ++
