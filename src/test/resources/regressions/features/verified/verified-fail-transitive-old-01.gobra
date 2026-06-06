@@ -1,0 +1,30 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Plan 11 gap: pureCallTransitivelySafe checks specNodes for PAccess and PDeref
+// but does NOT check for POld. A pure function with `old(x)` in its postcondition
+// is heap-dependent (old() snapshots heap state) but the transitive check misses it.
+//
+// This test documents the missing check. It currently FAILS because the expected
+// type_error is NOT reported — the bug in plan 11 is not yet fixed.
+
+// withOld: postcondition uses old(x), which is heap-dependent
+ensures ret == old(x)
+pure
+func withOld(x int) (ret int) {
+	return x
+}
+
+// useOld: verified function whose precondition calls withOld transitively
+// This should be rejected but currently is not.
+//:: ExpectedOutput(type_error)
+requires withOld(n) > 0
+ensures  ret == 1
+decreases
+verified
+func useOld(n int) (ret int) {
+	ret = 1
+	return ret
+}
