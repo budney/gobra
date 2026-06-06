@@ -228,7 +228,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     *
     * `specOnly` is true when following a verified callee: verified function bodies may freely
     * access the heap, so only the spec (pre/post/preserves) is checked, not the body.
-    * `visited` prevents re-traversal of already-checked nodes (handles mutual recursion).
+    * `visited` is mutated during traversal to prevent re-traversal (handles mutual recursion);
+    * callers must not reuse the same set instance across independent top-level calls.
     * `chain` accumulates the call path for error messages. */
   private def pureCallTransitivelySafe(
       symb: Either[FuncSymbol, MethodImpl],
@@ -378,46 +379,64 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     val callGraph: Map[PNode, Set[PNode]] =
       allVerified.map(n => n -> (calleesInBody(n) ++ calleesInSpec(n))).toMap
 
+    // Wrap PNode in an identity-keyed wrapper so that Map/Set operations inside
+    // Tarjan's algorithm use reference identity rather than structural equality.
+    // This prevents false positives when two distinct PNode objects happen to be
+    // structurally equal (e.g., generated or template code with identical AST shapes).
+    // popScc already uses `eq` for the stack root; this aligns the map/set lookups.
+    class IdentityKey(val node: PNode) {
+      override def equals(o: Any): Boolean = o match {
+        case k: IdentityKey => node eq k.node
+        case _ => false
+      }
+      override def hashCode: Int = System.identityHashCode(node)
+    }
+    def key(n: PNode): IdentityKey = new IdentityKey(n)
+
+    val callGraphK: Map[IdentityKey, Set[IdentityKey]] =
+      callGraph.map { case (n, ns) => key(n) -> ns.map(key) }
+
     // Tarjan's SCC algorithm, implemented with immutable state passed through the recursion.
     case class TarjanState(
-      idx:      Int             = 0,
-      indexMap: Map[PNode, Int] = Map.empty,
-      lowlink:  Map[PNode, Int] = Map.empty,
-      onStack:  Set[PNode]      = Set.empty,
-      stack:    Vector[PNode]   = Vector.empty,
-      msgs:     Messages        = noMessages
+      idx:      Int                    = 0,
+      indexMap: Map[IdentityKey, Int]  = Map.empty,
+      lowlink:  Map[IdentityKey, Int]  = Map.empty,
+      onStack:  Set[IdentityKey]       = Set.empty,
+      stack:    Vector[PNode]          = Vector.empty,
+      msgs:     Messages               = noMessages
     )
 
     def strongconnect(v: PNode, s: TarjanState): TarjanState = {
+      val kv = key(v)
       val s1 = s.copy(
         idx      = s.idx + 1,
-        indexMap = s.indexMap + (v -> s.idx),
-        lowlink  = s.lowlink  + (v -> s.idx),
-        onStack  = s.onStack  + v,
+        indexMap = s.indexMap + (kv -> s.idx),
+        lowlink  = s.lowlink  + (kv -> s.idx),
+        onStack  = s.onStack  + kv,
         stack    = s.stack    :+ v
       )
-      val s2 = callGraph.getOrElse(v, Set.empty).foldLeft(s1) { (acc, w) =>
-        if (!acc.indexMap.contains(w)) {
-          val acc2 = strongconnect(w, acc)
-          acc2.copy(lowlink = acc2.lowlink + (v -> math.min(acc2.lowlink(v), acc2.lowlink(w))))
-        } else if (acc.onStack.contains(w)) {
-          acc.copy(lowlink = acc.lowlink + (v -> math.min(acc.lowlink(v), acc.indexMap(w))))
+      val s2 = callGraphK.getOrElse(kv, Set.empty).foldLeft(s1) { (acc, kw) =>
+        if (!acc.indexMap.contains(kw)) {
+          val acc2 = strongconnect(kw.node, acc)
+          acc2.copy(lowlink = acc2.lowlink + (kv -> math.min(acc2.lowlink(kv), acc2.lowlink(kw))))
+        } else if (acc.onStack.contains(kw)) {
+          acc.copy(lowlink = acc.lowlink + (kv -> math.min(acc.lowlink(kv), acc.indexMap(kw))))
         } else acc
       }
-      if (s2.lowlink(v) == s2.indexMap(v)) {
+      if (s2.lowlink(kv) == s2.indexMap(kv)) {
         // Pop the SCC. Uses reference identity (`eq`) to identify the root, matching the
         // original algorithm's requirement that the stack is a true call stack.
         @scala.annotation.tailrec
-        def popScc(stk: Vector[PNode], os: Set[PNode], acc: Vector[PNode]): (Vector[PNode], Vector[PNode], Set[PNode]) = {
+        def popScc(stk: Vector[PNode], os: Set[IdentityKey], acc: Vector[PNode]): (Vector[PNode], Vector[PNode], Set[IdentityKey]) = {
           val w = stk.last
           val acc2 = acc :+ w
-          if (w eq v) (acc2, stk.init, os - w)
-          else         popScc(stk.init, os - w, acc2)
+          if (w eq v) (acc2, stk.init, os - key(w))
+          else         popScc(stk.init, os - key(w), acc2)
         }
         val (scc, stackTail, onStackRem) = popScc(s2.stack, s2.onStack, Vector.empty)
         val s3 = s2.copy(stack = stackTail, onStack = onStackRem)
         val cycleMsgs: Messages =
-          if (scc.size > 1 || (scc.size == 1 && callGraph.getOrElse(v, Set.empty).contains(v))) {
+          if (scc.size > 1 || (scc.size == 1 && callGraphK.getOrElse(kv, Set.empty).contains(kv))) {
             if (scc.size == 1)
               error(scc.head, s"\"verified\" ${nodeName(scc.head)} calls itself. Recursive domain axioms are unsound.")
             else {
@@ -432,7 +451,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     }
 
     allVerified.foldLeft(TarjanState()) { (s, n) =>
-      if (s.indexMap.contains(n)) s else strongconnect(n, s)
+      if (s.indexMap.contains(key(n))) s else strongconnect(n, s)
     }.msgs
   }
 
