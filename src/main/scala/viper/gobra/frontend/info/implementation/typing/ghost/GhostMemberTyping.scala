@@ -255,6 +255,14 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
     val chainToHere = chain :+ symbName
     val specNodes = (spec.pres ++ spec.posts ++ spec.preserves).flatMap(p => p +: allChildren(p))
+    // For bodyless (abstract/trusted) pure functions, body is None, so bodyNodes is empty.
+    // The spec-AST checks above (PAccess, PDeref, POld) still run against specNodes and will
+    // catch heap-dependent spec text regardless.  The remaining gap is hidden heap-dependence
+    // in the Silver encoding of a stub whose Gobra spec text appears clean — for example, a
+    // trusted pure function that is axiomatised at the Silver level to read heap memory even
+    // though its Gobra spec has no acc/*/old.  That gap is inherently undetectable from spec
+    // AST nodes alone.  Deliberately misannotated stubs are an accepted limitation; rejecting
+    // all bodyless pure functions (Option A) would break legitimate mathematical stubs.
     val bodyNodes = if (specOnly) Vector.empty else body.toVector.flatMap { case (_, block) => block +: allChildren(block) }
 
     if (specNodes.exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess]))

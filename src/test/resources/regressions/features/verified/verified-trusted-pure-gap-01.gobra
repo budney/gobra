@@ -1,0 +1,36 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Gap test: a trusted pure function with a clean Gobra spec (no acc/*/old) can
+// be called from a verified function's spec without triggering an error.
+//
+// pureCallTransitivelySafe checks the spec AST of transitive callees for
+// PAccess, PDeref, and POld nodes.  Those checks fire regardless of whether
+// the callee has a body.  The remaining gap is hidden heap-dependence in the
+// Silver encoding of a trusted stub whose Gobra spec text appears clean —
+// for example, a stub axiomatised at the Silver level to read heap memory
+// while its Gobra spec only states an arithmetic postcondition.  That gap is
+// inherently undetectable from spec AST nodes alone.
+//
+// NOTE: there is intentionally NO //:: ExpectedOutput(type_error) annotation
+// below.  The absence of an error here documents the current behaviour (Option B:
+// allowed with a documented caveat).  A pure function whose Gobra spec DOES
+// contain acc/*/old would still be caught; the gap is limited to stubs that
+// deliberately hide heap access behind a clean-looking spec.
+
+trusted
+pure
+ensures ret > 0
+func trustedMath(x int) (ret int)
+
+// No error expected — trustedMath has a clean Gobra spec.
+requires trustedMath(n) > 0
+ensures  ret == 1
+decreases
+verified
+func usesTrusted(n int) (ret int) {
+	ret = 1
+	return ret
+}
