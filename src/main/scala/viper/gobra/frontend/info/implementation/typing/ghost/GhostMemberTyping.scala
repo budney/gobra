@@ -99,7 +99,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
   private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
     if (member.spec.isVerified) {
-      val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String)
+      val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String, member)
       error(member, s"\"verified\" function \"${member.id.name}\" must have a body",
             member.body.isEmpty) ++
       error(member, s"\"verified\" function \"${member.id.name}\" must have a decreases clause",
@@ -123,7 +123,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
   private[typing] def wellDefIfVerifiedMethod(member: PMethodDecl): Messages = {
     if (member.spec.isVerified) {
       val isPtr = member.receiver.typ.isInstanceOf[PMethodReceivePointer]
-      val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, isPtr)
+      val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, member, isPtr)
       error(member, s"\"verified\" method \"${member.id.name}\" must have a body",
             member.body.isEmpty) ++
       error(member, s"\"verified\" method \"${member.id.name}\" must have a decreases clause",
@@ -146,7 +146,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
   private[typing] def wellDefIfVerifiedInterfaceMethod(sig: PMethodSig): Messages = {
     if (sig.spec.isVerified) {
-      val check = validateVerifiedSpecClause("interface method", sig.id.name, _: PNode, _: String)
+      val check = validateVerifiedSpecClause("interface method", sig.id.name, _: PNode, _: String, sig)
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have a decreases clause",
             sig.spec.terminationMeasures.isEmpty) ++
       error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one result",
@@ -164,7 +164,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     * checkFieldRead should be true for pointer-receiver methods. */
   private def validateVerifiedSpecClause(
       memberKind: String, memberName: String,
-      p: PNode, clauseKind: String, checkFieldRead: Boolean = false
+      p: PNode, clauseKind: String, rootDecl: PNode, checkFieldRead: Boolean = false
   ): Messages = {
     (if ((p +: allChildren(p)).exists(_.isInstanceOf[POld]))
       error(p, s"\"verified\" $memberKind \"$memberName\" uses old(...) in its $clauseKind. State-snapshotting for verified axioms is not yet supported.")
@@ -202,6 +202,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
               error(p, s""""verified" $memberKind "$memberName" transitively calls interface method "${symb.spec.id.name}" which has acc() in its spec (in the $clauseKind)""")
             else if (specNodes.exists(_.isInstanceOf[PDeref]))
               error(p, s""""verified" $memberKind "$memberName" transitively calls interface method "${symb.spec.id.name}" which dereferences a pointer in its spec (in the $clauseKind)""")
+            else if (specNodes.exists(_.isInstanceOf[POld]))
+              error(p, s""""verified" $memberKind "$memberName" transitively calls interface method "${symb.spec.id.name}" which uses old(...) in its spec (in the $clauseKind)""")
             else noMessages
           case _ => noMessages
         }
@@ -214,7 +216,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
         ifaceMethodMsgs ++ calleeOpt
           .flatMap { cs =>
             val nextSpecOnly = cs.fold(_.isVerified, _.isVerified)
-            pureCallTransitivelySafe(cs, visited, Vector.empty, nextSpecOnly)
+            pureCallTransitivelySafe(cs, visited, Vector.empty, nextSpecOnly, Some(rootDecl), !nextSpecOnly)
           }
           .fold(noMessages: Messages) { chain =>
             error(p, s""""verified" $memberKind "$memberName" has a transitively heap-dependent call in its $clauseKind: $chain""")
@@ -235,12 +237,18 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       symb: Either[FuncSymbol, MethodImpl],
       visited: scala.collection.mutable.Set[PNode],
       chain: Vector[String],
-      specOnly: Boolean
+      specOnly: Boolean,
+      verifiedRoot: Option[PNode],
+      cameFromPure: Boolean
   ): Option[String] = {
     val (decl, spec, body, symbName) = symb match {
       case Left(f)  => (f.decl: PNode, f.decl.spec, f.decl.body, s"func ${f.decl.id.name}")
       case Right(m) => (m.decl: PNode, m.decl.spec, m.decl.body, s"method ${m.decl.id.name}")
     }
+    // Back-edge check: if we arrived back at the originating verified function via at least
+    // one pure intermediary, the chain forms a cycle invisible to wellVerifiedRecursionCheck.
+    if (cameFromPure && verifiedRoot.exists(_ eq decl))
+      return Some(s"${(chain :+ symbName).mkString(" -> ")} calls back to the originating verified function (circular domain axiom)")
     if (visited.contains(decl)) return None
     visited.add(decl)
 
@@ -252,6 +260,8 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       return Some(s"${chainToHere.mkString(" -> ")} has acc(...) in its spec")
     if (specNodes.exists(_.isInstanceOf[PDeref]))
       return Some(s"${chainToHere.mkString(" -> ")} dereferences a pointer in its spec")
+    if (specNodes.exists(_.isInstanceOf[POld]))
+      return Some(s"${chainToHere.mkString(" -> ")} uses old(...) in its spec")
 
     (specNodes ++ bodyNodes).iterator.collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
       val calleeOpt: Option[(Either[FuncSymbol, MethodImpl], Boolean)] = resolve(invoke) match {
@@ -263,7 +273,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
         case Some(ap.FunctionCall(ap.MethodExpr(_, _, _, cs: MethodImpl), _))     if cs.isVerified => Some((Right(cs), true))
         case _ => None
       }
-      calleeOpt.flatMap { case (cs, nextSpecOnly) => pureCallTransitivelySafe(cs, visited, chainToHere, nextSpecOnly) }
+      calleeOpt.flatMap { case (cs, nextSpecOnly) => pureCallTransitivelySafe(cs, visited, chainToHere, nextSpecOnly, verifiedRoot, cameFromPure || !nextSpecOnly) }
     }.nextOption()
   }
 
