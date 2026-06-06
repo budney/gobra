@@ -166,16 +166,17 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       memberKind: String, memberName: String,
       p: PNode, clauseKind: String, rootDecl: PNode, checkFieldRead: Boolean = false
   ): Messages = {
-    (if ((p +: allChildren(p)).exists(_.isInstanceOf[POld]))
+    val all = p +: allChildren(p)
+    (if (all.exists(_.isInstanceOf[POld]))
       error(p, s"\"verified\" $memberKind \"$memberName\" uses old(...) in its $clauseKind. State-snapshotting for verified axioms is not yet supported.")
     else noMessages) ++
-    (if (containsHeapPermission(p))
+    (if (all.exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess]))
       error(p, s"\"verified\" $memberKind \"$memberName\" has a heap-permission assertion (acc(...)) in its $clauseKind. Viper domain axioms cannot contain resource assertions.")
     else noMessages) ++
-    (if (containsPointerDereference(p))
+    (if (all.exists(_.isInstanceOf[PDeref]))
       error(p, s"\"verified\" $memberKind \"$memberName\" dereferences a pointer in its $clauseKind. Viper domain axioms cannot contain heap accesses; consider passing the dereferenced value as a plain parameter instead.")
     else noMessages) ++
-    (if (checkFieldRead && (p +: allChildren(p)).exists {
+    (if (checkFieldRead && all.exists {
       case dot: PDot => resolve(dot) match {
         case Some(ap.FieldSelection(_, _, _, _)) => true
         case _                                   => false
@@ -189,7 +190,7 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       // spec clause and reject any whose own spec contains heap-permission or pointer-deref
       // nodes.  A single visited set prevents redundant re-traversal within one clause.
       val visited = scala.collection.mutable.Set[PNode]()
-      (p +: allChildren(p)).collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
+      all.collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
         val resolved = resolve(invoke)
         // For interface methods called via implicit receiver, check the MethodSpec spec
         // directly since there is no body and pureCallTransitivelySafe only handles impls.
@@ -276,12 +277,6 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
       calleeOpt.flatMap { case (cs, nextSpecOnly) => pureCallTransitivelySafe(cs, visited, chainToHere, nextSpecOnly, verifiedRoot, cameFromPure || !nextSpecOnly) }
     }.nextOption()
   }
-
-  private def containsHeapPermission(p: PNode): Boolean =
-    (p +: allChildren(p)).exists(n => n.isInstanceOf[PAccess] || n.isInstanceOf[PPredicateAccess])
-
-  private def containsPointerDereference(p: PNode): Boolean =
-    (p +: allChildren(p)).exists(_.isInstanceOf[PDeref])
 
   private def isSingleResultArg(member: PCodeRootWithResult): Messages = {
     error(member, "For now, pure methods and pure functions must have exactly one result argument", member.result.outs.size != 1)
