@@ -119,12 +119,14 @@ class DefaultMethodEncoding extends Encoding {
     val vResults = x.results.map(ctx.variable)
     for {
       method <- methodDefault(x)(ctx)
-      // Reuse pres from the already-encoded method to avoid double error-transformer registration.
-      // methodDefault builds pres as (varPres ++ userPres) ++ measures; drop the measures suffix.
-      // This also includes varPrecondition type bounds that the old code omitted from the domain antecedent.
-      vPres   = method.pres.dropRight(x.terminationMeasures.size).toVector
-      vPosts <- sequence(x.posts.map(ctx.postcondition))
-      domain  = buildVerifiedDomain(x.name.uniqueName, vRecv +: vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
+      // Reuse pres and posts from the already-encoded method to avoid double
+      // error-transformer registration in the MemberWriter monad.
+      // pres = (varPres ++ userPres) ++ measures; drop the measures suffix.
+      // posts = varPostconditions ++ userPostconditions; drop the varPostcondition prefix.
+      vPres            = method.pres.dropRight(x.terminationMeasures.size).toVector
+      vResultPostsSize = x.results.flatMap(ctx.varPostcondition).size
+      vPosts           = method.posts.drop(vResultPostsSize).toVector
+      domain           = buildVerifiedDomain(x.name.uniqueName, vRecv +: vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
     } yield VerifiedMemberEncoding(method, domain)
   }
 
@@ -134,9 +136,10 @@ class DefaultMethodEncoding extends Encoding {
     val vResults = x.results.map(ctx.variable)
     for {
       method <- functionDefault(x)(ctx)
-      vPres   = method.pres.dropRight(x.terminationMeasures.size).toVector
-      vPosts <- sequence(x.posts.map(ctx.postcondition))
-      domain  = buildVerifiedDomain(x.name.name, vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
+      vPres            = method.pres.dropRight(x.terminationMeasures.size).toVector
+      vResultPostsSize = x.results.flatMap(ctx.varPostcondition).size
+      vPosts           = method.posts.drop(vResultPostsSize).toVector
+      domain           = buildVerifiedDomain(x.name.name, vArgs, vResults, vPres, vPosts)(pos, info, errT)(ctx)
     } yield VerifiedMemberEncoding(method, domain)
   }
 

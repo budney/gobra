@@ -1,0 +1,31 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Regression test for double error-transformer registration in verifiedFunctionMembers.
+//
+// verifiedFunctionMembers previously called ctx.postcondition for each postcondition
+// twice: once inside functionDefault (to build the Viper method) and again explicitly
+// to populate the domain axiom body.  Each ctx.postcondition call registers an error
+// transformer in the MemberWriter monad, so a failing postcondition would produce two
+// identical Gobra errors instead of one.
+//
+// The fix extracts vPosts directly from the already-encoded method.posts, so each
+// postcondition's error transformer is registered exactly once.
+//
+// This test has two postconditions: one that holds and one that does not.  Exactly
+// one ExpectedOutput annotation must be satisfied.  A double-registration regression
+// would fire the transformer twice and produce an unexpected extra error, failing the
+// test.
+
+requires x > 0
+ensures ret > 0
+//:: ExpectedOutput(postcondition_error:assertion_error)
+ensures ret == x + 10
+decreases
+verified
+func doublePostFunc(x int) (ret int) {
+	ret = x + 1  // satisfies ret > 0 but not ret == x + 10
+	return ret
+}
