@@ -1,0 +1,40 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Three-hop chain: useTop's spec calls top, top's body calls mid, mid's body
+// calls leaf, and leaf has a pointer dereference in its precondition.
+// The transitive closure check must follow the chain and reject useTop.
+//
+// Note: pureCallTransitivelySafe checks specNodes (pre/post/preserves) for PDeref,
+// not body nodes. The dereference must appear in leaf's spec for the check to fire.
+
+// leaf: has pointer dereference in precondition (heap-dependent spec)
+requires *p > 0
+pure
+func leaf(p *int) (ret int) {
+	return *p
+}
+
+// mid: clean spec, body calls leaf
+pure
+func mid(p *int) (ret int) {
+	return leaf(p)
+}
+
+// top: clean spec, body calls mid
+pure
+func top(p *int) (ret int) {
+	return mid(p)
+}
+
+//:: ExpectedOutput(type_error)
+requires top(q) > 0
+ensures  ret == 1
+decreases
+verified
+func useTop(q *int) (ret int) {
+	ret = 1
+	return ret
+}

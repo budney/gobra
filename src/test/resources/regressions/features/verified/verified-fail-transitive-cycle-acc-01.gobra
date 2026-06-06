@@ -1,0 +1,34 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// evenDep and oddDep are mutually recursive pure functions.
+// evenDep's own spec is clean, but oddDep's precondition requires acc(p).
+// The transitive closure check follows evenDep's body to oddDep, finds the
+// heap access in oddDep's spec, and rejects cycleTest.
+//
+// The visited set in pureCallTransitivelySafe prevents an infinite traversal:
+// oddDep's body calls back to evenDep, which is already in the visited set,
+// so the traversal terminates rather than looping.
+
+pure
+func evenDep(n int, p *int) (ret int) {
+	return oddDep(n-1, p)
+}
+
+requires acc(p)
+pure
+func oddDep(n int, p *int) (ret int) {
+	return evenDep(n-1, p)
+}
+
+//:: ExpectedOutput(type_error)
+requires evenDep(k, q) > 0
+ensures  ret == 1
+decreases
+verified
+func cycleTest(k int, q *int) (ret int) {
+	ret = 1
+	return ret
+}
