@@ -573,6 +573,14 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
 
   // Syntactically determine if a method implementation mImpl cannot possibly implement a specification mSpec.
   // This is useful to provide feedback quickly, before we verify the program.
+  //
+  // NOTE: this function is only called for (impl, spec) pairs that appear in allRequiredImplements,
+  // which is populated lazily — only when a concrete type is actually used as an interface type
+  // (via assignment, conversion, or type assertion) or when an explicit `implements` proof block
+  // exists.  A struct method that structurally satisfies a verified interface method signature but
+  // is never used as that interface in the same compilation unit will not be checked here.  This is
+  // a known limitation shared with Go's duck-typed interface model: interface obligations are not
+  // imposed on a type until the two are connected at a use site.
   private def methodImplMightImplementSpec(mImpl: MethodImpl, mSpec: MethodSpec): Messages = {
     (if (mSpec.spec.spec.terminationMeasures.nonEmpty && mImpl.decl.spec.terminationMeasures.isEmpty)
       error(mImpl.decl.spec, s"This method tries to implement a terminating interface method, " +

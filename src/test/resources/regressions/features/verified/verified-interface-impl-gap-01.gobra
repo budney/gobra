@@ -1,0 +1,33 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Gap test: methodImplMightImplementSpec is only called when a concrete type
+// is actually used as the interface type in the same compilation unit.
+// Impl.Compute has the same signature as Verifier.Compute and is not marked
+// verified, but because no code assigns Impl to Verifier in this package the
+// mSpec.isVerified && !mImpl.isVerified check never fires.
+//
+// NOTE: there is intentionally NO //:: ExpectedOutput(type_error) annotation
+// below.  The absence of an error here documents the current behaviour.
+// If a proactive check is added in the future, this file should gain the
+// annotation and be renamed to verified-interface-impl-fail-gap-01.gobra.
+
+type Verifier interface {
+	verified
+	decreases
+	ensures ret > 0
+	Compute() (ret int)
+}
+
+type Impl struct{}
+
+// Not marked verified, but matches Verifier.Compute's signature.
+// No use of Impl as Verifier exists in this package, so no error fires.
+ensures ret > 0
+decreases
+func (i Impl) Compute() (ret int) {
+	ret = 1
+	return ret
+}

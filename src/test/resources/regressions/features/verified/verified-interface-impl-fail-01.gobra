@@ -1,0 +1,26 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Coverage test: when Impl is actually used as Verifier, the check fires.
+// The error is reported on the implementing method's spec, not on the use site.
+
+type Verifier interface {
+	verified
+	decreases
+	ensures ret > 0
+	Compute() (ret int)
+}
+
+type Impl struct{}
+
+//:: ExpectedOutput(type_error)
+ensures ret > 0
+decreases
+func (i Impl) Compute() (ret int) {
+	ret = 1
+	return ret
+}
+
+var _ Verifier = Impl{}
