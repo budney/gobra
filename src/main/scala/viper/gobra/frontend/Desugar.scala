@@ -4416,9 +4416,9 @@ object Desugar extends LazyLogging {
         } yield in.Conditional(wcond, wthn, wels, typ)(src)
 
         case PLet(ass, op) =>
-          val dOp = pureExprD(ctx, info)(op)
+          val dOp = pureExprD(ctx, info, inSpecContext)(op)
           unit((ass.left zip ass.right).foldRight(dOp)((lr, letop) => {
-            val right = pureExprD(ctx, info)(lr._2)
+            val right = pureExprD(ctx, info, inSpecContext)(lr._2)
             val left = in.LocalVar(
               nm.variable(lr._1.name, info.scope(lr._1), info),
               right.typ.withAddressability(Addressability.exclusiveVariable)
@@ -4624,8 +4624,8 @@ object Desugar extends LazyLogging {
     def boundVariableD(x: PBoundVariable) : in.BoundVar =
       in.BoundVar(idName(x.id, info), typeD(info.symbType(x.typ), Addressability.boundVariable)(meta(x, info)))(meta(x, info))
 
-    def pureExprD(ctx: FunctionContext, info: TypeInfo)(expr: PExpression): in.Expr = {
-      val dExp = exprD(ctx, info)(expr)
+    def pureExprD(ctx: FunctionContext, info: TypeInfo, inSpecContext: Boolean = false)(expr: PExpression): in.Expr = {
+      val dExp = exprD(ctx, info, inSpecContext)(expr)
       Violation.violation(dExp.stmts.isEmpty && dExp.decls.isEmpty, s"expected pure expression, but got $expr")
       dExp.res
     }
@@ -4711,7 +4711,7 @@ object Desugar extends LazyLogging {
           for {
             dOp <- assertionD(ctx, info)(op)
             lets = (ass.left zip ass.right).foldRight(dOp)((lr, letop) => {
-              val right = pureExprD(ctx, info)(lr._2)
+              val right = pureExprD(ctx, info, inSpecContext = true)(lr._2)
               val left = in.LocalVar(
                 nm.variable(lr._1.name, info.scope(lr._1), info),
                 right.typ.withAddressability(Addressability.exclusiveVariable)

@@ -1,0 +1,24 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function with no preconditions returns a known positive value.
+// The domain axiom fires unconditionally: forall {} :: constSeven_spec() == 7.
+
+ensures ret == 7
+decreases
+verified
+func constSeven() (ret int) {
+	ret = 7
+	return ret
+}
+
+// constSeven() is used inside a let-expression in the ensures clause.
+// The axiom for constSeven fires unconditionally, so the verifier can substitute
+// m == 7 and discharge m > 0 without any additional assumption.
+ensures let m := constSeven() in m > 0
+func useInLetEnsures() (result int) {
+	result = constSeven()
+	return result
+}
