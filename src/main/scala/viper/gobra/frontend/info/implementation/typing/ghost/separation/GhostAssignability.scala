@@ -228,13 +228,19 @@ trait GhostAssignability {
     * parameter is not explicitly annotated as being ghost.
     */
   private def isCallImplicitlyGhost(call: ap.FunctionCall): Boolean = {
-    // we only do this special treatment for calls to pure functions as the call
-    // can be erased without losing any side-effects. Furthermore, we have to do
-    // this implicit treatment only if assignability of arguments to parameters
-    // would otherwise fail:
+    // We extend this treatment to verified functions: like pure functions, verified
+    // functions are side-effect free in spec position and may be called from ghost code,
+    // so ghost arguments flowing into their non-ghost parameters should not be an error.
+    val isSpecCallable = call.callee match {
+      case p: ap.Function                          => p.symb.isSpecCallable
+      case p: ap.ReceivedMethod                    => p.symb.isSpecCallable
+      case p: ap.ImplicitlyReceivedInterfaceMethod => p.symb.isSpecCallable
+      case p: ap.MethodExpr                        => p.symb.isSpecCallable
+      case _                                       => call.callee.isPure
+    }
     val argTyping = explicitCalleeArgGhostTyping(call).toTuple
     val assignable = argsAssignable(call, argTyping)
-    call.callee.isPure && assignable.nonEmpty
+    isSpecCallable && assignable.nonEmpty
   }
 
   /* If a closure is not ghost, the arguments and results of all the specs it can be called with must have

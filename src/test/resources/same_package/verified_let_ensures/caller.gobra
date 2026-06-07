@@ -1,0 +1,12 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// verified function defined in verified_func.go (same package) used in a
+// let-expression in an ensures clause of a .gobra file.
+ensures let m := constSeven() in m > 0
+func useInLetEnsures() (result int) {
+	result = constSeven()
+	return result
+}

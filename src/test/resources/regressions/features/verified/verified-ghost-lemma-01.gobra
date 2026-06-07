@@ -1,0 +1,27 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// A verified function whose postcondition can be used as a domain axiom.
+
+requires n >= 0
+ensures ret == n + 1
+decreases
+verified
+func inc(n int) (ret int) {
+	ret = n + 1
+	return ret
+}
+
+// A ghost lemma whose parameter is ghost (all params of a ghost function are ghost).
+// Calling inc(n) passes a ghost argument to inc's non-ghost parameter.
+// isCallImplicitlyGhost must recognise verified functions as spec-callable so that
+// this is not a ghost-separation violation.
+ghost
+requires n >= 0
+ensures inc(n) > n
+decreases
+func lemmaInc(n int) {
+	assert inc(n) == n + 1
+}
