@@ -1,0 +1,34 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// Two verified functions composed in an ensures clause: f(g(x)).
+// functionCallArgsD must propagate inSpecContext so that the inner verified
+// call g(x) is also treated as pure when desugaring the argument list of f.
+
+requires n >= 0
+ensures ret == n + 10
+decreases
+verified
+func addTen(n int) (ret int) {
+	ret = n + 10
+	return ret
+}
+
+requires n >= 0
+ensures ret == n * 2
+decreases
+verified
+func double(n int) (ret int) {
+	ret = n * 2
+	return ret
+}
+
+// addTen(double(n)) nests a verified call inside another verified call's argument.
+requires n >= 0
+ensures addTen(double(n)) == n*2 + 10
+func useNested(n int) (result int) {
+	result = addTen(double(n))
+	return result
+}

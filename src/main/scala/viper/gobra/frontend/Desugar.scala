@@ -2183,7 +2183,7 @@ object Desugar extends LazyLogging {
           }
         }
 
-        functionCallArgsD(p.args, params)(ctx, info, src)
+        functionCallArgsD(p.args, params, inSpecContext)(ctx, info, src)
       }
 
       // encode results
@@ -2336,7 +2336,7 @@ object Desugar extends LazyLogging {
     /** Desugars the arguments to a function call or a call with spec.
       * @param args The expressions passed as arguments
       * @param params The types of the arguments of the callee (or the spec) */
-    private def functionCallArgsD(args: Vector[PExpression], params: Vector[Type])(ctx: FunctionContext, info: TypeInfo, src: Meta): Writer[Vector[in.Expr]] = {
+    private def functionCallArgsD(args: Vector[PExpression], params: Vector[Type], inSpecContext: Boolean = false)(ctx: FunctionContext, info: TypeInfo, src: Meta): Writer[Vector[in.Expr]] = {
       val parameterCount: Int = params.length
 
       // is of the form Some(x) if the type of the last param is variadic and the type of its elements is x
@@ -2345,7 +2345,7 @@ object Desugar extends LazyLogging {
         case _ => None
       }
 
-      val wRes: Writer[Vector[in.Expr]] = sequence(args map exprD(ctx, info, false)).map {
+      val wRes: Writer[Vector[in.Expr]] = sequence(args map exprD(ctx, info, inSpecContext)).map {
         // go function chaining feature
         case Vector(in.Tuple(targs)) if parameterCount > 1 => targs
         case dargs => dargs
