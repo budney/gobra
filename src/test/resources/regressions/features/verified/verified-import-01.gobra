@@ -1,0 +1,20 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package pkg
+
+// ##(-I ./verified-import-01/)
+
+import "verifiedpkg"
+
+// A verified function defined in an imported package is usable in spec expressions
+// of the importing package.  When specOnly=true (import context), the parser must
+// preserve the verified function body so that wellDefIfVerifiedFunction does not
+// report "must have a body", and so that postconditions are available as domain axioms.
+
+requires n >= 0
+ensures verifiedpkg.AddOne(n) == n + 1
+func callImportedVerified(n int) (result int) {
+	result = verifiedpkg.AddOne(n)
+	return result
+}

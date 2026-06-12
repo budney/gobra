@@ -1,0 +1,13 @@
+// Any copyright is dedicated to the Public Domain.
+// http://creativecommons.org/publicdomain/zero/1.0/
+
+package verifiedpkg
+
+requires n >= 0
+ensures ret == n + 1
+decreases
+verified
+func AddOne(n int) (ret int) {
+	ret = n + 1
+	return ret
+}

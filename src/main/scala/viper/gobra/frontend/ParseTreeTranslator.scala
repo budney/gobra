@@ -877,8 +877,10 @@ class ParseTreeTranslator(pom: PositionManager, source: Source, specOnly : Boole
     // Go allows the blank identifier here, but PFunctionDecl doesn't.
     val id = goIdnDef.get(ctx.IDENTIFIER())
     val sig = visitNode[Signature](ctx.signature())
-    // Translate the function body if the function is not abstract or trusted, specOnly isn't set or the function is pure
-    val body = if (has(ctx.blockWithBodyParameterInfo()) && !ctx.trusted && (!specOnly || ctx.pure)) Some(visitNode[(PBodyParameterInfo, PBlock)](ctx.blockWithBodyParameterInfo())) else None
+    // Translate the function body if the function is not abstract or trusted, specOnly isn't set or the function is pure or verified.
+    // Verified function bodies must be preserved in spec-only (import) mode so that wellDefIfVerifiedFunction
+    // can confirm the body exists, and so that postconditions are available as domain axioms.
+    val body = if (has(ctx.blockWithBodyParameterInfo()) && !ctx.trusted && (!specOnly || ctx.pure || ctx.verified)) Some(visitNode[(PBodyParameterInfo, PBlock)](ctx.blockWithBodyParameterInfo())) else None
     (id, sig._1, sig._2, body)
   }
 
@@ -888,7 +890,7 @@ class ParseTreeTranslator(pom: PositionManager, source: Source, specOnly : Boole
     val id = goIdnDef.get(ctx.IDENTIFIER())
     val recv = visitNode[PReceiver](ctx.receiver())
     val sig = visitNode[Signature](ctx.signature())
-    val body = if (has(ctx.blockWithBodyParameterInfo()) && !ctx.trusted && (!specOnly || ctx.pure)) Some(visitNode[(PBodyParameterInfo, PBlock)](ctx.blockWithBodyParameterInfo())) else None
+    val body = if (has(ctx.blockWithBodyParameterInfo()) && !ctx.trusted && (!specOnly || ctx.pure || ctx.verified)) Some(visitNode[(PBodyParameterInfo, PBlock)](ctx.blockWithBodyParameterInfo())) else None
     (id, recv,sig._1, sig._2, body)
   }
 
