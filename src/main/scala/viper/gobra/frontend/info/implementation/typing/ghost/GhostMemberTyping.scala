@@ -7,7 +7,7 @@
 package viper.gobra.frontend.info.implementation.typing.ghost
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.{Messages, error, noMessages}
-import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PCodeRootWithResult, PDeref, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PGhostStatement, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PMethodSig, PNode, POld, PParameter, PPredicateAccess, PPreserves, PReturn, PVariadicType, PWithBody}
+import viper.gobra.ast.frontend.{PAccess, PAssume, PBlock, PBodyParameterInfo, PCodeRootWithResult, PDeref, PDot, PExplicitGhostMember, PFPredicateDecl, PFunctionDecl, PFunctionSpec, PGhostMember, PIdnUse, PImplementationProof, PInhale, PInvoke, PMember, PMPredicateDecl, PMethodDecl, PMethodImplementationProof, PMethodReceivePointer, PMethodSig, PNode, POld, PParameter, PPredicateAccess, PPreserves, PResult, PReturn, PVariadicType, PWithBody}
 import viper.gobra.ast.frontend.{AstPattern => ap}
 import viper.gobra.frontend.info.base.SymbolTable.{Function => FuncSymbol, MPredicateSpec, MethodImpl, MethodSpec}
 import viper.gobra.frontend.info.base.Type.{InterfaceT, Type, UnknownType}
@@ -97,66 +97,50 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     } else noMessages
   }
 
-  private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages = {
-    if (member.spec.isVerified) {
-      val check = validateVerifiedSpecClause("function", member.id.name, _: PNode, _: String, member)
-      error(member, s"\"verified\" function \"${member.id.name}\" must have a body",
-            member.body.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have a decreases clause",
-            member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one result",
-            member.result.outs.isEmpty) ++
-      error(member, s"\"verified\" function \"${member.id.name}\" must have at least one ensures clause",
-            member.spec.posts.isEmpty) ++
-      member.spec.pres.flatMap(check(_, "precondition")) ++
-      member.spec.posts.flatMap(check(_, "postcondition")) ++
-      member.spec.preserves.flatMap(check(_, "preserves clause")) ++
-      member.body.toVector.flatMap { case (_, block) =>
-        allChildren(block).collect {
-          case a: PAssume => error(a, s"\"verified\" function \"${member.id.name}\" must not contain assume")
-          case a: PInhale => error(a, s"\"verified\" function \"${member.id.name}\" must not contain inhale")
-        }.flatten
-      }
-    } else noMessages
-  }
+  private[typing] def wellDefIfVerifiedFunction(member: PFunctionDecl): Messages =
+    if (member.spec.isVerified)
+      wellDefIfVerifiedMember("function", member.id.name, member.spec, member.result, member, member.body)
+    else noMessages
 
-  private[typing] def wellDefIfVerifiedMethod(member: PMethodDecl): Messages = {
+  private[typing] def wellDefIfVerifiedMethod(member: PMethodDecl): Messages =
     if (member.spec.isVerified) {
       val isPtr = member.receiver.typ.isInstanceOf[PMethodReceivePointer]
-      val check = validateVerifiedSpecClause("method", member.id.name, _: PNode, _: String, member, isPtr)
-      error(member, s"\"verified\" method \"${member.id.name}\" must have a body",
-            member.body.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have a decreases clause",
-            member.spec.terminationMeasures.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one result",
-            member.result.outs.isEmpty) ++
-      error(member, s"\"verified\" method \"${member.id.name}\" must have at least one ensures clause",
-            member.spec.posts.isEmpty) ++
-      member.spec.pres.flatMap(check(_, "precondition")) ++
-      member.spec.posts.flatMap(check(_, "postcondition")) ++
-      member.spec.preserves.flatMap(check(_, "preserves clause")) ++
-      member.body.toVector.flatMap { case (_, block) =>
-        allChildren(block).collect {
-          case a: PAssume => error(a, s"\"verified\" method \"${member.id.name}\" must not contain assume")
-          case a: PInhale => error(a, s"\"verified\" method \"${member.id.name}\" must not contain inhale")
-        }.flatten
-      }
+      wellDefIfVerifiedMember("method", member.id.name, member.spec, member.result, member, member.body, isPtr = isPtr)
     } else noMessages
-  }
 
-  private[typing] def wellDefIfVerifiedInterfaceMethod(sig: PMethodSig): Messages = {
-    if (sig.spec.isVerified) {
-      val check = validateVerifiedSpecClause("interface method", sig.id.name, _: PNode, _: String, sig)
-      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have a decreases clause",
-            sig.spec.terminationMeasures.isEmpty) ++
-      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one result",
-            sig.result.outs.isEmpty) ++
-      error(sig, s"\"verified\" interface method \"${sig.id.name}\" must have at least one ensures clause",
-            sig.spec.posts.isEmpty) ++
-      sig.spec.pres.flatMap(check(_, "precondition")) ++
-      sig.spec.posts.flatMap(check(_, "postcondition")) ++
-      sig.spec.preserves.flatMap(check(_, "preserves clause"))
-    } else noMessages
+  private[typing] def wellDefIfVerifiedInterfaceMethod(sig: PMethodSig): Messages =
+    if (sig.spec.isVerified)
+      wellDefIfVerifiedMember("interface method", sig.id.name, sig.spec, sig.result, sig, None, requiresBody = false)
+    else noMessages
+
+  private def wellDefIfVerifiedMember(
+      memberKind:   String,
+      memberName:   String,
+      spec:         PFunctionSpec,
+      result:       PResult,
+      rootDecl:     PNode,
+      body:         Option[(PBodyParameterInfo, PBlock)],
+      requiresBody: Boolean = true,
+      isPtr:        Boolean = false
+  ): Messages = {
+    val check = validateVerifiedSpecClause(memberKind, memberName, _: PNode, _: String, rootDecl, isPtr)
+    error(rootDecl, s""""verified" $memberKind "$memberName" must have a decreases clause""",
+          spec.terminationMeasures.isEmpty) ++
+    error(rootDecl, s""""verified" $memberKind "$memberName" must have at least one result""",
+          result.outs.isEmpty) ++
+    error(rootDecl, s""""verified" $memberKind "$memberName" must have at least one ensures clause""",
+          spec.posts.isEmpty) ++
+    (if (requiresBody) error(rootDecl, s""""verified" $memberKind "$memberName" must have a body""", body.isEmpty)
+     else noMessages) ++
+    spec.pres.flatMap(check(_, "precondition")) ++
+    spec.posts.flatMap(check(_, "postcondition")) ++
+    spec.preserves.flatMap(check(_, "preserves clause")) ++
+    body.toVector.flatMap { case (_, block) =>
+      allChildren(block).collect {
+        case a: PAssume => error(a, s""""verified" $memberKind "$memberName" must not contain assume""")
+        case a: PInhale => error(a, s""""verified" $memberKind "$memberName" must not contain inhale""")
+      }.flatten
+    }
   }
 
   /** Check one spec clause for constructs incompatible with verified domain axioms.
@@ -188,9 +172,10 @@ trait GhostMemberTyping extends BaseTyping { this: TypeInfoImpl =>
     {
       // Walk every pure/verified function/method called (directly or transitively) from this
       // spec clause and reject any whose own spec contains heap-permission or pointer-deref
-      // nodes.  A single visited set prevents redundant re-traversal within one clause.
-      val visited = scala.collection.mutable.Set[PNode]()
+      // nodes.  Each top-level callee gets its own visited set so that a bad callee reachable
+      // from two distinct call paths is reported once per path rather than silently dropped.
       all.collect { case invoke: PInvoke => invoke }.flatMap { invoke =>
+        val visited = scala.collection.mutable.Set[PNode]()
         val resolved = resolve(invoke)
         // For interface methods called via implicit receiver, check the MethodSpec spec
         // directly since there is no body and pureCallTransitivelySafe only handles impls.
