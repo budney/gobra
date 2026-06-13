@@ -57,6 +57,9 @@ class LookupTable(
   def lookup(f: FPredicateProxy): FPredicateLikeMember = definedFPredicates(f)
   def lookup(l: FunctionLitProxy): FunctionLitLike = definedFuncLiterals(l)
 
+  def lookupOpt(f: FunctionProxy): Option[FunctionLikeMember] = definedFunctions.get(f)
+  def lookupOpt(m: MethodProxy): Option[MethodLikeMember] = definedMethods.get(m)
+
   def getMethods: Iterable[MethodLikeMember] = definedMethods.values
   def getFunctions: Iterable[FunctionLikeMember] = definedFunctions.values
   def getMPredicates: Iterable[MPredicateLikeMember] = definedMPredicates.values

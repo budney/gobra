@@ -117,7 +117,17 @@ trait Context {
     case bf: BuiltInFunction => typeEncoding.builtInFunction(this)(bf)
   }
 
+  def lookupOpt(f: in.FunctionProxy): Option[in.FunctionMember] = table.lookupOpt(f).map {
+    case fm: FunctionMember => fm
+    case bf: BuiltInFunction => typeEncoding.builtInFunction(this)(bf)
+  }
+
   def lookup(m: in.MethodProxy): in.MethodMember = table.lookup(m) match {
+    case mm: MethodMember => mm
+    case bm: BuiltInMethod => typeEncoding.builtInMethod(this)(bm)
+  }
+
+  def lookupOpt(m: in.MethodProxy): Option[in.MethodMember] = table.lookupOpt(m).map {
     case mm: MethodMember => mm
     case bm: BuiltInMethod => typeEncoding.builtInMethod(this)(bm)
   }
