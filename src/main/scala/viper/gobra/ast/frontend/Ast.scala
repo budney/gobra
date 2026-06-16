@@ -917,6 +917,10 @@ case class PFunctionSpec(
     case PPreserves(exp) => exp
     case PEnsures(exp) => exp
   }
+  /** returns expressions from preserves clauses only */
+  def preserves: Vector[PExpression] = clauses.collect {
+    case PPreserves(exp) => exp
+  }
 }
 
 case class PBackendAnnotation(key: String, values: Vector[String]) extends PGhostMisc
