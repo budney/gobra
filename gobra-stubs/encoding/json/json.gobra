@@ -1,0 +1,37 @@
+// Package json stub for Gobra verification.
+//
+// Signatures and contracts are derived from the published documentation
+// at https://pkg.go.dev/encoding/json. Only the symbols used by this
+// project are declared; bodies are omitted (trusted), as is standard for
+// Gobra stubs.
+package json
+
+// A RawMessage is a raw encoded JSON value. It implements Marshaler and
+// Unmarshaler and can be used to delay JSON decoding or precompute a
+// JSON encoding.
+type RawMessage []byte
+
+// Marshal returns the JSON encoding of v.
+//
+// Following the (value, error) convention used throughout the standard
+// library, exactly one of the returned byte slice and the error is nil.
+ensures (res == nil) != (err == nil)
+decreases _
+func Marshal(v any) (res []byte, err error)
+
+// MarshalIndent is like Marshal but applies Indent to format the output.
+// Each JSON element in the output will begin on a new line beginning
+// with prefix followed by one or more copies of indent according to the
+// indentation nesting.
+//
+// Following the (value, error) convention used throughout the standard
+// library, exactly one of the returned byte slice and the error is nil.
+ensures (res == nil) != (err == nil)
+decreases _
+func MarshalIndent(v any, prefix string, indent string) (res []byte, err error)
+
+// Unmarshal parses the JSON-encoded data and stores the result in the
+// value pointed to by v. If v is nil or not a pointer, Unmarshal returns
+// an InvalidUnmarshalError.
+decreases _
+func Unmarshal(data []byte, v any) error

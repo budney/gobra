@@ -1,0 +1,35 @@
+// Package io stub for Gobra verification.
+//
+// Signatures and contracts are derived from the published documentation
+// at https://pkg.go.dev/io. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra stubs.
+package io
+
+// Reader is the interface that wraps the basic Read method.
+type Reader interface {
+	Read(p []byte) (n int, err error)
+}
+
+// Writer is the interface that wraps the basic Write method.
+type Writer interface {
+	Write(p []byte) (n int, err error)
+}
+
+// Closer is the interface that wraps the basic Close method.
+type Closer interface {
+	Close() error
+}
+
+// ReadCloser is the interface that groups the basic Read and Close
+// methods.
+type ReadCloser interface {
+	Reader
+	Closer
+}
+
+// ReadAll reads from r until an error or EOF and returns the data it
+// read. A successful call returns err == nil, not err == EOF. Because
+// ReadAll is defined to read from src until EOF, it does not treat an
+// EOF from Read as an error to be reported.
+decreases _
+func ReadAll(r Reader) (res []byte, err error)

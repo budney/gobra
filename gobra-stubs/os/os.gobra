@@ -1,0 +1,101 @@
+// Package os stub for Gobra verification.
+//
+// Signatures and contracts are derived from the published documentation
+// at https://pkg.go.dev/os. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra stubs
+// (see e.g. strconv.Atoi in Gobra's own stub library).
+package os
+
+import "time"
+
+// FileMode represents a file's mode and permission bits. (os.FileMode is
+// an alias for io/fs.FileMode, defined as `type FileMode uint32`.)
+type FileMode uint32
+
+// File represents an open file descriptor.
+type File struct{}
+
+// Stdin is an open File pointing to the standard input file descriptor.
+var Stdin *File
+
+// Read reads up to len(p) bytes from the File and stores them in p. It
+// returns the number of bytes read and any error encountered.
+decreases _
+func (f *File) Read(p []byte) (n int, err error)
+
+// Getenv retrieves the value of the environment variable named by key.
+// It returns the value, which will be empty if the variable is not
+// present. To distinguish between an empty value and an unset value,
+// use LookupEnv.
+decreases _
+func Getenv(key string) string
+
+// Setenv sets the value of the environment variable named by key. It
+// returns an error, if any.
+decreases _
+func Setenv(key string, value string) error
+
+// Unsetenv unsets a single environment variable.
+decreases _
+func Unsetenv(key string) error
+
+// Getpid returns the process id of the caller.
+decreases _
+func Getpid() int
+
+// MkdirAll creates a directory named path, along with any necessary
+// parents, and returns nil, or else returns an error. The permission
+// bits perm (before umask) are used for all directories that MkdirAll
+// creates. If path is already a directory, MkdirAll does nothing and
+// returns nil.
+decreases _
+func MkdirAll(path string, perm FileMode) error
+
+// ReadFile reads the named file and returns the contents. A successful
+// call returns err == nil, not err == EOF. Because ReadFile reads the
+// whole file, it does not treat an EOF from Read as an error to be
+// reported.
+//
+// Following the (value, error) convention used throughout the standard
+// library, exactly one of the returned byte slice and the error is nil.
+ensures (res == nil) != (err == nil)
+decreases _
+func ReadFile(name string) (res []byte, err error)
+
+// WriteFile writes data to the named file, creating it if necessary. If
+// the file does not exist, WriteFile creates it with permissions perm
+// (before umask); otherwise WriteFile truncates it before writing,
+// without changing permissions.
+decreases _
+func WriteFile(name string, data []byte, perm FileMode) error
+
+// FileInfo describes a file and is returned by Stat.
+type FileInfo interface {
+	Name() string
+	Size() int64
+	Mode() FileMode
+	ModTime() time.Time
+	IsDir() bool
+	Sys() any
+}
+
+// Stat returns a FileInfo describing the named file. If there is an
+// error, it will be of type *PathError.
+//
+// Exactly one of the returned FileInfo and the error is nil.
+ensures (res == nil) != (err == nil)
+decreases _
+func Stat(name string) (res FileInfo, err error)
+
+// UserHomeDir returns the current user's home directory.
+//
+// On Unix, including macOS, it returns the $HOME environment variable.
+// On Windows, it returns %USERPROFILE%. On Plan 9, it returns the $home
+// environment variable.
+//
+// If the expected variable is not set in the environment, UserHomeDir
+// returns either a platform-specific default value or a non-nil error.
+// Either way, a successful call returns a non-empty path.
+ensures err == nil ==> len(res) > 0
+decreases _
+func UserHomeDir() (res string, err error)

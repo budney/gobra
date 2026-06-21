@@ -1,0 +1,14 @@
+// Package filepath stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/path/filepath. Only the symbols used by this
+// project are declared; bodies are omitted (trusted), as is standard for
+// Gobra stubs.
+package filepath
+
+// Join joins any number of path elements into a single path, separating
+// them with an OS specific Separator. Empty elements are ignored. The
+// result is Cleaned. However, if the argument list is empty or all its
+// elements are empty, Join returns an empty string.
+decreases _
+func Join(parts ...string) string

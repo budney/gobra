@@ -1,0 +1,80 @@
+// Package mcp stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/github.com/mark3labs/mcp-go/mcp. Only the symbols
+// used by this project are declared, and types are simplified to the
+// subset of fields/methods this project relies on; bodies are omitted
+// (trusted), as is standard for Gobra stubs.
+package mcp
+
+// Tool is the definition of an MCP tool exposed by a server.
+type Tool struct{}
+
+// NewTool creates a new Tool with the given name and options.
+//
+// ToolOption and PropertyOption (the documented named function types for
+// the variadic parameters below) are written out as anonymous function
+// types here because a defined function type used as a variadic
+// parameter's element type triggers an internal error in Gobra's slice
+// encoding.
+decreases _
+func NewTool(name string, opts ...func(*Tool)) Tool
+
+// WithDescription adds a description to the Tool.
+decreases _
+func WithDescription(description string) func(*Tool)
+
+// WithString adds a string property to the Tool's input schema.
+decreases _
+func WithString(name string, opts ...func(*map[string]any)) func(*Tool)
+
+// WithNumber adds a number property to the Tool's input schema.
+decreases _
+func WithNumber(name string, opts ...func(*map[string]any)) func(*Tool)
+
+// WithBoolean adds a boolean property to the Tool's input schema.
+decreases _
+func WithBoolean(name string, opts ...func(*map[string]any)) func(*Tool)
+
+// Required marks a property as required in the Tool's input schema.
+decreases _
+func Required() func(*map[string]any)
+
+// Description sets the description of a property.
+decreases _
+func Description(desc string) func(*map[string]any)
+
+// CallToolRequest is the request sent to a tool handler when the tool
+// is invoked.
+type CallToolRequest struct{}
+
+// GetArguments returns the tool call arguments as a map.
+decreases _
+func (r CallToolRequest) GetArguments() map[string]any
+
+// GetString returns the named argument as a string, or defaultValue if
+// it is missing or not a string.
+decreases _
+func (r CallToolRequest) GetString(key string, defaultValue string) string
+
+// GetBool returns the named argument as a bool, or defaultValue if it
+// is missing or not a bool.
+decreases _
+func (r CallToolRequest) GetBool(key string, defaultValue bool) bool
+
+// GetFloat returns the named argument as a float64, or defaultValue if
+// it is missing or not a number.
+decreases _
+func (r CallToolRequest) GetFloat(key string, defaultValue float64) float64
+
+// CallToolResult is the result returned from a tool handler.
+type CallToolResult struct{}
+
+// NewToolResultText creates a new CallToolResult with a text content.
+decreases _
+func NewToolResultText(text string) *CallToolResult
+
+// NewToolResultError creates a new CallToolResult with an error message,
+// with IsError set to true.
+decreases _
+func NewToolResultError(text string) *CallToolResult

@@ -1,0 +1,48 @@
+// Package fmt stub for Gobra verification.
+//
+// Signatures and contracts are derived from the published documentation
+// at https://pkg.go.dev/fmt. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra
+// stubs. Gobra's built-in fmt stub declares no symbols at all, so this
+// stub replaces it entirely for this project.
+package fmt
+
+import "io"
+
+// Errorf formats according to a format specifier and returns the string
+// as a value that satisfies error.
+ensures res != nil
+decreases _
+func Errorf(format string, a ...any) (res error)
+
+// Fprintln formats using the default formats for its operands and writes
+// to w. Spaces are always added between operands and a newline is
+// appended. It returns the number of bytes written and any write error
+// encountered.
+decreases _
+func Fprintln(w io.Writer, a ...any) (n int, err error)
+
+// Print formats using the default formats for its operands and writes to
+// standard output. Spaces are added between operands when neither is a
+// string. It returns the number of bytes written and any write error
+// encountered.
+decreases _
+func Print(a ...any) (n int, err error)
+
+// Printf formats according to a format specifier and writes to standard
+// output. It returns the number of bytes written and any write error
+// encountered.
+decreases _
+func Printf(format string, a ...any) (n int, err error)
+
+// Println formats using the default formats for its operands and writes
+// to standard output. Spaces are always added between operands and a
+// newline is appended. It returns the number of bytes written and any
+// write error encountered.
+decreases _
+func Println(a ...any) (n int, err error)
+
+// Sprintf formats according to a format specifier and returns the
+// resulting string.
+decreases _
+func Sprintf(format string, a ...any) string

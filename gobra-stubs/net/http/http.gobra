@@ -1,0 +1,143 @@
+// Package http stub for Gobra verification.
+//
+// Signatures and contracts are derived from the published documentation
+// at https://pkg.go.dev/net/http. Only the symbols used by this project
+// are declared; bodies are omitted (trusted), as is standard for Gobra
+// stubs.
+package http
+
+import (
+	"io"
+	"net/url"
+)
+
+// A Header represents the key-value pairs in an HTTP header.
+type Header map[string][]string
+
+// Set sets the header entries associated with key to the single
+// element value. It replaces any existing values associated with key.
+decreases _
+func (h Header) Set(key string, value string)
+
+// Request represents an HTTP request received by a server or to be sent
+// by a client.
+type Request struct {
+	// Header contains the request header fields either received by the
+	// server or to be sent by the client.
+	Header Header
+
+	// URL specifies either the URI being requested (for server
+	// requests) or the URL to access (for client requests).
+	URL *url.URL
+}
+
+// Response represents the response from an HTTP request.
+type Response struct {
+	// Body represents the response body.
+	Body io.ReadCloser
+}
+
+// A Client is an HTTP client.
+type Client struct{}
+
+// DefaultClient is the default Client and is used by Get, Head, and
+// Post.
+var DefaultClient *Client
+
+// Do sends an HTTP request and returns an HTTP response, following
+// policy (such as redirects, cookies, auth) as configured on the
+// client.
+//
+// If the returned error is nil, the Response will contain a non-nil
+// Body which the user is expected to close. (A non-nil Response with a
+// non-nil error only occurs when CheckRedirect fails, and even then the
+// returned Response.Body is already closed.)
+ensures (err == nil) != (res == nil)
+decreases _
+func (c *Client) Do(req *Request) (res *Response, err error)
+
+// NewRequest wraps NewRequestWithContext using the background context.
+ensures (err == nil) != (res == nil)
+decreases _
+func NewRequest(method string, url string, body io.Reader) (res *Request, err error)
+
+// Get issues a GET to the specified URL. If the response is one of the
+// following redirect codes, Get follows the redirect after calling the
+// Client's CheckRedirect function.
+//
+// An error is returned if there were too many redirects or if there was
+// an HTTP protocol error. A non-2xx response doesn't cause an error. If
+// the returned error is nil, the Response will contain a non-nil Body
+// which the user is expected to close.
+ensures (err == nil) != (res == nil)
+decreases _
+func Get(url string) (res *Response, err error)
+
+// Post issues a POST to the specified URL.
+//
+// If the returned error is nil, the Response will contain a non-nil
+// Body which the user is expected to close.
+ensures (err == nil) != (res == nil)
+decreases _
+func Post(url string, contentType string, body io.Reader) (res *Response, err error)
+
+// ResponseWriter is used by an HTTP handler to construct an HTTP
+// response.
+type ResponseWriter interface {
+	Header() Header
+	Write(p []byte) (n int, err error)
+	WriteHeader(statusCode int)
+}
+
+// A Handler responds to an HTTP request.
+type Handler interface {
+	ServeHTTP(w ResponseWriter, r *Request)
+}
+
+// ServeMux is an HTTP request multiplexer.
+type ServeMux struct{}
+
+// NewServeMux allocates and returns a new ServeMux.
+decreases _
+func NewServeMux() *ServeMux
+
+// HandleFunc registers the handler function for the given pattern.
+decreases _
+func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request))
+
+// A Server defines parameters for running an HTTP server.
+type Server struct {
+	// Addr optionally specifies the TCP address for the server to
+	// listen on, in the form "host:port".
+	Addr string
+
+	// Handler is the handler to invoke, http.DefaultServeMux if nil.
+	Handler Handler
+}
+
+// ListenAndServe listens on the TCP network address srv.Addr and then
+// calls Serve to handle requests on incoming connections. Accepted
+// connections are configured to enable TCP keep-alives. If srv.Addr is
+// blank, ":http" is used.
+//
+// ListenAndServe always returns a non-nil error. After Shutdown or
+// Close, the returned error is ErrServerClosed.
+decreases _
+func (srv *Server) ListenAndServe() error
+
+// Close immediately closes all active net.Listeners and any connections
+// in state StateNew, StateActive, or StateIdle.
+decreases _
+func (srv *Server) Close() error
+
+// ErrServerClosed is returned by the Server's Serve, ServeTLS,
+// ListenAndServe, and ListenAndServeTLS methods after a call to Shutdown
+// or Close.
+var ErrServerClosed error
+
+// Error replies to the request with the specified error message and
+// HTTP code. It does not otherwise end the request; the caller should
+// ensure no further writes are done to w. The error message should be
+// plain text.
+decreases _
+func Error(w ResponseWriter, error string, code int)

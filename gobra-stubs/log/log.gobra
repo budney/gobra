@@ -1,0 +1,20 @@
+// Package log stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/log. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra stubs.
+package log
+
+// Printf calls Output to print to the standard logger. Arguments are
+// handled in the manner of fmt.Printf.
+decreases _
+func Printf(format string, v ...any)
+
+// Println calls Output to print to the standard logger. Arguments are
+// handled in the manner of fmt.Println.
+decreases _
+func Println(v ...any)
+
+// Fatalf is equivalent to Printf() followed by a call to os.Exit(1).
+decreases _
+func Fatalf(format string, v ...any)

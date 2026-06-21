@@ -1,0 +1,18 @@
+// Package base64 stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/encoding/base64. Only the symbols used by this
+// project are declared; bodies are omitted (trusted), as is standard for
+// Gobra stubs.
+package base64
+
+// An Encoding is a radix 64 encoding/decoding scheme, defined by a
+// 64-character alphabet.
+type Encoding struct{}
+
+// StdEncoding is the standard base64 encoding, as defined in RFC 4648.
+var StdEncoding *Encoding
+
+// EncodeToString returns the base64 encoding of src.
+decreases _
+func (enc *Encoding) EncodeToString(src []byte) string

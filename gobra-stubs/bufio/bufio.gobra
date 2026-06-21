@@ -1,0 +1,24 @@
+// Package bufio stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/bufio. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra stubs.
+package bufio
+
+import "io"
+
+// Reader implements buffering for an io.Reader object.
+type Reader struct{}
+
+// NewReader returns a new Reader whose buffer has the default size.
+decreases _
+func NewReader(rd io.Reader) *Reader
+
+// ReadString reads until the first occurrence of delim in the input,
+// returning a string containing the data up to and including the
+// delimiter. If ReadString encounters an error before finding a
+// delimiter, it returns the data read before the error and the error
+// itself (often io.EOF). ReadString returns err != nil if and only if
+// the returned data does not end in delim.
+decreases _
+func (r *Reader) ReadString(delim byte) (string, error)

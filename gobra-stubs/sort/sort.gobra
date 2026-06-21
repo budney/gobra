@@ -1,0 +1,14 @@
+// Package sort stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/sort. Only the symbols used by this project are
+// declared; bodies are omitted (trusted), as is standard for Gobra stubs.
+package sort
+
+// Slice sorts the slice x given the provided less function. It panics
+// if x is not a slice.
+//
+// The sort is not guaranteed to be stable: equal elements may be
+// reversed from their original order. For a stable sort, use SliceStable.
+decreases _
+func Slice(x any, less func(i int, j int) bool)

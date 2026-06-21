@@ -1,0 +1,48 @@
+// Package server stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/github.com/mark3labs/mcp-go/server. Only the
+// symbols used by this project are declared, and types are simplified to
+// the subset of fields/methods this project relies on; bodies are
+// omitted (trusted), as is standard for Gobra stubs.
+package server
+
+import (
+	"context"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
+
+// MCPServer is an MCP server that manages tools, resources, prompts, and
+// sessions.
+type MCPServer struct{}
+
+// NewMCPServer creates a new MCP server with the given name and version.
+//
+// The real signature also accepts variadic ServerOption values
+// (opts ...ServerOption), omitted here because this project always calls
+// NewMCPServer with no options, and a variadic parameter whose element is
+// a defined function type triggers an internal error in Gobra's slice
+// encoding when the call site passes zero arguments.
+decreases _
+func NewMCPServer(name string, version string) *MCPServer
+
+// AddTool adds a tool with its handler function to the server.
+//
+// The handler parameter's type is written out as an anonymous function
+// type (the documented ToolHandlerFunc type, inlined) because a named
+// function type here triggers an internal error in Gobra's encoding of
+// the corresponding parameter.
+decreases _
+func (s *MCPServer) AddTool(tool mcp.Tool, handler func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error))
+
+// ServeStdio creates and starts a StdioServer with os.Stdin and
+// os.Stdout. It sets up signal handling for graceful shutdown on SIGTERM
+// and SIGINT. Returns an error if the server encounters issues during
+// operation.
+//
+// The real signature also accepts variadic StdioOption values
+// (opts ...StdioOption), omitted here for the same reason as
+// NewMCPServer's opts above.
+decreases _
+func ServeStdio(server *MCPServer) error

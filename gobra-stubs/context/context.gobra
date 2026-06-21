@@ -1,0 +1,28 @@
+// Package context stub for Gobra verification.
+//
+// Signatures are derived from the published documentation at
+// https://pkg.go.dev/context. This project only uses context.Context as
+// a parameter type passed through to handler functions; no methods are
+// invoked, so the interface is declared without contracts.
+package context
+
+import "time"
+
+// A Context carries a deadline, a cancellation signal, and other values
+// across API boundaries.
+type Context interface {
+	// Deadline returns the time when work done on behalf of this context
+	// should be canceled.
+	Deadline() (deadline time.Time, ok bool)
+
+	// Done returns a channel that's closed when work done on behalf of
+	// this context should be canceled.
+	Done() <-chan struct{}
+
+	// Err returns nil if Done is not yet closed, or a non-nil error
+	// explaining why otherwise.
+	Err() error
+
+	// Value returns the value associated with this context for key.
+	Value(key any) any
+}
