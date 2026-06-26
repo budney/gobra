@@ -85,7 +85,9 @@ sound for Silver verification because all execution paths are explored exhaustiv
 
 **Known limitation:** Defers inside loops (`for { defer f() }`) are not correctly handled
 by this encoding — each iteration overwrites the same activation variable. The Scala
-implementation has the same limitation. Document this in the CLI `--help` output.
+implementation has the same limitation. Document this in `README.md` and a
+`KNOWN_LIMITATIONS.md` file at the repo root, not in `--help` output (`--help` is for
+flags, not soundness caveats that users need to read before writing specs).
 
 **Closures with captured mutable variables:** Encode captured mutable variables as additional
 method parameters passed by reference (`Ref`). The closure's Silver method takes these as extra

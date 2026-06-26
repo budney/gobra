@@ -54,20 +54,21 @@ If none succeed, fail fast with a message directing the user to set `JAVA_HOME` 
 to enable jenv's export plugin: `jenv enable-plugin export`. Document this in the error message
 when `libjvm` is not found.
 
-**Thread attachment**: JNI requires every OS thread that calls into the JVM to be attached.
-CGo goroutines may run on any OS thread. Because the JVM is a singleton and JNI is not
-goroutine-safe in general, all JNI calls from Go-Gobra are channeled through a single
-dedicated goroutine (the "JNI worker"). Other goroutines send requests and await results over
-a channel. This pattern also makes parallel test execution safe (see plan 34).
+**Worker pool**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines rather than a single
+dedicated worker. This plan implements the pool with `poolSize=1` as the baseline; plan 17b
+expands it to N workers for parallel verification of chopped sub-programs.
 
-The JNI worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock
-it. `LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
+Each worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock it.
+`LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
 required because JNI thread attachment is per-OS-thread: `AttachCurrentThread` is called once
-on that fixed OS thread, and all subsequent JNI calls from the worker are then on the same
+on that fixed OS thread, and all subsequent JNI calls from that worker run on the same
 attached thread. Without `LockOSThread`, the Go scheduler can silently migrate the goroutine
 to a different OS thread between CGo calls, making the JNI attachment state inconsistent.
-No `sync.Map` for tracking attachment state is needed — the single locked goroutine is the
-only thread that ever calls JNI.
+
+Each worker goroutine is independent — workers do not share JNI state. The pool design is
+therefore correct for both `poolSize=1` and `poolSize=N` without any coordination between
+workers. Plan 34 (test infrastructure) is safe at any pool size because each worker
+serializes its own JNI calls internally.
 
 **SilverBridge JAR**: At JVM startup, extract the embedded `SilverBridge.jar` (see plan 16)
 to a temp directory and add it to the classpath alongside the ViperServer JAR.
@@ -76,7 +77,8 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
-- JNI worker goroutine with `runtime.LockOSThread()` at startup and request/response channel
+- `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(job VerifyJob) <-chan Result`; `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
+- Worker goroutine template: `runtime.LockOSThread()` at startup, `AttachCurrentThread`, request loop, `DetachCurrentThread` on exit
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns

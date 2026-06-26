@@ -69,8 +69,38 @@ from the desugarer.
 - `internal/translator/context.go` — `Context` interface and implementation
 - `internal/translator/encoding.go` — `Encoding` interface
 - `internal/translator/translator.go` — `Translate(prog *internal.Program, info *TypeInfo) (*silver.Program, error)`
-- Name mangling utilities
+- `internal/translator/mangle.go` — name mangling utilities (see spec below)
+- `TupleDomain(n int) *silver.Domain` helper on `Context`: lazily emits (and caches) a parametric
+  Silver tuple domain for arity `n`. Used by the struct encoding (plan 21) for exclusive structs.
+  The domain exposes `tuple_get(base, idx, n)` projections. Emit once per arity; cache in translator state.
 - Tests: translate a trivial internal AST (empty method) and verify the Silver output shape
+
+## Name Mangling Specification
+
+Silver identifiers must match `[a-zA-Z$_][a-zA-Z0-9$_]*`. Go identifiers can contain
+Unicode characters; Go package paths contain `/` and `.`. The mangling scheme must be
+**injective** (no two distinct Go names produce the same Silver name).
+
+**Rules (applied in order):**
+
+1. Replace `/` with `_` and `.` with `_` in package paths.
+2. Replace any character not in `[a-zA-Z0-9_$]` with `_u{hex}_` where `{hex}` is the
+   Unicode code point in uppercase hex (e.g., `α` → `_u03B1_`).
+3. Prepend `G_` if the result starts with a digit (Silver identifiers cannot start with a digit).
+4. Silver field names are globally scoped; qualify them as `{mangledPkg}_{TypeName}_{FieldName}`
+   to avoid collisions across packages (same convention as plan 21).
+5. Silver method and function names: `{mangledPkg}_{funcName}` for package-level functions;
+   `{mangledPkg}_{TypeName}_{methodName}` for methods.
+6. Auxiliary generated names (tuple domains, box/unbox functions, etc.) use a `gobra__` prefix
+   to avoid collisions with user-defined Silver names.
+
+This scheme is injective because: package separators (`/`, `.`) become `_`; the `_u{hex}_`
+encoding is unambiguous; the `gobra__` prefix is reserved and never emitted for user names.
+
+**Note on collision with Scala Gobra**: The Scala Gobra uses a similar but not identical
+mangling scheme. Differential testing (plan 34) compares verification *results*, not Silver
+output, so scheme differences between Go-Gobra and Scala Gobra are acceptable as long as the
+generated Silver is valid and produces correct results.
 
 ## Critical Invariant: Bodyless Viper Functions Are Uninterpreted
 

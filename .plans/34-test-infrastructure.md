@@ -57,7 +57,14 @@ running it in CI on every push is impractical for a solo project. A `go test -ru
 target or a separate Makefile target is sufficient.
 
 **Test timeout (resolved):** Always pass `-timeout 30m` (or longer) when running the full
-regression suite. The default `go test` timeout of 10 minutes is too short: with `go test
--parallel N`, N goroutines compete for the single JNI worker; a large corpus of Silicon
-verification jobs will exceed 10 minutes easily. CI must set `-timeout 30m` explicitly.
-Document this in the repo README and the CI workflow file.
+regression suite. The default `go test` timeout of 10 minutes is too short for a large
+corpus of Silicon verification jobs. CI must set `-timeout 30m` explicitly. Document this
+in the repo README and the CI workflow file.
+
+**Parallelism ceiling (resolved):** `go test -parallel N` controls how many test goroutines
+run concurrently. Before plan 17b (pool expansion), all JNI calls are serialized through a
+single worker, so `-parallel N` increases goroutine scheduling overhead without improving
+throughput — use `-parallel 1` for the plan 15/17 baseline. After plan 17b, set `-parallel`
+to match the pool size: `go test -parallel $(nproc)` is appropriate. Beyond `runtime.NumCPU()`
+workers, memory use increases (each worker holds a Silicon + Z3 process) with no throughput
+gain. Document the recommended value in the CI workflow and README.

@@ -74,6 +74,27 @@ largest single unit of work in the frontend.
 - Tests: type-check a selection of regression test files and verify reported errors match
   `//@ expectedError` annotations
 
+## Resolved Questions
+
+**Ghost forward references (resolved):** The Scala type checker uses Kiama's circular
+attribute evaluation to handle mutually recursive ghost types lazily. The Go two-pass approach
+handles this differently:
+
+- **Pass 1 (stub registration)**: Walk all ghost declarations and register their names in the
+  ghost type table as **stubs** — a `GhostType` value that records the name and kind but has
+  no body yet (e.g., `ADTStub{name: "MyADT"}`).
+- **Pass 2 (body resolution)**: Walk all ghost declarations again, now resolving each body.
+  Because all names are already in the table as stubs, forward references and mutual recursion
+  are handled: the resolver finds the stub and returns it; the stub is later filled in.
+
+Stubs must never escape the type checker — by the time `TypeInfo` is returned, all stubs
+must be fully resolved. Add an assertion at the end of Pass 2 that no `GhostType` in the
+table is still a stub. If any remain, it indicates a missing declaration, which should have
+been caught as a "type not found" error earlier.
+
+This two-stub-pass approach handles all patterns the Scala checker handles, including
+self-recursive ADTs (`adt Tree { Leaf{}; Node{left Tree; right Tree} }`).
+
 ## Open Questions
 
 - How to handle Gobra ghost types that have no `go/types` representation (e.g., `seq[T]`,

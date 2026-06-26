@@ -76,11 +76,13 @@ public class SilverBridge {
 }
 ```
 
-**Note on `ErrTrafo`:** Silver nodes take an `ErrTrafo` parameter used for error re-labelling
-in transformations. Go-Gobra passes the identity transformation (`ErrTrafo.id`) for all
-directly-constructed nodes. Verify the exact API name against the Silver version in the
-ViperServer JAR — it may be `ErrTrafo$.MODULE$.id()` or `NoTrafos$.MODULE$` depending on
-the Silver version. Add a compile-time check in the Makefile target.
+**Note on `ErrTrafo`:** Silver nodes take an `ErrorTrafo` parameter used for error re-labelling
+in transformations. Go-Gobra passes the identity transformation for all directly-constructed
+nodes. The correct value is `NoTrafos$.MODULE$` — verified against the Silver submodule:
+`NoTrafos` is a Scala `case object` implementing `ErrorTrafo` as the identity (no re-labelling).
+`ErrTrafo` is a separate case class for custom transformations; it is not used here. In
+`SilverBridge.java`, declare `errT` parameters as `Object` and pass `NoTrafos$.MODULE$`
+from `viper.silver.ast.NoTrafos$`.
 
 The JAR is compiled at build time (Makefile target), embedded in the Go binary via
 `//go:embed`, extracted to a temp directory at startup, and added to the JVM classpath.

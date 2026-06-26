@@ -26,6 +26,17 @@ return structured verification results (success or a list of errors with positio
 
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — provides the Java Silver AST object
 
+## Relationship to Chopping and Parallelism
+
+This plan establishes the **single-program, single-worker** baseline: `Verify` accepts one
+`*silver.Program`, builds its Java equivalent via plan 16, calls Silicon, and returns a result.
+
+Chopping and parallel verification are layered on top in separate plans:
+- Plan 16b (Silver Chopper) splits a `*silver.Program` into sub-programs before JNI-building.
+- Plan 17b (Parallel Workers) expands the pool to N workers and dispatches sub-programs in
+  parallel. Callers of plan 17's `Verify` function do not change — the dispatch layer in 17b
+  wraps it.
+
 ## Reference: Current Gobra
 
 - `src/main/scala/viper/gobra/backend/Silicon.scala` — how Gobra calls Silicon today

@@ -79,8 +79,14 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 
 ## Work breakdown structure
 
-38 plan files, organized in 9 groups. See [00-overview.md](00-overview.md) for the full
+40 plan files, organized in 9 groups. See [00-overview.md](00-overview.md) for the full
 dependency table and list of currently unblocked work items.
+
+Two plans in Group 4 (Silver IR & JNI Backend) address parallelism:
+- [16b-silver-chopper.md](16b-silver-chopper.md) — Go port of the Silver Chopper; splits
+  a `*silver.Program` into sub-programs for parallel verification; no JVM dependency
+- [17b-parallel-workers.md](17b-parallel-workers.md) — expands the JNI worker pool from
+  N=1 to N workers; enables true parallel verification of chopped sub-programs
 
 **To find what you can work on next:** open `00-overview.md` and find plan files whose
 dependencies are all marked complete.

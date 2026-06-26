@@ -44,16 +44,20 @@ and achieve full pass rate parity with the Scala implementation.
 4. Maintain a `testdata/skip.txt` (or equivalent) for known failures with explanations
 
 **Pre-populating the generics skip list:** Before the first test run, identify all test files
-that use Go generics syntax and pre-mark them as `SKIP:generics-not-implemented`:
+that declare generic functions or types and pre-mark them as `SKIP:generics-not-implemented`.
+Use a pattern that targets generic *declarations* (type parameter lists on `func` or `type`),
+not array types or other bracket uses:
 
-```
+```bash
 find src/test/resources/regressions -name "*.gobra" \
-  | xargs grep -l "\[.*\]" \
+  | xargs grep -El "^\s*(func|type)\s+\w+\s*\[" \
   | sort
 ```
 
-Review matches manually (the pattern is approximate; `[N]T` arrays will also match) and add
-confirmed generics tests to `tests/testdata/skip.txt` before the initial run.
+This matches lines like `func F[T any](...)` and `type Stack[T any] struct{...}` but not
+array types (`[N]T` always appears in a type position, not immediately after a name).
+Review matches manually for false positives (e.g., slice-typed return types on the same
+line as a declaration), then add confirmed generics tests to `tests/testdata/skip.txt`.
 
 ## Deliverables
 

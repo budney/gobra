@@ -55,7 +55,9 @@ self-hosting: Go-Gobra verifies its own source code.
 | [14-silver-ast.md](14-silver-ast.md) | Silver IR (Go structs) | 01 |
 | [15-jni-setup.md](15-jni-setup.md) | JNI Setup & JVM Lifecycle | 01 |
 | [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver JNI Builder | 14, 15 |
+| [16b-silver-chopper.md](16b-silver-chopper.md) | Silver Program Chopper | 14 |
 | [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 16 |
+| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16b, 17 |
 | [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16 |
 
 ### Group 5: Translator
@@ -111,11 +113,14 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
 
 ## Cross-Cutting Notes
 
-**Concurrency model**: Go-Gobra is written in Go (goroutines throughout) but serializes all
-JNI calls through a single dedicated JNI worker goroutine (plan 15). Verification is therefore
-effectively single-threaded at the Silicon level, even if the rest of the pipeline runs
-concurrently. Plan 33 (pipeline orchestration) and plan 34 (test infrastructure) must account
-for this: verification requests queue through the JNI worker; they do not run in parallel.
+**Concurrency model**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines (plan 15), each
+locked to its own OS thread via `runtime.LockOSThread()` and each holding its own
+`SiliconFrontendAPI` instance. The pool starts with `poolSize=1` (plan 15 baseline) and
+expands to N workers in plan 17b. With N workers and `--chop`, multiple chopped sub-programs
+verify in parallel — matching the parallelism Scala Gobra achieves via `Future.traverse`.
+Without `--chop`, or before plan 17b is complete, verification is effectively single-threaded
+at the Silicon level. Plan 33 wires `--workers N` and plan 34 accounts for the JNI worker
+pool in test infrastructure.
 
 **Error/diagnostic contract**: Every pipeline stage uses the same `Diagnostic` type
 `{File, Line, Col, Message, Category}` (defined in plan 32). Each stage accumulates errors
