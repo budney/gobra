@@ -98,6 +98,22 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
 - Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
   confirm the resulting object passes `silver.ast.Program.checkTransitively()`
 
+## Version Coupling Note
+
+`SilverBridge.java` must be compiled against **exactly the same version of Silver** that is
+bundled in the ViperServer JAR used at runtime. If the Silver API changes (constructor
+signatures, collection types, etc.), `SilverBridge.java` must be updated in lockstep.
+
+To prevent silent breakage:
+- The Makefile target must accept an explicit `VIPERSERVER_JAR` variable and fail if it is
+  not set (no hardcoded default path).
+- The compiled `SilverBridge.jar` should embed the Silver version string (read from the JAR
+  manifest) as a constant, and `jvm.go` should assert at startup that the version string in
+  `SilverBridge.jar` matches the version in the runtime ViperServer JAR. Fail fast with a
+  clear message if they differ.
+- When the `viperserver/` submodule is updated, re-running `make SilverBridge.jar` is
+  mandatory; document this in the repo README.
+
 ## Open Questions
 
 - Should `SilverBridge.java` define one method per Silver node type, or group them

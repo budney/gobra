@@ -56,8 +56,14 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
 - Tests: verify a trivially correct Silver program → expect Success; verify a trivially
   incorrect one → expect Failure with at least one error
 
-## Open Questions
+## Resolved Questions
 
-- Silicon is not thread-safe in general; should Go-Gobra serialize all calls to Silicon, or
-  run multiple Silicon instances in parallel (one per goroutine)? Current Gobra uses one
-  instance per verification job; start with serial execution.
+**Silicon thread safety (resolved):** Serialize all calls to Silicon through a single instance.
+Silicon is not thread-safe; the current Scala Gobra uses one instance per verification job.
+Start with serial execution (one Silicon instance per Go-Gobra process lifetime).
+
+**Silicon pre-warming for tests (resolved):** Silicon initialization (JVM startup + Z3
+initialization) takes significant time. The test infrastructure (plan 34) initializes Silicon
+once in `TestMain` and reuses the same instance for all tests. Plan 17's `SiliconConfig` must
+therefore support a "warm" path where the already-started Silicon instance is handed to each
+`Verify` call without re-initialization. Do not start/stop Silicon per test.

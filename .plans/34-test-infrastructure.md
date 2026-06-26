@@ -49,7 +49,15 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 - `tests/regression_test.go` — Go test file that plugs the runner into `go test`
 - Documentation on how to add new test cases
 
-## Open Questions
+## Resolved Questions
 
-- Should differential testing against Scala Gobra run as part of CI, or only on demand?
-  On-demand is safer (Scala Gobra has a slow startup time).
+**Differential testing cadence (resolved):** Differential testing against Scala Gobra runs
+on-demand only, not in CI. Scala Gobra has significant startup time (JVM + Silicon init);
+running it in CI on every push is impractical for a solo project. A `go test -run Differential`
+target or a separate Makefile target is sufficient.
+
+**Test timeout (resolved):** Always pass `-timeout 30m` (or longer) when running the full
+regression suite. The default `go test` timeout of 10 minutes is too short: with `go test
+-parallel N`, N goroutines compete for the single JNI worker; a large corpus of Silicon
+verification jobs will exceed 10 minutes easily. CI must set `-timeout 30m` explicitly.
+Document this in the repo README and the CI workflow file.

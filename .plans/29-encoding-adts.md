@@ -74,16 +74,26 @@ domain X {
 ### Mathematical Collections
 
 **`seq[T]`**: Exclusive → Silver `Seq[T]` (built-in, no domain). Operations map directly to
-Viper built-ins. Special case: sparse large literals use a generated `emptySeq_{T}(n: Int): Seq[T]`
+Viper built-ins. Special case: sparse literals use a generated `emptySeq_{T}(n: Int): Seq[T]`
 function with postcondition `|result| == n && forall i :: 0 <= i < n ==> result[i] == dflt(T)`.
-Dense literal chunks alternate with `emptySeq` calls.
+The literal is split into chunks: a gap of **5 or more** consecutive missing indices between
+explicit elements triggers an `EmptyChunk` (rendered as `emptySeq(size)`); tightly-packed
+elements (gap < 5) form `NonEmptyChunk`s. Dense literals with no gaps are emitted directly
+as Silver sequence constructors. This threshold of 5 matches the Scala implementation's
+hardcoded `threshold: Int = 5` in `SequenceEncoding.chunkify()`.
 
 **`set[T]`**: Exclusive → Silver `Set[T]` (built-in). All set operations are Viper built-ins.
 
 **`mset[T]`**: Exclusive → Silver `Multiset[T]` (built-in). `x # s` (multiplicity) = Viper's
 built-in multiset containment, which returns the count.
 
-**`dict[K]V`**: Exclusive → Silver `Map[K,V]` (built-in). See plan 24 for details.
+**`dict[K]V`** (ghost mathematical map, owned by this plan): Exclusive → Silver `Map[K,V]`
+(Silver's built-in `Map` type). No `Ref`, no Silver field. All operations use Silver built-in
+map operations directly: `m[k]` → `Lookup(m, k)`, `k in m` → `Contains(m, k)`,
+`m[k := v]` → `Map(m, k, v)`, `|m|` → `|m|`. This is the same Silver `MapType(K, V)` that
+runtime `map[K]V` uses for its underlying field content (plan 24), but for `dict[K]V` the
+entire value *is* the `Map[K,V]` — there is no wrapping `Ref`. The encoding lives in
+`mathcollections.go` alongside `seq`, `set`, and `mset`.
 
 **`option[T]`**: Encode as a dedicated Silver domain per element type:
 ```silver

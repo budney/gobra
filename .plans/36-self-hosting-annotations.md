@@ -62,6 +62,18 @@ good first target — it's a pure function with no heap allocation beyond string
 - Ghost helper library in `internal/ghost/` (predicates, lemmas)
 - Document which properties are proved vs. trusted
 
+## Unsafe Operations
+
+Go-Gobra itself uses CGo (via jnigi) and may indirectly use `unsafe.Pointer` in the JNI
+layer. Gobra cannot currently reason about `unsafe.Pointer` semantics. For self-hosting:
+
+- Mark the entire `internal/backend/jvm/` package as `//@ trusted` at the package boundary.
+  The JVM lifecycle and JNI calling convention is verified by design-review and testing, not
+  by formal proof.
+- Document each `//@ trusted` annotation in `SELF_HOSTING.md` with the reason and the
+  test/invariant that stands in for the missing proof.
+- The stretch goal (plan 37) of verifying the JNI backend layer is explicitly post-milestone.
+
 ## Open Questions
 
 - Which safety properties are most important to prove? Memory safety (no nil dereferences)

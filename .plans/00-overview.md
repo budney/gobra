@@ -12,7 +12,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | Viper backend | Keep ViperServer/Silicon/Carbon as-is | Scope limited to Gobra itself |
 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR | In-process JVM; helper JAR wraps Silver constructors with Java-friendly signatures, avoiding raw Scala collection construction from Go |
 | Go parser | `go/parser` stdlib + custom annotation mini-parser | Go grammar is large/subtle; stdlib is correct, maintained, handles generics |
-| Annotation syntax | **Unresolved — see 02-annotation-syntax-decision.md** | Must be resolved before parser work begins |
+| Annotation syntax | Keep `//@ ...` unchanged — see 02-annotation-syntax-decision.md | Resolved |
 | Feature scope | Full parity, built incrementally | Self-hosting defines "done enough" |
 | Testing strategy | Port regression suite; differential testing vs. Scala Gobra | Scala Gobra is the oracle throughout |
 | Team / timeline | Solo, no hard deadline | Plan supports sequential or depth-first execution |
@@ -110,11 +110,14 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
 
 ## Unblocked Work (can start immediately)
 
-After completing 01:
-- 03, 06, 11, 14, 15 are all unblocked and independent of each other
-
-After completing 02 as well:
-- 05 becomes unblocked (annotation parser requires the syntax decision)
+**D4 is resolved.** After completing 01 (project setup), all of the following are unblocked
+and independent of each other:
+- 03 (Frontend AST)
+- 05 (Annotation Parser) — previously blocked on D4; now unblocked
+- 06 (Gobrafier)
+- 11 (Internal AST)
+- 14 (Silver IR)
+- 15 (JNI Setup)
 
 Note: 04 (Go Parser Integration) is blocked by **both** 03 and 06; it cannot start until
 both the Frontend AST and the Gobrafier are complete. The Gobrafier is a text preprocessor

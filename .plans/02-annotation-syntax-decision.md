@@ -60,12 +60,13 @@ Examples: separate `.spec` files, Go build tag blocks, structured comment direct
 
 ## Decision
 
-**Record the chosen option here once resolved. Until then, 03-frontend-ast.md and**
-**05-annotation-parser.md are blocked.**
+**Option A: keep `//@ ...` unchanged.**
 
-Recommendation: **Option A** (keep `//@ ...`). The regression test suite is the primary
-validation mechanism throughout this project; breaking it at the start adds unnecessary risk
-with no clear benefit for a solo implementation effort.
+This unblocks 03-frontend-ast.md and 05-annotation-parser.md.
+
+Rationale: The regression test suite is the primary validation mechanism throughout this
+project; breaking it at the start adds unnecessary risk with no clear benefit for a solo
+implementation effort.
 
 ## Deliverables
 
@@ -79,8 +80,30 @@ with no clear benefit for a solo implementation effort.
   - Assertion operators (`&&`, `||`, `==>`, `!`)
   - Gobra-specific: `seq`, `set`, `mset`, `dict`, `option`, ADT constructors
 
-## Open Questions
+## Resolved Questions
 
-- Should `//@ ...` annotations be allowed mid-statement (current Gobra allows some), or only
-  at statement/declaration boundaries?
-- How are multi-line annotations handled? Current Gobra uses consecutive `//@ ` lines.
+**Inline (mid-statement) annotations**: In scope — full parity with the Scala implementation.
+The Gobrafier handles specific inline patterns where a `//@ ...` comment appears on the same
+line as the Go expression it annotates. Examples from the Scala Gobrafier:
+
+```go
+f(args) //@ with ghostArgs           // ghost argument injection at call site
+return x, y //@ with ghostResult     // ghost result at return
+x := rhs //@ as ghost_assignment     // ghost assignment annotation
+f(x) //@ unfolding P(x)             // unfolding access inline
+```
+
+The annotation parser (05) must handle these in addition to standalone `//@ ...` lines.
+The Gobrafier (06) strips the Go-side syntax; the annotation parser sees the `//@ ...`
+portion. These are not arbitrary mid-expression placement — they are specific positional
+patterns that the Gobrafier recognizes by regex. Document the full list in plan 05.
+
+**Multi-line annotations**: Consecutive `//@ ` lines in the same comment block are
+concatenated (with synthetic newlines for position tracking) before lexing. A single
+logical annotation can span multiple `//@ ` lines:
+
+```go
+//@ requires acc(x) &&
+//@          acc(y)
+func f(x, y *int) { ... }
+```

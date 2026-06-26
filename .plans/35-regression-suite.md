@@ -50,7 +50,26 @@ and achieve full pass rate parity with the Scala implementation.
 - Passing rate tracked in `tests/COVERAGE.md`
 - CI job running the full regression suite on every push
 
-## Open Questions
+## Skip List Format (Resolved)
 
-- Some regression tests may use features not yet implemented (e.g., Go generics — see plan 30);
-  these must be skipped with an explanation. Mark them `SKIP: feature-not-implemented` in skip.txt.
+`tests/testdata/skip.txt` uses a machine-parseable format, one entry per line:
+
+```
+# Comments start with #
+tests/testdata/regressions/features/generics/basic.gobra SKIP:generics-not-implemented
+tests/testdata/regressions/features/channels/select.gobra SKIP:select-not-implemented
+tests/testdata/regressions/issues/123.gobra SKIP:known-z3-timeout
+```
+
+Fields (tab- or space-separated):
+1. Path relative to the `gobra-go/` directory
+2. `SKIP:<reason-slug>` — one of a fixed set of reason slugs:
+   - `generics-not-implemented`
+   - `feature-not-implemented` (other missing features)
+   - `known-z3-timeout`
+   - `known-false-negative` (Go-Gobra accepts what Scala Gobra rejects — investigate separately)
+   - `known-false-positive` (Go-Gobra rejects what Scala Gobra accepts — investigate separately)
+
+The CI job that runs the suite must fail if a test in the skip list now passes (i.e., skip
+entries must be pruned as features are implemented). This prevents the skip list from silently
+accumulating stale entries.

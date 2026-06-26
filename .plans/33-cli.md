@@ -47,8 +47,16 @@ status code.
 - `internal/pipeline/pipeline.go` — `Run(cfg *Config) error` orchestrating all stages
 - Tests: integration tests running the full pipeline on small `.gobra` files
 
-## Open Questions
+## Resolved Questions
 
-- Should the CLI use `flag` (stdlib), `cobra`, or `pflag`? `cobra` is common for Go CLIs
-  and supports subcommands if needed in the future; `flag` is simpler. Given this is a solo
-  project, `flag` is sufficient.
+**CLI library (resolved):** Use Go's stdlib `flag` package. `cobra` adds subcommand support
+but also adds a dependency and annotation burden for self-hosting. The current Gobra has no
+subcommands; `flag` is sufficient and keeps the codebase simpler to verify.
+
+**ViperServer JAR path precedence (resolved):** The `--viperServerJar` flag and the
+`VIPERSERVER_JAR` environment variable both specify the JAR path. Resolution order:
+1. `--viperServerJar` flag (explicit CLI override, highest priority)
+2. `VIPERSERVER_JAR` environment variable
+3. Fatal error if neither is set.
+
+Document this precedence in `--help` output and the README.

@@ -62,11 +62,14 @@ gobra-go/                         ← Go module root (go.mod here)
     silver/                       ← Silver IR Go types + printer
     backend/                      ← JNI setup, Silicon/Carbon callers
     reporting/                    ← error reporter
-  pkg/                            ← any exported utilities
   tests/
     testdata/regressions/ → ../../src/test/resources/regressions/  (symlink or copy)
     testdata/stubs/       → ../../src/main/resources/               (symlink or copy)
 ```
+
+Note: there is no `pkg/` directory. This is a replacement tool, not a library — nothing should
+be exported from the Go module. If a programmatic Go embedding API is needed in the future,
+add `pkg/` at that time.
 
 Paths relative to the existing repo root:
 ```

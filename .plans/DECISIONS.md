@@ -94,12 +94,10 @@ comment node's source position.
 
 ---
 
-## D4 — Annotation syntax: keep `//@ ...` (recommended, not yet resolved)
+## D4 — Annotation syntax: keep `//@ ...` (resolved)
 
-**Status: RECOMMENDATION — must be confirmed before work on 03, 04, 05 begins.**
-See [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md).
-
-**Recommendation:** Keep the existing `//@ ...` syntax unchanged.
+**Status: RESOLVED.** See [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md).
+Plans 03, 04, and 05 are unblocked.
 
 **Rationale:**
 - Full compatibility with all existing `.gobra` test files and the regression suite.

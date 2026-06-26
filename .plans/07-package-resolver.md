@@ -36,8 +36,12 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 - **`golang.org/x/tools/go/packages`**: Use this library for module-aware package loading
   rather than reimplementing module resolution. Note: it invokes `go list` under the hood,
-  which requires a Go toolchain to be installed at runtime. This is acceptable for a
-  development-time verifier.
+  which requires a Go toolchain to be installed at runtime (`go` in `$PATH`). This is
+  acceptable for a development-time verifier. Document this runtime requirement prominently:
+  "Go-Gobra requires a Go toolchain at runtime for package resolution (`go list`)." Fail fast
+  with a clear message if `go` is not found in `$PATH`. Note this also means Go-Gobra cannot
+  be used in environments where only a pre-compiled binary is deployed without a Go toolchain
+  (e.g., some CI containers) — document this as a known limitation.
 - **Topological ordering**: The resolver must produce packages in dependency order (a
   topological sort of the import graph). The type checker (10) requires that all imported
   packages are type-checked before the importing package. Detect and report import cycles as

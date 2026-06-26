@@ -54,13 +54,19 @@ to enable jenv's export plugin: `jenv enable-plugin export`. Document this in th
 when `libjvm` is not found.
 
 **Thread attachment**: JNI requires every OS thread that calls into the JVM to be attached.
-CGo goroutines may run on any OS thread. The JVM wrapper must attach the current thread before
-any JNI call and detach when done (or keep it attached for the lifetime of the goroutine).
-Use a `sync.Map` keyed by goroutine OS thread ID to track attachment state. Because the JVM
-is a singleton and JNI is not goroutine-safe in general, all JNI calls from Go-Gobra are
-channeled through a single dedicated goroutine (the "JNI worker"). Other goroutines send
-requests and await results over a channel. This pattern also makes parallel test execution
-safe (see plan 34).
+CGo goroutines may run on any OS thread. Because the JVM is a singleton and JNI is not
+goroutine-safe in general, all JNI calls from Go-Gobra are channeled through a single
+dedicated goroutine (the "JNI worker"). Other goroutines send requests and await results over
+a channel. This pattern also makes parallel test execution safe (see plan 34).
+
+The JNI worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock
+it. `LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
+required because JNI thread attachment is per-OS-thread: `AttachCurrentThread` is called once
+on that fixed OS thread, and all subsequent JNI calls from the worker are then on the same
+attached thread. Without `LockOSThread`, the Go scheduler can silently migrate the goroutine
+to a different OS thread between CGo calls, making the JNI attachment state inconsistent.
+No `sync.Map` for tracking attachment state is needed — the single locked goroutine is the
+only thread that ever calls JNI.
 
 **SilverBridge JAR**: At JVM startup, extract the embedded `SilverBridge.jar` (see plan 16)
 to a temp directory and add it to the classpath alongside the ViperServer JAR.
@@ -69,7 +75,7 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
-- JNI worker goroutine with request/response channel
+- JNI worker goroutine with `runtime.LockOSThread()` at startup and request/response channel
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns

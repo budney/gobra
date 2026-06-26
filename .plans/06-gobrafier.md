@@ -46,17 +46,33 @@ The parser's dependency list includes 06; 06's dependency list does not include 
 - Handle `trusted` modifier
 - Handle Gobra import statements for ghost packages
 
+## Position Mapping Strategy (Resolved)
+
+The Gobrafier's primary position contract is: **preserve line count**. When content is removed
+or transformed on a line, insert a `\n` to keep the preprocessed file's line numbers identical
+to the original. This matches the Scala Gobrafier's approach (which explicitly adds `"\n"` in
+each regex replacement to "maintain line consistency").
+
+Consequence: errors reported by `go/parser` on the preprocessed file will have correct line
+numbers pointing into the original source. Column positions within a line may shift when inline
+ghost content is removed (e.g., `f(args) //@ with ghost_args` → `f(args)` shifts nothing
+after the call, but ghost parameter lists inserted before `)` do shift trailing columns).
+
+**Known limitation:** column positions within a transformed line are best-effort. This matches
+the Scala implementation's behavior and is acceptable in practice because most Gobra error
+messages are reported at line granularity, and the transformed content is typically at
+end-of-line positions.
+
+**For `.gobra` files:** no transformation is applied; source positions are direct.
+
+`PositionMap` is therefore a simple line-delta table (preprocessed line → original line).
+In practice, since line counts are preserved, the table is the identity mapping and can be
+omitted entirely for the initial implementation. Add a non-trivial mapping only if a
+transformation is found that changes line counts.
+
 ## Deliverables
 
-- `internal/frontend/gobrafier.go` — `Gobrafy(src []byte, filename string) ([]byte, PositionMap, error)`
-- `PositionMap` type that maps preprocessed `token.Pos` back to original source positions
+- `internal/frontend/gobrafier.go` — `Gobrafy(src []byte, filename string) ([]byte, error)`
+  (no PositionMap needed for the initial implementation; see position mapping note above)
 - Tests: compare preprocessed output for a selection of `.go` and `.gobra` test files against
-  expected output (golden files)
-
-## Open Questions
-
-- Should the Gobrafier produce an in-memory `[]byte` or write a temp file? In-memory is
-  preferable (no filesystem I/O); `go/parser` accepts `[]byte` directly via `ParseFile`'s
-  `src` parameter.
-- Position mapping strategy: maintain a line-offset table mapping preprocessed line N to
-  original line M, or track byte-offset ranges? Line-offset table is simpler.
+  expected output (golden files); verify line count is preserved in all cases

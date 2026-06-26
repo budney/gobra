@@ -55,6 +55,14 @@ sub-slicing).
 **Function bodies**: slice constructor functions have **no bodies** — correctness relies entirely
 on pre/postconditions. Do not generate Viper function bodies for slice operations.
 
+**High-risk area**: Because Silicon treats bodyless Viper functions as uninterpreted, any
+missing or incomplete postcondition silently weakens verification — Silicon will not complain,
+it will simply be unable to prove things that depend on the omitted fact, or worse, will
+accept an incorrect proof if a precondition is too weak. The slice encoding is the most
+complex in the system. Every postcondition on every slice constructor function must be
+verified against the Scala implementation during porting. Use the Scala Gobra as oracle: if a
+regression test passes Scala but fails Go-Gobra, check for a missing postcondition first.
+
 **`make([]T, len, cap)`**: inhales permissions over the full capacity; asserts default values
 over length only.
 

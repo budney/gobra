@@ -54,7 +54,9 @@ constructs are unified.
 - `PrettyPrinter` for debugging (helpful throughout development)
 - Unit tests: construct representative internal AST trees and print/traverse them
 
-## Open Questions
+## Resolved Questions
 
-- Should the internal AST be immutable (all fields set at construction, no mutation) or allow
-  post-construction annotation? Immutable is safer and matches the Scala implementation.
+**Immutability (resolved):** The internal AST is immutable — all fields are set at construction,
+no post-construction mutation. This is consistent with plan 13, where transforms are pure
+`*internal.Program → *internal.Program` functions that construct new trees. Immutability
+eliminates aliasing bugs in the transform pipeline and matches the Scala implementation.

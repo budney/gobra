@@ -65,14 +65,14 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 | D1 | Scope | Rewrite Gobra only; Viper/Silver/Silicon/Carbon unchanged |
 | D2 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR (`SilverBridge.java`) |
 | D3 | Go parser | `go/parser` stdlib + custom recursive-descent annotation mini-parser |
-| D4 | Annotation syntax | **Pending** — recommendation is keep `//@ ...` unchanged |
+| D4 | Annotation syntax | **Resolved** — keep `//@ ...` unchanged (see 02) |
 | D5 | Feature scope | Full parity with pinned Scala Gobra commit, built incrementally |
 | D6 | Testing | Port regression suite; Scala Gobra is the oracle |
 | D7 | Team/timeline | Solo, no hard deadline |
 | D8 | Code location | `gobra-go/` subdirectory; promoted to root at cut-over |
 | D9 | Frontend AST | Embed `go/ast` nodes; add Gobra-specific types alongside |
 
-**D4 (annotation syntax) must be resolved before any frontend work begins.**
+**D4 (annotation syntax) is resolved — keep `//@ ...`. Frontend work may begin.**
 
 ---
 
@@ -99,7 +99,7 @@ These four are independent and can be done in any order:
 
 **Completed:** Planning only. No Go code has been written yet.
 
-**Next action:** Resolve D4 (annotation syntax), then begin 01 (project setup).
+**Next action:** Begin 01 (project setup). D4 is resolved; 03, 05, and frontend work are unblocked.
 
 ---
 

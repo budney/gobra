@@ -48,8 +48,8 @@ assertion fires at every call site.
 **`len(m)`**: Requires read permission; `|m.underlyingMapField| == cardinality` of the
 underlying Silver map.
 
-**Ghost `dict[K]V`** (mathematical map): Exclusive `dict[K]V` → `vpr.MapType(K, V)` directly
-(Silver's built-in `Map`). No field, no `Ref`. All operations are Silver built-in map ops.
+**Ghost `dict[K]V`**: handled entirely by plan 29 (`mathcollections.go`). Plan 24 covers only
+runtime `map[K]V`. Do not add dict encoding here.
 
 **Comma-ok idiom** (`v, ok := m[k]`): produce a tuple `(MapLookup(content, k), MapContains(content, k))` and decompose via tuple projection. The desugarer should handle the tuple decomposition.
 
@@ -58,5 +58,5 @@ iteration order. Use a ghost variable or quantifier over the map domain.
 
 ## Deliverables
 
-- `internal/translator/encodings/maps.go` (regular maps + ghost dict)
+- `internal/translator/encodings/maps.go` (runtime `map[K]V` only; ghost `dict[K]V` is in plan 29)
 - Tests: encode map lookup, assignment, deletion, comma-ok, len

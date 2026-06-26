@@ -51,9 +51,26 @@ domain Poly[T] {
   function box(x: T): Ref
   function unbox(y: Ref): T
   axiom { forall x: T :: {box(x)} unbox(box(x)) == x }
-  // For finite types (bool): conditional round-trip axiom only when dynType matches
 }
 ```
+
+The unbounded round-trip axiom `unbox(box(x)) == x` is safe for infinite types (`Int`,
+`Ref`, `Seq[T]`, etc.) where distinct values of `T` are guaranteed to be distinct.
+
+**`Bool` is a special case.** `Bool` has only two values (`true`, `false`). The unbounded
+axiom `forall x: Bool :: unbox(box(x)) == x` is still logically sound, but some SMT solvers
+(Z3 in particular) may derive unexpected consequences: since there are only two boxed booleans,
+Z3 can deduce `box(true) != box(false)` from the axiom, but it may also collapse the `unbox`
+values for boxes of *other types* (`Int`, etc.) without the converse axiom `box(unbox(y)) == y`.
+The converse axiom is too strong (it would mean every `Ref` is a box of something), so it is
+omitted.
+
+The safe approach (used in the Scala Gobra) is to guard the `unbox` direction with a
+`dynType` check: for `Bool`, instead of the unbounded converse, rely on the fact that
+`unbox` is only called at type-assertion sites where `dynType(i) == bool_Type()` is already
+established in the context. Silicon's path-sensitivity handles the rest. No special axiom is
+needed beyond the standard round-trip above — just ensure the type-assertion encoding in the
+`Type` domain always establishes `dynType` before unboxing.
 
 **`Type` domain** (global, shared across all interface encodings):
 ```silver
