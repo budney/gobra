@@ -1,0 +1,71 @@
+# 05 — Annotation Mini-Parser
+
+## Objective
+
+Implement a custom recursive-descent parser for `//@ ...` annotation expressions. The Go parser
+(04) extracts raw comment strings; this parser turns them into typed frontend AST nodes (03).
+
+## Scope
+
+**In scope:**
+- Lexer for annotation tokens (keywords, identifiers, operators, literals, punctuation)
+- Recursive-descent parser producing frontend AST specification nodes
+- Source position tracking relative to the comment's position in the file (so error messages
+  point to the right line/column within the annotation, not just the comment start)
+- Full coverage of the Gobra annotation language as decided in 02:
+  - Contract clauses: `requires`, `ensures`, `preserves`
+  - Termination measures: `decreases`
+  - Permission expressions: `acc(e)`, `acc(e, p)`, `wildcard`, `write`, `none`
+  - Assertion operators: `&&`, `||`, `==>`, `!`, `--*`
+  - Quantifiers: `forall x: T :: P`, `exists x: T :: P`
+  - Ghost statements: `fold`, `unfold`, `assert`, `assume`, `exhale`, `inhale`
+  - Magic wands: `package`, `apply`
+  - Old/before: `old(e)`, `before(e)`
+  - Type assertions in specs
+  - Sequence/set/multiset/dict/option literals and operations
+  - ADT constructors and `match` expressions
+  - `pure`, `ghost`, `trusted`, `opaque` modifiers
+  - Labeled old: `old[l](e)`
+  - Permission fractions: `1/2`, `p/q`
+  - `unfolding e in e`
+
+**Out of scope:**
+- Parsing standard Go syntax (that's `go/parser` in 04)
+- Type-checking the annotation expressions (08, 09)
+
+## Dependencies
+
+- [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md) — grammar is defined here
+- [03-frontend-ast.md](03-frontend-ast.md) — target AST node types for spec expressions
+
+## Reference: Current Gobra
+
+- `src/main/antlr4/GobraParser.g4` — the definitive grammar for all annotation constructs;
+  use this as the specification for the recursive-descent parser
+- `src/main/antlr4/GobraLexer.g4` — token definitions
+- `src/main/scala/viper/gobra/frontend/ParseTreeTransformer.scala` — shows how parse tree
+  nodes map to AST nodes for spec expressions
+
+## Key Implementation Notes
+
+- A hand-written recursive-descent parser is appropriate here: the annotation grammar is
+  unambiguous, operator precedence is well-defined, and it avoids a parser-generator dependency
+- The lexer should skip whitespace and handle `//@ ` prefix stripping
+- Multi-line annotations: consecutive `//@ ` lines in the same comment block are concatenated
+  before lexing, with synthetic newlines to preserve line numbers
+- Operator precedence (low to high): `==>`, `||`, `&&`, `!`, comparison, additive,
+  multiplicative, unary, postfix
+
+## Deliverables
+
+- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) (SpecNode, error)`
+- Full grammar coverage of the Gobra annotation language
+- Position-accurate error messages (column relative to comment start)
+- Table-driven tests covering each annotation form, including error cases
+
+## Open Questions
+
+- Should the annotation parser produce a separate AST that is later merged into the frontend AST,
+  or should it produce frontend AST nodes directly? Direct production is simpler.
+- How to handle annotations that span constructs (e.g., a `requires` on a method vs. on a
+  closure literal)? Let the type checker sort it out; the parser just produces nodes.
