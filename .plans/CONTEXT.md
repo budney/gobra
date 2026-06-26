@@ -34,6 +34,28 @@ used as-is via JNI. Only the pipeline above is being rewritten in Go.
 
 ---
 
+## Repository layout (current and future)
+
+```
+viperproject/gobra/          ← existing repo, self-hosting branch
+  gobra-go/                  ← NEW: Go implementation lives here during development
+    go.mod                   ← module: github.com/viperproject/gobra
+    cmd/gobra/               ← CLI entry point
+    internal/                ← all pipeline stages
+    tests/testdata/          ← symlinks to regression tests and stubs (see below)
+  src/                       ← existing Scala implementation (reference; deleted at cut-over)
+  viperserver/               ← git submodule: Silicon/Carbon JARs for JNI (kept permanently)
+  .plans/                    ← this planning directory
+```
+
+Test data is accessible from `gobra-go/` via relative paths or symlinks:
+- Regression tests: `../../src/test/resources/regressions/`
+- Built-in stubs: `../../src/main/resources/`
+
+**Endgame (cut-over):** When self-hosting is achieved, delete the Scala source and promote
+`gobra-go/` to the repo root. See D8 in [DECISIONS.md](DECISIONS.md) for the full cut-over
+step list.
+
 ## Key decisions (summary)
 
 All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md). Summary:
@@ -47,6 +69,7 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 | D5 | Feature scope | Full parity with Scala Gobra, built incrementally |
 | D6 | Testing | Port regression suite; Scala Gobra is the oracle |
 | D7 | Team/timeline | Solo, no hard deadline |
+| D8 | Code location | `gobra-go/` subdirectory; promoted to root at cut-over |
 
 **D4 (annotation syntax) must be resolved before any frontend work begins.**
 

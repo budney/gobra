@@ -5,16 +5,31 @@
 Bootstrap the Go-Gobra repository: Go module, directory layout, build tooling, license headers,
 and CI. This is the prerequisite for all other work.
 
+## Repository Structure (resolved — see D8 in DECISIONS.md)
+
+The Go implementation lives in a `gobra-go/` subdirectory of the existing Gobra repository,
+on the `self-hosting` branch. This gives immediate access to:
+- `src/test/resources/regressions/` — the regression test corpus
+- `src/main/resources/` — the built-in Go stdlib stubs
+- `viperserver/` submodule — Silicon/Carbon JARs needed for JNI
+
+**Endgame:** Once Go-Gobra reaches full parity and self-hosting, the Scala source is deleted
+and `gobra-go/` is promoted to the repo root in a cut-over commit. The `viperserver/`
+submodule stays (still needed for JNI).
+
+**Module path:** `github.com/viperproject/gobra` — same as the Scala project, since this is
+a replacement, not a parallel tool. The subdirectory path avoids conflict during development.
+
 ## Scope
 
 **In scope:**
-- `go mod init` for the new module (e.g. `github.com/viperproject/gobra`)
+- Create `gobra-go/` directory at the repo root on the `self-hosting` branch
+- `go mod init github.com/viperproject/gobra` inside `gobra-go/`
 - Top-level directory skeleton mirroring the logical pipeline stages
 - Makefile or `just`-file with common targets (build, test, lint)
-- License header tooling (reuse the viperproject MPL-2.0 setup)
-- GitHub Actions CI stub (build + test on push)
-- `.gitignore` for Go build artifacts and JVM temp files
-- Decision on whether this lives in the existing repo (new subdirectory or branch) or a new repo
+- License header tooling (reuse the viperproject MPL-2.0 setup — MPL-2.0)
+- GitHub Actions CI stub for the Go build (separate job from the existing Scala CI)
+- `.gitignore` additions for Go build artifacts and JVM temp files
 
 **Out of scope:**
 - Any actual Go source beyond skeleton `package` declarations
@@ -30,34 +45,50 @@ None — this is the root of the dependency graph.
 - `.github/` — existing CI workflows and license check config
 - `src/main/scala/viper/gobra/` — top-level package layout to mirror in Go
 
-## Proposed Directory Layout
+## Directory Layout
 
 ```
-gobra-go/
-  cmd/gobra/        ← main package, CLI entry point
+gobra-go/                         ← Go module root (go.mod here)
+  cmd/gobra/                      ← main package, CLI entry point
   internal/
-    frontend/       ← parser, annotation parser, gobrafier, package resolver
-    info/           ← type checker
+    frontend/                     ← parser, annotation parser, gobrafier, package resolver
+    info/                         ← type checker
     ast/
-      frontend/     ← frontend AST node types
-      internal/     ← internal AST node types
-    desugar/        ← desugarer
-    transform/      ← internal transforms
-    translator/     ← translator + encodings
-    silver/         ← Silver IR Go types
-    backend/        ← JNI setup, Silicon/Carbon callers
-    reporting/      ← error reporter
-  pkg/              ← any exported utilities
+      frontend/                   ← frontend AST node types
+      internal/                   ← internal AST node types
+    desugar/                      ← desugarer
+    transform/                    ← internal transforms
+    translator/                   ← translator core + encodings
+    silver/                       ← Silver IR Go types + printer
+    backend/                      ← JNI setup, Silicon/Carbon callers
+    reporting/                    ← error reporter
+  pkg/                            ← any exported utilities
+  tests/
+    testdata/regressions/ → ../../src/test/resources/regressions/  (symlink or copy)
+    testdata/stubs/       → ../../src/main/resources/               (symlink or copy)
+```
+
+Paths relative to the existing repo root:
+```
+viperproject/gobra/
+  gobra-go/          ← NEW: Go implementation (this project)
+  src/               ← existing Scala implementation (reference; deleted at cut-over)
+  viperserver/       ← existing submodule: stays permanently (JNI JARs)
+  .plans/            ← this planning directory
 ```
 
 ## Deliverables
 
-- Repository compiles with `go build ./...` (even if empty)
-- `go vet ./...` and `golint` pass
-- License header check passes
-- CI runs on push
+- `gobra-go/` directory created on the `self-hosting` branch
+- `go build ./...` succeeds (even with only skeleton packages)
+- `go vet ./...` passes
+- License header check passes (MPL-2.0 headers on all `.go` files)
+- CI job `go-build` runs on push alongside the existing Scala CI job
+- Test data accessible from `gobra-go/tests/testdata/` (symlinks or relative paths)
 
 ## Open Questions
 
-- New repo vs. subdirectory/branch of the existing Gobra repo?
-- Module path: `github.com/viperproject/gobra` (same name, new impl) or a distinct path?
+- Symlinks vs. copies for test data: symlinks are cleaner but may cause issues on Windows CI
+  runners. Use symlinks; add a note in CI to enable symlink support if needed.
+- Should `gobra-go/` have its own `README.md` explaining it is the Go rewrite in progress?
+  Yes — add a minimal one pointing to `CONTEXT.md` and `DECISIONS.md` in `.plans/`.

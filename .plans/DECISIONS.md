@@ -132,6 +132,44 @@ Differential testing against Scala Gobra catches regressions immediately.
 
 ---
 
+## D8 — Code location: `gobra-go/` subdirectory in existing repo, promoted at cut-over
+
+**Decision:** The Go implementation lives in a `gobra-go/` subdirectory of the existing Gobra
+repository, on the `self-hosting` branch. When Go-Gobra reaches full parity and self-hosting,
+the Scala source is deleted and `gobra-go/` is promoted to the repo root in a single cut-over
+commit.
+
+**Rationale:**
+- The existing repo contains everything Go-Gobra needs during development: the regression test
+  corpus (`src/test/resources/regressions/`), the built-in stubs (`src/main/resources/`), and
+  the `viperserver/` submodule with the Silicon/Carbon JARs required for JNI. Having these
+  in place without duplication or additional submodules significantly reduces setup friction.
+- The Scala source is the reference implementation throughout the port; having it in the same
+  repo (and on the same branch) makes cross-referencing trivial.
+- The endgame cut-over commit (delete Scala, promote Go) is a one-time cost. `git log --follow`
+  loses history before the move, but this is acceptable for a replacement project.
+
+**Alternatives considered:**
+1. **New repository** (`viperproject/gobra-go`) — clean separation and independent CI, but
+   requires duplicating or submoduling the regression tests, stubs, and `viperserver/` tree.
+   The daily friction during development outweighs the clean-repo benefit. Rejected.
+2. **Replace at root on `self-hosting` branch** — avoids the cut-over awkwardness but makes
+   the branch so divergent from `master` that tracking upstream Scala changes becomes very
+   difficult. Rejected.
+
+**Module path:** `github.com/viperproject/gobra` — same as the Scala project, since this is a
+replacement. No conflict during development because the Go module root is `gobra-go/go.mod`,
+not the repo root.
+
+**Cut-over steps (deferred to completion of 37-self-hosting-verify.md):**
+1. Delete `src/`, `build.sbt`, `project/`, and other Scala artifacts
+2. Move contents of `gobra-go/` to the repo root
+3. Update `go.mod` path if needed
+4. Update CI to remove Scala jobs
+5. Tag the last Scala release before the cut-over
+
+---
+
 ## D7 — Solo project, no hard deadline
 
 **Decision:** This is a solo effort with no fixed timeline. The WBS is written for sequential
