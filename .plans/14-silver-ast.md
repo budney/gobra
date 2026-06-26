@@ -65,7 +65,11 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
 - Tests: construct a simple Silver program in Go structs; print it; verify the output is
   valid Silver by passing it to ViperServer
 
-## Open Questions
+## Resolved Questions
 
-- Should Silver positions carry Go source info (for error mapping) or Silver source info
-  (for debugging the translator output)? Carry both: a `GoPos` and an optional `SilverPos`.
+**Position design (resolved):** Each Silver Go node carries both a `GoPos` (the original Go
+source file/line/col, used by the reporter in plan 32) and an optional `SilverPos` (the Silver
+source location, used only for debugging translator output). The reporter uses `GoPos` to map
+Silicon errors back to Go source. The `GoPos` field must never be nil for nodes that originate
+from Go source; translator-internal synthetic nodes (e.g., auxiliary fields) may leave it nil
+and use a sentinel unknown position.

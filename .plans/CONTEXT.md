@@ -71,6 +71,7 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 | D7 | Team/timeline | Solo, no hard deadline |
 | D8 | Code location | `gobra-go/` subdirectory; promoted to root at cut-over |
 | D9 | Frontend AST | Embed `go/ast` nodes; add Gobra-specific types alongside |
+| D10 | Frontend visitor | Companion wrapper structs for go/ast nodes Gobra extends; single Visitor interface |
 
 **D4 (annotation syntax) is resolved — keep `//@ ...`. Frontend work may begin.**
 

@@ -72,8 +72,31 @@ from the desugarer.
 - Name mangling utilities
 - Tests: translate a trivial internal AST (empty method) and verify the Silver output shape
 
-## Open Questions
+## Critical Invariant: Bodyless Viper Functions Are Uninterpreted
 
-- Should encodings be stateless (pure functions taking Context) or stateful (objects with
-  accumulated state)? The current Gobra uses stateful encoding objects; this is simpler for
-  encodings that need to accumulate auxiliary definitions (e.g., domain declarations).
+**All encoding authors must read this.**
+
+When a Viper `Function` has no body, Silicon treats it as an **uninterpreted function** — it
+is axiomatized solely by its preconditions and postconditions. There is no built-in soundness
+check that postconditions are consistent; Silicon simply assumes them. The consequences:
+
+- A **missing postcondition** silently weakens verification: Silicon cannot prove anything that
+  depends on the omitted fact, but it will not report an error.
+- An **incorrect postcondition** (one that is false in some model) silently unsounds the proof:
+  Silicon may accept an incorrect program by using the false axiom.
+- An **overly strong precondition** makes the function uncallable for legitimate inputs.
+
+This invariant affects: slice constructors (plan 23), array box/unbox functions (plan 23),
+the `Poly[T]` domain (plan 25), the `Type` domain (plan 25), string domain functions (plan 20),
+`goIntDiv`/`goIntMod` (plan 20), and any other place where a bodyless Viper function is emitted.
+
+**For each bodyless function, verify every postcondition against the Scala implementation
+before considering that encoding complete.** Use the Scala Gobra as oracle: if a regression
+test passes Scala but fails Go-Gobra, check for a missing postcondition first.
+
+## Resolved Questions
+
+**Encoding state (resolved):** Encodings are stateful objects (matching the Scala implementation).
+Each encoding accumulates auxiliary Silver definitions (domains, functions, fields) in its
+internal state and emits them at the end of translation. The `Context` holds references to all
+encoding objects (initialized together at translator startup), allowing mutual access.

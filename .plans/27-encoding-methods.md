@@ -66,9 +66,28 @@ method M(r: Ref, x: Int) returns (y: Bool)
 - End-to-end test: translate a small but non-trivial annotated Go program (e.g., the swap
   example from `src/test/resources/regressions/examples/`) and verify it passes Silicon
 
-## Open Questions
+## Resolved Questions
 
-- How are closures with captured mutable variables encoded? This is a known hard case;
-  study the Scala implementation carefully.
-- How is `defer` order (LIFO) encoded in Silver? Likely via a sequence of inhale/exhale
-  at return points.
+**`defer` encoding (resolved):** The desugarer converts `defer f(args)` into an
+`in.Defer(in.FunctionCall(...))` node in the internal AST. The translator handles all
+`in.Defer` nodes via a dedicated `DeferEncoding` pass on the method body:
+
+For each `defer` statement:
+1. Generate a boolean activation variable `active_N = false` and N temporary variables
+   `temp_N_0, ..., temp_N_k` (one per argument).
+2. At the defer site: `active_N = true; temp_N_0 = arg0; ...` (arguments evaluated eagerly,
+   matching Go semantics).
+3. At the end of the method body: emit, in **reverse program order** (sorted by line number
+   descending), `if (active_N) { f(temp_N_0, ...) }`.
+
+There is no runtime stack. Each defer has its own statically-known activation boolean. This is
+sound for Silver verification because all execution paths are explored exhaustively.
+
+**Known limitation:** Defers inside loops (`for { defer f() }`) are not correctly handled
+by this encoding — each iteration overwrites the same activation variable. The Scala
+implementation has the same limitation. Document this in the CLI `--help` output.
+
+**Closures with captured mutable variables:** Encode captured mutable variables as additional
+method parameters passed by reference (`Ref`). The closure's Silver method takes these as extra
+`Ref` arguments alongside the explicit parameters. Study `ClosureEncoding.scala` in the Scala
+translator for the exact lifting strategy before implementing.

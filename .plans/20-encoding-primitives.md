@@ -43,13 +43,13 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 - No Silver domain for integers.
 - **Integer division and modulo**: Do NOT use Silver's built-in `/` and `%` operators — they
   use floor division, but Go truncates toward zero. Generate custom Viper functions
-  `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with axioms implementing Go's
+  `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with bodies implementing Go's
   truncation semantics. Emit these functions once and cache them.
-  Both functions require a precondition `r != 0` — Go panics on integer division by zero at
-  runtime. The desugarer or overflow-check transform (plan 13) is responsible for inserting
-  this precondition as an assertion before each division/modulo operation when overflow
-  checking is enabled. The encoding itself emits the `requires r != 0` on the Viper function
-  and does not add a separate assertion at call sites — that is the transform's job.
+  Both functions carry a precondition `requires r != 0` — Go panics on integer division by
+  zero at runtime. **No call-site assertion is inserted** by the desugarer or any transform.
+  The function's precondition is sufficient: Silicon requires proof that `r != 0` at every
+  call site and emits a precondition-violation error pointing to the division expression.
+  This check is unconditional — it is not gated on `--overflow`.
 - **Bitwise operators** (`&`, `|`, `^`, `&^`, `<<`, `>>`): encode as uninterpreted Viper
   functions (`bitwiseAnd(l, r: Int): Int`, etc.) with **no axioms**. They are black boxes
   for the SMT solver. Preconditions on shifts: `right >= 0`.

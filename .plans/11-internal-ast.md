@@ -39,13 +39,18 @@ constructs are unified.
 - **Members**: `Method`, `Function`, `FPredicate`, `MPredicate`, `Field`, `GlobalVar`
 - **Statements**: `Seqn`, `Assign`, `Return`, `If`, `While`, `Assert`, `Assume`,
   `Exhale`, `Inhale`, `Fold`, `Unfold`, `PackageWand`, `ApplyWand`, `New`,
-  `Make`, `GoCall`, `Defer`
+  `Make`, `GoCall`, `Defer`, `FunctionCall`, `MethodCall`, `ClosureCall`
+  - Note: `FunctionCall`, `MethodCall`, and `ClosureCall` carry a `targets: []LocalVar` slice
+    for the multiple assignment targets at call sites. This is how multiple return values are
+    decomposed: the call is a statement with N targets, not an expression.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
-  `Call`, `PureFunctionCall`, `Unary`, `Binary`, `Old`, `Conditional`
+  `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
+  `Tuple` (for comma-ok and channel-receive pairs — see below)
 - **Assertions**: `SepAnd`, `Access`, `Predicate`, `ExprAssertion`, `MagicWand`,
   `Forall`, `Exists`
 - **Types**: `IntT`, `BoolT`, `StringT`, `PointerT`, `StructT`, `InterfaceT`,
-  `SliceT`, `ArrayT`, `MapT`, `ChannelT`, `FunctionT`, `AdtT`, `PermissionT`
+  `SliceT`, `ArrayT`, `MapT`, `ChannelT`, `FunctionT`, `AdtT`, `PermissionT`,
+  `TupleT` (for multi-value expression types)
 
 ## Deliverables
 
@@ -60,3 +65,12 @@ constructs are unified.
 no post-construction mutation. This is consistent with plan 13, where transforms are pure
 `*internal.Program → *internal.Program` functions that construct new trees. Immutability
 eliminates aliasing bugs in the transform pipeline and matches the Scala implementation.
+
+**Multiple return values (resolved):** Go functions with multiple return values are decomposed
+at the call site. `FunctionCall`, `MethodCall`, and `ClosureCall` are **statements** (not
+expressions) with a `targets: []LocalVar` field. The desugarer introduces one fresh `LocalVar`
+per return value and assigns them from the call statement. For the comma-ok idiom specifically
+(`v, ok := m[k]`; `v, ok := <-ch`), the internal AST uses a `Tuple(args []Expr)` expression
+with `TupleT(ts []Type)` — because these are expressions in a larger statement, not
+function calls. Pure functions (`PureFunctionCall`, `PureMethodCall`) return a single value
+(Go's `pure` functions are restricted to a single non-error return).

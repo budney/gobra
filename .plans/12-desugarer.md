@@ -61,7 +61,17 @@ overflow checks stubs), and produces the flat, uniform representation the transl
 - `internal/desugar/desugar.go` — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, error)`
 - Tests: for each major desugaring rule, a before/after pair showing frontend → internal AST
 
-## Open Questions
+## Resolved Questions
 
-- How to handle Go's multiple return values in the internal AST? The current internal AST
-  models them as tuples; confirm the internal AST design in 11 before implementing.
+**Multiple return values (resolved — see plan 11):** `FunctionCall`/`MethodCall`/`ClosureCall`
+are statements with a `targets: []LocalVar` field. The desugarer introduces one fresh `LocalVar`
+per return value and populates `targets` from them. For comma-ok expressions (`m[k]`, `<-ch`),
+the desugarer produces a `Tuple([]Expr{...})` expression and then decomposes it via individual
+`Assign` statements to the LHS variables.
+
+**Division by zero (resolved):** The desugarer does NOT insert a call-site assertion for
+`r != 0` before integer division or modulo. The generated `goIntDiv`/`goIntMod` Viper functions
+already carry `requires r != 0` in their preconditions (plan 20). Silicon enforces this
+precondition at every call site and produces a precondition-violation error pointing to the
+division expression. No additional call-site assertion is needed. This behavior is unconditional
+— it is not gated on `--overflow`.

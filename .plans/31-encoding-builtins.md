@@ -39,7 +39,9 @@ the full stdlib source to be verified.
 - Integration with package resolver to serve them as virtual packages
 - Tests: verify a program that calls `sync.Mutex.Lock` using the stub
 
-## Open Questions
+## Resolved Questions
 
-- Are all existing stubs syntactically compatible with the Go-Gobra parser, or will some
-  need updates if the annotation syntax decision (02) results in any changes?
+**Stub compatibility (resolved):** D4 (plan 02) keeps the `//@ ...` annotation syntax
+unchanged. The existing stub files in `src/main/resources/` use `//@ ...` syntax exclusively.
+No stub updates are needed for syntax reasons. The stubs can be copied as-is into
+`internal/frontend/stubs/`.

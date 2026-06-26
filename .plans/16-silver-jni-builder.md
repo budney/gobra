@@ -58,18 +58,29 @@ import viper.silver.ast.*;
 public class SilverBridge {
     public static Method makeMethod(
             String name, Object[] params, Object[] returns,
-            Object[] pres, Object[] posts, Object body,
+            Object[] pres, Object[] posts, Seqn body,  // null = no body (abstract method)
             Object pos, Object info) {
+        // scala.Option$.MODULE$.apply(x) returns Some(x) when x != null, None when x == null.
+        // This is the correct Java interop idiom for Scala Option.
+        scala.Option<Seqn> bodyOpt = scala.Option$.MODULE$.apply(body);
+        // ErrTrafo.id is the identity error transformation (no re-labelling).
+        ErrTrafo errT = ErrTrafo$.MODULE$.id();
         return new Method(name,
             CollectionConverters.ListHasAsScala(Arrays.asList(params)).asScala().toList(),
             CollectionConverters.ListHasAsScala(Arrays.asList(returns)).asScala().toList(),
             CollectionConverters.ListHasAsScala(Arrays.asList(pres)).asScala().toList(),
             CollectionConverters.ListHasAsScala(Arrays.asList(posts)).asScala().toList(),
-            (scala.Option) body, (Position) pos, (Info) info, ErrorTrafo$.MODULE$.apply());
+            bodyOpt, (Position) pos, (Info) info, errT);
     }
     // ... one method per Silver node type that Go needs to construct
 }
 ```
+
+**Note on `ErrTrafo`:** Silver nodes take an `ErrTrafo` parameter used for error re-labelling
+in transformations. Go-Gobra passes the identity transformation (`ErrTrafo.id`) for all
+directly-constructed nodes. Verify the exact API name against the Silver version in the
+ViperServer JAR — it may be `ErrTrafo$.MODULE$.id()` or `NoTrafos$.MODULE$` depending on
+the Silver version. Add a compile-time check in the Makefile target.
 
 The JAR is compiled at build time (Makefile target), embedded in the Go binary via
 `//go:embed`, extracted to a temp directory at startup, and added to the JVM classpath.

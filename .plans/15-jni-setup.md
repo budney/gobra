@@ -40,11 +40,12 @@ the rest of the backend uses.
 **Do not hardcode a single path** — `libjvm` location varies across JDK distributions, versions,
 and package managers. Use runtime probing in this order:
 
-1. `$JAVA_HOME/lib/server/libjvm.dylib` (macOS, standard HotSpot)
-2. `$JAVA_HOME/jre/lib/server/libjvm.dylib` (older macOS JDK layouts)
-3. `$JAVA_HOME/lib/server/libjvm.so` (Linux)
-4. `$JAVA_HOME/jre/lib/amd64/server/libjvm.so` (Linux, older)
-5. `%JAVA_HOME%\bin\server\jvm.dll` (Windows)
+1. `$JAVA_HOME/lib/server/libjvm.dylib` (macOS, standard HotSpot Intel/ARM64)
+2. `$JAVA_HOME/lib/libjvm.dylib` (macOS, Temurin/Zulu on Apple Silicon — no `server/` subdir)
+3. `$JAVA_HOME/jre/lib/server/libjvm.dylib` (older macOS JDK layouts)
+4. `$JAVA_HOME/lib/server/libjvm.so` (Linux)
+5. `$JAVA_HOME/jre/lib/amd64/server/libjvm.so` (Linux, older)
+6. `%JAVA_HOME%\bin\server\jvm.dll` (Windows)
 
 If none succeed, fail fast with a message directing the user to set `JAVA_HOME` correctly.
 

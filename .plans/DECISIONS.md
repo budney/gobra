@@ -117,9 +117,9 @@ Plans 03, 04, and 05 are unblocked.
 **Decision:** The goal is full feature parity with a pinned version of Scala Gobra, achieved
 incrementally. Self-hosting (Go-Gobra verifies its own source) is the completion milestone.
 
-**Version pin**: Record the target commit hash here when the project starts. Do not chase
-upstream Scala Gobra changes during the port; post-parity sync is a separate effort.
-Target commit: *(fill in when work begins on 01-project-setup.md)*
+**Version pin**: Do not chase upstream Scala Gobra changes during the port; post-parity sync
+is a separate effort.
+Target commit: `d7e0b582` (Allow outer function outputs in outline preconditions, fix #1029)
 
 **Rationale:** Full parity ensures the Go rewrite is a true replacement, not a subset tool.
 Incremental delivery allows early validation and keeps the project tractable.
@@ -206,6 +206,38 @@ permission expressions) are defined as additional types alongside the embedded s
 parallel `GhostTypeInfo` for Gobra-specific constructs. The two are combined into a unified
 `TypeInfo` output. The package resolver (07) must supply a `types.Importer` compatible with
 `go/types.Check` (see plan 10 for the topological ordering this implies).
+
+---
+
+## D10 — Frontend AST visitor: companion wrapper structs
+
+**Decision:** The Gobra frontend AST uses **companion wrapper structs** (Option B) for every
+`go/ast` node that Gobra extends. A single `Visitor` interface covers all Gobra node types,
+giving the type checker (08) and desugarer (12) one traversal mechanism.
+
+**Nodes that get wrappers** (only those Gobra actually extends):
+- `PFuncDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec`
+- `PMethodDecl` wraps `*ast.FuncDecl` + receiver + `*PFunctionSpec`
+- `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
+- `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
+- `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
+- `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + loop invariants
+
+Leaf nodes Gobra doesn't annotate (`*ast.BasicLit`, `*ast.Ident`, etc.) stay as `go/ast` types.
+
+**Rationale:**
+- A single visitor mechanism for the type checker and desugarer avoids having to coordinate
+  two traversal APIs (`go/ast`'s own visitor and a separate Gobra visitor) at every call site.
+- Boilerplate is bounded: only a small, fixed set of `go/ast` node types need wrappers.
+- The approach is consistent with the user's preference for abstraction.
+
+**Alternatives considered:**
+1. **Side-table only (Option A)** — no wrappers; extensions in `map[ast.Node]GobExtension`.
+   Minimal boilerplate but callers must manage two traversals.
+2. **PFile + targeted extension visitor (Option C)** — middle ground. Rejected as offering
+   neither the simplicity of A nor the uniformity of B.
+
+**Consequence:** See plan 03 for the complete list of wrapper types and the visitor interface.
 
 ---
 

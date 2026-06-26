@@ -51,8 +51,18 @@ diagnostic output.
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
 
-## Open Questions
+## Resolved Questions
 
-- When Silicon reports an error at a Silver position that was generated from multiple Go
-  positions (e.g., a desugared expression), which position should be reported? Follow the
-  current Gobra's heuristic.
+**Error position extraction (resolved):** Silicon returns a `VerificationError` with an
+`offendingNode` field (a Silver AST node). Each Silver node carries metadata set during
+translation: a `Source.Verifier.Info` containing the `frontend.PNode` and `AbstractOrigin`
+(file/line/col) of the Go construct that generated it. The reporter calls
+`Source.unapply(error.offendingNode)` (or its Go equivalent: read the `GoPos` field from the
+Silver node's metadata) to extract the Go source position.
+
+**Multi-position heuristic (resolved):** When a Silver node was generated from multiple Go
+constructs (e.g., a desugared multi-assignment), the position stored on the Silver node is that
+of the **outermost enclosing Go construct** — the statement or expression that triggered the
+desugaring, not the synthetic sub-nodes it produced. The translator must store the outermost
+position when constructing synthetic Silver nodes during desugaring. This matches the Scala
+Gobra's behavior.

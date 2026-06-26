@@ -49,7 +49,14 @@ edge annotation.
 - `internal/transform/pipeline.go` — `Apply(prog *internal.Program, cfg Config) *internal.Program`
 - Tests: verify that overflow assertions are inserted correctly; verify constant folding
 
-## Open Questions
+## Resolved Questions
 
-- Should transforms mutate the AST in place or produce a new AST? New AST is safer; in-place
-  is more memory-efficient. Follow the pattern established in 11.
+**Mutation vs. new AST (resolved — see plan 11):** Each transform produces a new
+`*internal.Program` tree. The internal AST is immutable (all fields set at construction);
+in-place mutation is not an option. This matches the Scala implementation.
+
+**Division by zero (resolved — see plan 12):** The overflow transform does NOT insert
+`assert r != 0` before integer division. That check is handled at the Viper level via the
+`requires r != 0` precondition on `goIntDiv`/`goIntMod` (plan 20). The overflow transform
+is responsible only for bounded-integer range checks (e.g., asserting that an `int8` result
+fits in [-128, 127]) when `--overflow` is enabled.

@@ -43,6 +43,18 @@ and achieve full pass rate parity with the Scala implementation.
 3. Use the Scala Gobra as oracle: if behavior differs, Scala Gobra is correct
 4. Maintain a `testdata/skip.txt` (or equivalent) for known failures with explanations
 
+**Pre-populating the generics skip list:** Before the first test run, identify all test files
+that use Go generics syntax and pre-mark them as `SKIP:generics-not-implemented`:
+
+```
+find src/test/resources/regressions -name "*.gobra" \
+  | xargs grep -l "\[.*\]" \
+  | sort
+```
+
+Review matches manually (the pattern is approximate; `[N]T` arrays will also match) and add
+confirmed generics tests to `tests/testdata/skip.txt` before the initial run.
+
 ## Deliverables
 
 - All test files copied/linked into `tests/testdata/regressions/`

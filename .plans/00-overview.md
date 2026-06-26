@@ -13,9 +13,10 @@ self-hosting: Go-Gobra verifies its own source code.
 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR | In-process JVM; helper JAR wraps Silver constructors with Java-friendly signatures, avoiding raw Scala collection construction from Go |
 | Go parser | `go/parser` stdlib + custom annotation mini-parser | Go grammar is large/subtle; stdlib is correct, maintained, handles generics |
 | Annotation syntax | Keep `//@ ...` unchanged — see 02-annotation-syntax-decision.md | Resolved |
-| Feature scope | Full parity, built incrementally | Self-hosting defines "done enough" |
+| Feature scope | Full parity with commit `d7e0b582`, built incrementally | Self-hosting defines "done enough" |
 | Testing strategy | Port regression suite; differential testing vs. Scala Gobra | Scala Gobra is the oracle throughout |
 | Team / timeline | Solo, no hard deadline | Plan supports sequential or depth-first execution |
+| Frontend visitor | Companion wrapper structs (Option B) — see D10 in DECISIONS.md | Resolved |
 
 ## Work Breakdown Structure
 
@@ -107,6 +108,23 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
                           └─> Backend (backend/) ──> ViperServer/Silicon
                                 └─> Reporter (reporting/)
 ```
+
+## Cross-Cutting Notes
+
+**Concurrency model**: Go-Gobra is written in Go (goroutines throughout) but serializes all
+JNI calls through a single dedicated JNI worker goroutine (plan 15). Verification is therefore
+effectively single-threaded at the Silicon level, even if the rest of the pipeline runs
+concurrently. Plan 33 (pipeline orchestration) and plan 34 (test infrastructure) must account
+for this: verification requests queue through the JNI worker; they do not run in parallel.
+
+**Error/diagnostic contract**: Every pipeline stage uses the same `Diagnostic` type
+`{File, Line, Col, Message, Category}` (defined in plan 32). Each stage accumulates errors
+into a `[]Diagnostic` slice and continues where possible; the pipeline aborts only if any
+errors exist before moving to the next stage. Panics (not errors) are reserved for internal
+consistency violations that cannot be recovered from.
+
+**Bodyless Viper functions**: See the critical warning in plan 19 — missing postconditions
+on bodyless Viper functions silently weaken verification. This affects plans 20, 23, 24, 25.
 
 ## Unblocked Work (can start immediately)
 

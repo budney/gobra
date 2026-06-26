@@ -72,8 +72,28 @@ type checker.
   idiomatic Go and mirrors the Scala sealed trait hierarchy. Avoid large structs with optional
   fields.
 
+- **Visitor interface — companion wrappers (resolved — see D10 in DECISIONS.md)**: The tree
+  mixes `go/ast` types and Gobra-specific types, which cannot be covered by a single visitor
+  interface without a common base. The chosen approach is Option B: **companion wrapper structs**
+  for every `go/ast` node that Gobra extends, plus standalone Gobra types for ghost-only
+  constructs. A single `Visitor` interface covers all Gobra node types, enabling the type
+  checker (08) and desugarer (12) to traverse the tree with one mechanism.
+
+  **Which nodes get wrappers** (only nodes Gobra actually extends):
+  - `PFuncDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec`
+  - `PMethodDecl` wraps `*ast.FuncDecl` + receiver + `*PFunctionSpec`
+  - `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
+  - `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
+  - `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
+  - `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + loop invariants
+
+  Leaf nodes that Gobra does not annotate (`*ast.BasicLit`, `*ast.Ident`, `*ast.SelectorExpr`,
+  etc.) are referenced directly as `go/ast` types from within Gobra wrapper nodes — no wrapper
+  needed for them.
+
 - **Consequence for node shape**: For any Go construct that `go/ast` already represents (file,
-  function declaration, statement, expression, type), the Gobra frontend AST adds a thin wrapper
-  or companion struct carrying Gobra-specific data (attached specs, ghost markers). For constructs
-  `go/ast` has no representation for (predicates, magic wands, ADTs, ghost parameters), define
-  new types from scratch.
+  function declaration, statement, expression, type), the Gobra frontend AST defines a companion
+  struct embedding the `go/ast` node plus Gobra-specific data (attached specs, ghost markers).
+  For constructs `go/ast` has no representation for (predicates, magic wands, ADTs, ghost
+  parameters), define new Gobra types from scratch. The `go/types.Check` call in plan 08 runs
+  on the embedded `*ast.File` directly, independent of the Gobra wrapper layer.
