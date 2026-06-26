@@ -48,6 +48,22 @@ plug.
 - Silver name generation must be deterministic (same input → same Silver name) for caching
   and debugging
 
+## The Exclusive / Shared Duality (Critical Architecture Concept)
+
+Every Go type has **two encodings** depending on whether the value is addressable (reachable
+via pointer) at the point of use:
+
+- **Exclusive** (`T°`): value semantics — the Go value is a pure mathematical value. Silver
+  uses a value type (`Int`, `Bool`, a domain type, or `Seq[T]`). No heap, no permissions.
+- **Shared** (`T@`): the value lives on the heap and is reachable by pointer. Silver uses
+  `Ref`. Ownership of the value is an `acc()` permission.
+
+This duality applies uniformly across all types (see encoding plans 20–31). The `Context`
+must provide a method `ExclusiveType(t internal.Type) silver.Type` and
+`SharedType(t internal.Type) silver.Type` that each encoding delegates to. The translator
+core is responsible for deciding which mode to use at each program point, based on type info
+from the desugarer.
+
 ## Deliverables
 
 - `internal/translator/context.go` — `Context` interface and implementation

@@ -12,6 +12,8 @@ status code.
 - All CLI flags from the current Gobra (replicate `--help` output parity):
   - Input: `-i`/`--input` (files), `-p`/`--packages`, `--projectRoot`, `--include`
   - Backend: `--backend` (silicon/carbon), `--z3Exe`, `--boogieExe`
+  - JVM: `--viperServerJar` (path to the ViperServer/Silicon fat JAR; also read from
+    `VIPERSERVER_JAR` env var); `--jvmArgs` (additional JVM flags)
   - Verification: `--overflow`, `--checkConsistency`, `--module`, `--assumeInjectivityOnInhale`
   - Output: `--logLevel`, `--printViper`, `--parseOnly`, `--typeCheckOnly`, `--noVerify`
   - Performance: `--parallelizeBranches`, `--cacheFile`

@@ -35,12 +35,28 @@ definitions and calls, fractional permissions, wildcards, magic wands, and the g
 - Look for predicate encoding, permission expression encoding
 - Silver's `AccessPredicate`, `PredicateAccessPredicate`, `FractionalPerm`, `WildcardPerm`
 
+## Proposed Approach (from Scala source analysis)
+
+**User-defined predicates** map directly to Silver predicates. No desugaring required:
+`pred P(x T) { body }` → Silver `predicate P(x: silverT) { silverBody }`.
+
+**`acc(e)` and `acc(e, p)`**: translate to Silver `AccessPredicate` or
+`PredicateAccessPredicate` depending on whether `e` is a field access or predicate call.
+Full permission (`write`) → `FullPerm()`. Wildcard → `WildcardPerm()`.
+
+**Fractional permissions** `p/q`: → Silver `FractionalPerm(p, q)`. Permission expressions
+`p + q`, `p - q`, `p * q` → Silver `PermAdd`, `PermSub`, `PermMul`.
+
+**Magic wands** `A --* B`: → Silver `MagicWand(A, B)`.
+- `package (A --* B) { proof }`: → Silver `Package(wand, proof)` statement.
+- `apply (A --* B)`: → Silver `Apply(wand)` statement.
+
+**`fold P(e)` / `unfold P(e)`**: → Silver `Fold` / `Unfold` statements directly.
+
+**Ghost-only heap locations** are standard Silver fields with no corresponding Go field;
+their Silver field declarations are emitted by the relevant encoding module.
+
 ## Deliverables
 
 - `internal/translator/encodings/permissions.go`
-- Tests: encode predicate definition, fold/unfold, fractional permission in a precondition
-
-## Open Questions
-
-- Are user-defined predicates represented as Silver predicates directly, or are they
-  desugared differently? Confirm by reading the Scala encoding.
+- Tests: encode predicate definition, fold/unfold, fractional permission, magic wand

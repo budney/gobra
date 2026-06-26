@@ -10,7 +10,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Viper backend | Keep ViperServer/Silicon/Carbon as-is | Scope limited to Gobra itself |
-| Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) | Mirrors Prusti (Rust); in-process JVM, no filesystem boundary, no HTTP overhead |
+| Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR | In-process JVM; helper JAR wraps Silver constructors with Java-friendly signatures, avoiding raw Scala collection construction from Go |
 | Go parser | `go/parser` stdlib + custom annotation mini-parser | Go grammar is large/subtle; stdlib is correct, maintained, handles generics |
 | Annotation syntax | **Unresolved — see 02-annotation-syntax-decision.md** | Must be resolved before parser work begins |
 | Feature scope | Full parity, built incrementally | Self-hosting defines "done enough" |
@@ -29,9 +29,9 @@ self-hosting: Go-Gobra verifies its own source code.
 | File | Title | Blocked by |
 |------|-------|------------|
 | [03-frontend-ast.md](03-frontend-ast.md) | Frontend AST | 01, 02 |
-| [04-go-parser.md](04-go-parser.md) | Go Parser Integration | 03 |
+| [04-go-parser.md](04-go-parser.md) | Go Parser Integration | 03, 06 |
 | [05-annotation-parser.md](05-annotation-parser.md) | Annotation Mini-Parser | 02, 03 |
-| [06-gobrafier.md](06-gobrafier.md) | Go File Preprocessor (Gobrafier) | 04 |
+| [06-gobrafier.md](06-gobrafier.md) | Go File Preprocessor (Gobrafier) | 01 |
 | [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 04, 06 |
 
 ### Group 2: Type Checker
@@ -110,5 +110,12 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
 
 ## Unblocked Work (can start immediately)
 
-After completing 01 and 02:
-- 03, 11, 14, 15 are all unblocked and independent of each other
+After completing 01:
+- 03, 06, 11, 14, 15 are all unblocked and independent of each other
+
+After completing 02 as well:
+- 05 becomes unblocked (annotation parser requires the syntax decision)
+
+Note: 04 (Go Parser Integration) is blocked by **both** 03 and 06; it cannot start until
+both the Frontend AST and the Gobrafier are complete. The Gobrafier is a text preprocessor
+that runs before the parser — it is a prerequisite for 04, not a downstream dependent of it.

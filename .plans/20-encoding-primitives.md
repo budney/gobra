@@ -34,19 +34,47 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 - Note: Gobra encodes Go's fixed-width integers using Silver's unbounded `Int` type plus
   range assertions (or a modular arithmetic domain); understand which approach is used
 
-## Key Encoding Decisions
+## Proposed Approach (from Scala source analysis)
 
-- Silver has one integer type (`Int`, unbounded); Go has many sized types. Current Gobra
-  uses a combination of range constraints and modular arithmetic domains for sized integers.
-- Boolean in Silver is `Bool`; maps directly.
-- Strings in Silver are typically encoded as a domain with limited operations.
+**Integers (`int`, `int8/16/32/64`, `uint*`):**
+- Exclusive: `vpr.Int` (unbounded) for all integer sizes. Range constraints for sized types
+  are inserted by the overflow check transform (plan 13), not by this encoding.
+- Shared: `vpr.Ref`.
+- No Silver domain for integers.
+- **Integer division and modulo**: Do NOT use Silver's built-in `/` and `%` operators — they
+  use floor division, but Go truncates toward zero. Generate custom Viper functions
+  `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with axioms implementing Go's
+  truncation semantics. Emit these functions once and cache them.
+- **Bitwise operators** (`&`, `|`, `^`, `&^`, `<<`, `>>`): encode as uninterpreted Viper
+  functions (`bitwiseAnd(l, r: Int): Int`, etc.) with **no axioms**. They are black boxes
+  for the SMT solver. Preconditions on shifts: `right >= 0`.
+
+**Booleans:** `vpr.Bool` (Exclusive); `vpr.Ref` (Shared). Direct Silver mapping.
+
+**Strings:**
+- Exclusive: `vpr.Int` — an opaque integer identifier in the `Strings` domain.
+- Shared: `vpr.Ref`.
+- Generate a Silver domain `Strings` with:
+  - `unique function stringLit_{hexEncodedValue}(): Int` per string literal
+  - `function strLen(id: Int): Int` with axiom `0 <= strLen(x)` and per-literal axioms
+  - `function strConcat(l, r: Int): Int` with `strLen(concat) == strLen(l) + strLen(r)` axiom
+  - Pure Viper function `strSlice(s, lo, hi: Int): Int` with length postcondition
+
+**Floats (`float32`, `float64`):**
+- Exclusive: `vpr.Int` (opaque identifier, same pattern as strings).
+- Shared: `vpr.Ref`.
+- All arithmetic operations become uninterpreted Viper functions (`addFloat64`, etc.) with
+  no axioms. Float reasoning is fully opaque to the SMT solver.
+
+**`byte` / `rune`:** Aliases for `uint8` / `int32` respectively; use those encodings.
 
 ## Deliverables
 
-- `internal/translator/encodings/primitives.go`
-- Tests: encode representative arithmetic expressions and verify the Silver output
+- `internal/translator/encodings/primitives.go` (integers, booleans, floats, byte, rune)
+- `internal/translator/encodings/strings.go` (string domain + concat/slice functions)
+- Tests: encode representative arithmetic including division, bitwise ops, string concat
 
 ## Open Questions
 
-- Does Gobra use a separate Silver domain for each integer size, or one parameterized domain?
-  Read `IntEncoding.scala` carefully before implementing.
+- `unsafe.Sizeof` / `unsafe.Alignof`: treat as opaque integer constants for the initial
+  implementation; mark with `// TODO: unsafe` comments.

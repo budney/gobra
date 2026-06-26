@@ -38,12 +38,58 @@ the need to encode method contracts for dynamic dispatch.
 - Pay special attention to how behavioral subtyping is encoded via Silver `apply` and
   predicate abstractions
 
+## Proposed Approach (from Scala source analysis)
+
+**Interface value representation:** A Go interface value is encoded as a Silver **2-tuple**:
+`(polyVal: Ref, dynType: Type)` where:
+- `polyVal` is the universally-boxed concrete value (see `Poly[T]` domain below).
+- `dynType` is a term of the `Type` domain (see below) carrying the runtime type tag.
+
+**`Poly[T]` domain** (one per concrete type `T` that is boxed):
+```silver
+domain Poly[T] {
+  function box(x: T): Ref
+  function unbox(y: Ref): T
+  axiom { forall x: T :: {box(x)} unbox(box(x)) == x }
+  // For finite types (bool): conditional round-trip axiom only when dynType matches
+}
+```
+
+**`Type` domain** (global, shared across all interface encodings):
+```silver
+domain Type {
+  unique function bool_Type(): Type
+  unique function int_Type(): Type
+  function slice_Type(elem: Type): Type
+  function struct_Type_{S}(): Type  // per struct type
+  // ... one per type constructor
+  function tag(t: Type): Int
+  unique function {TypeName}_tag(): Int  // per concrete type
+  function behavioral_subtype(sub: Type, sup: Type): Bool
+  function comparableType(t: Type): Bool
+  // axioms: tag uniqueness, subtype reflexivity/transitivity, comparability
+}
+```
+
+**Type switch / type assertions (resolved):** The `Type` domain's `tag` function and unique
+tag constants serve as the type discriminant. `i.(T)` asserts `dynType(i) == T_tag()` and
+unboxes `polyVal` via `Poly[T].unbox`. Type switches are chained `if` or conditional expressions
+on `dynType`.
+
+**Interface predicates:** All predicates from the same interface are merged into one parametric
+Silver predicate, with the body as a chain of
+`typeOf(recv) == T_Type() ? body_of_T_predicate(...) : ...` conditional expressions.
+
+**Interface methods:** A pure interface method `I.M` becomes a Silver function with
+postconditions `typeOf(itf) == T_Type() ==> result == proof_{T}_{I}_{M}(valueOf(itf, T), args)`
+for each implementing type `T`.
+
+**Nil interface:** `tuple2(null, nilType())` where `nilType()` is a domain function.
+
 ## Deliverables
 
 - `internal/translator/encodings/interfaces.go`
-- Tests: encode an interface with one method, a struct implementing it, and a dynamic call
-
-## Open Questions
-
-- How does Gobra encode the "iterable set of types implementing an interface" for type switches?
-  This requires some form of type tag or discriminant in the Silver encoding.
+- `Poly[T]` domain generation (one per boxed concrete type)
+- `Type` domain generation (global singleton, accumulated across all encodings)
+- Tests: encode an interface with one method, a struct implementing it, a dynamic call, and
+  a type switch with two cases

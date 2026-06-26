@@ -35,19 +35,51 @@ sub-slicing).
 - `src/main/scala/viper/gobra/translator/encodings/arrays/` — array encoding
 - The slice encoding is known to be one of the most intricate parts of Gobra; read carefully
 
-## Key Encoding Pattern
+## Proposed Approach (from Scala source analysis)
 
-Gobra represents slices as a Silver domain capturing the slice header (ptr, len, cap) and
-uses a combination of Silver fields and sequence axioms to model the backing array and
-element permissions. Study the existing encoding before designing the Go version.
+### Slices
+
+**Exclusive `[]T°`**: a value of the parametric Silver domain `Slice[T]`, which is a 4-tuple
+`(array: Array[T], offset: Int, len: Int, cap: Int)` with domain functions:
+- `sarray(s: Slice[T]): Array[T]`, `soffset(s)`, `slen(s)`, `scap(s)`
+- `sconstruct(a, offset, len, cap): Slice[T]` — Viper function with pre/postconditions
+  fixing projections to arguments
+- `nilSlice_{T}(): Slice[T]` — the nil slice per element type
+- Sub-slicing operations: `ssliceFromSlice(s, lo, hi)`, `sfullSliceFromSlice(s, lo, hi, max)`,
+  `ssliceFromArray(a, lo, hi)`, `sfullSliceFromArray(a, lo, hi, max)`
+
+**Shared `[]T@`**: `vpr.Ref`.
+
+**Permissions on slices:** `acc(s: []T, perm)` → `forall idx: Int :: {loc(sarray(s), soffset(s)+idx)} 0 <= idx < slen(s) ==> elem_acc(sarray(s), soffset(s)+idx, perm)`. Default bound is **length**, not capacity. Accessing capacity requires explicit `SliceBound.Cap`.
+
+**Function bodies**: slice constructor functions have **no bodies** — correctness relies entirely
+on pre/postconditions. Do not generate Viper function bodies for slice operations.
+
+**`make([]T, len, cap)`**: inhales permissions over the full capacity; asserts default values
+over length only.
+
+### Arrays
+
+**Exclusive `[n]T°`** (fixed-size): encoded as a `Seq[vprElemType]` **boxed** by a pair of
+Viper functions `box_{n}_{T}(x: Seq[T]): BoxedArray` / `unbox_{n}_{T}(y: BoxedArray): Seq[T]`
+with pre/postconditions enforcing `|result| == n`. The underlying type is `Seq[T]` so array
+equality uses Viper's built-in sequence axioms.
+
+**Shared `[n]T@`** (heap-allocated): encoded using the `Array[T]` parametric Silver domain
+(with `array_loc(a, i)`, `alen(a)` domain functions), also boxed with `box/unbox` enforcing
+`alen(result) == n`. `arrayNil()` is the sentinel null array.
+
+**Additional generated items (per `(n, T)` pair, monomorphized):**
+- `arrayConversion(x: [n]T@): [n]T°` — reads shared array as exclusive; requires wildcard perms
+- `arrayDefault(): [n]T°` — default value with quantified per-element defaults
+
+**Monomorphization**: fully monomorphized per `(n, elementType)` pair. Array types of different
+sizes or element types generate separate `box/unbox` function pairs.
+
+**Resolved**: slices use the `Slice[T]` domain (not `Seq`); exclusive arrays use `Seq[T]` (not the `Array[T]` domain).
 
 ## Deliverables
 
-- `internal/translator/encodings/slices.go`
-- `internal/translator/encodings/arrays.go`
-- Tests: encode slice indexing, append, sub-slicing, len/cap
-
-## Open Questions
-
-- Does the current Gobra encoding use a Silver `Seq` to model slice contents, or a
-  heap-based array model? This significantly affects complexity. Read the Scala source first.
+- `internal/translator/encodings/slices.go` — `Slice[T]` domain + all slice operations
+- `internal/translator/encodings/arrays.go` — box/unbox + `Array[T]` domain + conversion fns
+- Tests: encode slice indexing, append, sub-slicing, len/cap, array literal, array indexing

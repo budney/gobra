@@ -53,8 +53,11 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 - The lexer should skip whitespace and handle `//@ ` prefix stripping
 - Multi-line annotations: consecutive `//@ ` lines in the same comment block are concatenated
   before lexing, with synthetic newlines to preserve line numbers
-- Operator precedence (low to high): `==>`, `||`, `&&`, `!`, comparison, additive,
-  multiplicative, unary, postfix
+- Operator precedence (low to high): `--*` (magic wand), `==>`, `||`, `&&`, comparison
+  (`==`, `!=`, `<`, `<=`, `>`, `>=`), additive (`+`, `-`), multiplicative (`*`, `/`, `%`),
+  unary prefix (including `!`, unary `-`, `old`, `before`, `unfolding`), postfix/primary
+- Note: `!` is a unary prefix operator, not a binary one; it belongs at the unary level,
+  not between `&&` and comparison
 
 ## Deliverables
 

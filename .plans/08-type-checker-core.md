@@ -46,24 +46,36 @@ largest single unit of work in the frontend.
 
 - **Two-pass approach**: Pass 1 collects all declarations in scope (needed for forward references
   and mutually recursive types/functions). Pass 2 resolves and checks all uses.
-- Consider using `go/types` from the stdlib as a foundation for checking standard Go constructs,
-  then layering Gobra-specific checks on top. This avoids reimplementing the entire Go type
-  system from scratch and reduces risk of spec divergence.
-- The output is a `TypeInfo` object that maps AST nodes to their types and declarations;
-  this is queried by the desugarer and translator.
+- **Use `go/types` for standard Go (resolved — see D9 in DECISIONS.md)**: Because plan 03
+  commits to embedding `go/ast` nodes, `go/types.Check` can be called directly on the
+  underlying `*ast.File`. This handles all standard Go type rules. Gobra-specific checks
+  (ghost types, spec expression types, ADTs, permissions) are layered on top as a second pass.
+- **Two-tier type system**: `go/types` produces a `*types.Info` side table for Go constructs.
+  Gobra maintains a parallel `GhostTypeInfo` for ghost/spec-only constructs. Both are combined
+  into the unified `TypeInfo` output consumed by the desugarer.
+- **`go/types` ↔ package resolver coupling**: `go/types.Check` requires an `types.Importer`
+  to resolve imported packages. This importer must be wired to the package resolver (07), which
+  in turn must supply already-type-checked `*types.Package` objects for imports. The result is
+  a topological ordering constraint: dependencies must be type-checked before dependents (handled
+  in plan 10).
+- **Error accumulation**: Collect all type errors rather than stopping at the first. Use a
+  `[]Diagnostic` accumulator passed through the checker; continue checking after an error where
+  doing so produces meaningful additional diagnostics. Abort (do not proceed to desugaring) if
+  any errors are present.
+- **Side-table for type info**: Attach type information via a `map[ast.Node]types.Type`
+  side table (pointer identity as key), not via fields on AST nodes. This keeps AST nodes
+  immutable and decouples type info from the AST definition.
 
 ## Deliverables
 
-- `internal/info/typeinfo.go` — `TypeInfo` interface
-- `internal/info/checker.go` — `Check(pkg *frontend.PPackage, ...) (*TypeInfo, []error)`
-- Symbol table with scope chain
+- `internal/info/typeinfo.go` — `TypeInfo` interface (combines `*types.Info` + `GhostTypeInfo`)
+- `internal/info/checker.go` — `Check(pkg *frontend.PPackage, importer types.Importer) (*TypeInfo, []Diagnostic)`
+- Symbol table with scope chain for ghost/spec constructs (Go symbols are handled by `go/types`)
 - Tests: type-check a selection of regression test files and verify reported errors match
   `//@ expectedError` annotations
 
 ## Open Questions
 
-- Use `go/types` as a sub-component (call `go/types.Check` on the Go subset, then extend for
-  Gobra-specific constructs) or implement the full type system from scratch?
-  Using `go/types` is strongly recommended to avoid reimplementing a complex, spec-mandated system.
-- How to attach type information to AST nodes? Options: map from node identity (pointer) to
-  type; or add type fields to AST structs (requires mutable AST). A side-table map is cleaner.
+- How to handle Gobra ghost types that have no `go/types` representation (e.g., `seq[T]`,
+  `set[T]`, ADT types)? Define a parallel `GhostType` interface extending `types.Type` so
+  they can coexist in the same type-info map.

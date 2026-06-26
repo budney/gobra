@@ -37,23 +37,46 @@ the rest of the backend uses.
 
 ## Platform Notes
 
-- **macOS**: `$JAVA_HOME/lib/server/libjvm.dylib`
-- **Linux**: `$JAVA_HOME/lib/server/libjvm.so`
-- **Windows**: `%JAVA_HOME%\bin\server\jvm.dll`
-- All platforms: `JAVA_HOME` env var or runtime detection via `java -XshowSettings:all`
+**Do not hardcode a single path** — `libjvm` location varies across JDK distributions, versions,
+and package managers. Use runtime probing in this order:
+
+1. `$JAVA_HOME/lib/server/libjvm.dylib` (macOS, standard HotSpot)
+2. `$JAVA_HOME/jre/lib/server/libjvm.dylib` (older macOS JDK layouts)
+3. `$JAVA_HOME/lib/server/libjvm.so` (Linux)
+4. `$JAVA_HOME/jre/lib/amd64/server/libjvm.so` (Linux, older)
+5. `%JAVA_HOME%\bin\server\jvm.dll` (Windows)
+
+If none succeed, fail fast with a message directing the user to set `JAVA_HOME` correctly.
+
+**jenv compatibility**: jenv manages `JAVA_HOME` via shell shims. The shims affect PATH but
+`JAVA_HOME` must resolve to the *real* JDK installation directory, not a shim. Require users
+to enable jenv's export plugin: `jenv enable-plugin export`. Document this in the error message
+when `libjvm` is not found.
+
+**Thread attachment**: JNI requires every OS thread that calls into the JVM to be attached.
+CGo goroutines may run on any OS thread. The JVM wrapper must attach the current thread before
+any JNI call and detach when done (or keep it attached for the lifetime of the goroutine).
+Use a `sync.Map` keyed by goroutine OS thread ID to track attachment state. Because the JVM
+is a singleton and JNI is not goroutine-safe in general, all JNI calls from Go-Gobra are
+channeled through a single dedicated goroutine (the "JNI worker"). Other goroutines send
+requests and await results over a channel. This pattern also makes parallel test execution
+safe (see plan 34).
+
+**SilverBridge JAR**: At JVM startup, extract the embedded `SilverBridge.jar` (see plan 16)
+to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 ## Deliverables
 
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
-- `JVMConfig` struct: JAR paths, JVM flags, Z3 path
+- `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
+- JNI worker goroutine with request/response channel
+- `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns
-  a non-empty string
+  a non-empty string; confirm probe succeeds under a jenv-managed `JAVA_HOME`
 
 ## Open Questions
 
 - Should the JVM be a global singleton (one per Go-Gobra process) or allow multiple instances?
   JNI only supports one JVM per process; singleton is correct.
-- How to handle the case where `libjvm` cannot be found? Fail fast with a clear error message
-  directing the user to set `JAVA_HOME`.
-- CGo complicates cross-compilation; document this limitation explicitly.
+- CGo complicates cross-compilation; document this limitation explicitly in the README.

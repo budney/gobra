@@ -34,18 +34,29 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 ## Key Implementation Notes
 
-- Go's own `golang.org/x/tools/go/packages` library can drive module-aware package loading;
-  consider using it rather than reimplementing module resolution from scratch
+- **`golang.org/x/tools/go/packages`**: Use this library for module-aware package loading
+  rather than reimplementing module resolution. Note: it invokes `go list` under the hood,
+  which requires a Go toolchain to be installed at runtime. This is acceptable for a
+  development-time verifier.
+- **Topological ordering**: The resolver must produce packages in dependency order (a
+  topological sort of the import graph). The type checker (10) requires that all imported
+  packages are type-checked before the importing package. Detect and report import cycles as
+  an error; do not proceed to type checking if a cycle exists.
+- **Error accumulation**: If one package fails to parse or resolve, record the error and
+  continue resolving other packages where possible. Report all errors at the end rather than
+  stopping at the first failure.
 - Built-in stubs (Go stdlib ghost specs) ship as embedded resources in the Go binary using
-  `//go:embed`; they are parsed the same way as user packages
-- The resolver produces a `PackageInfo` map: import path → parsed AST set
+  `//go:embed`; they are parsed the same way as user packages.
+- The resolver produces a `PackageInfo` list in topological order: each entry is
+  `{ImportPath string, Files []*frontend.PFile, Deps []string}`.
 
 ## Deliverables
 
 - `internal/frontend/packageresolver.go`
+- `PackageInfo` type and topologically-sorted `[]*PackageInfo` result
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
-  the correct set of files is loaded
+  the correct set of files is loaded in dependency order
 
 ## Open Questions
 

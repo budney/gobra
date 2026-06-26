@@ -39,28 +39,67 @@ is passed directly to Silicon.
 - `viperserver/silicon/silver/src/main/scala/viper/silver/ast/Program.scala` — `Program`
   constructor signature is the top-level target
 
+## Approach: Thin Java Helper JAR (SilverBridge)
+
+Constructing Scala collection objects (`scala.collection.immutable.Seq`) directly from Go via
+raw JNI is extremely painful: it requires calling `Nil$.MODULE$` and `$colon$colon()` for
+every list element in reverse order, for every Silver constructor argument. Instead, a thin
+Java helper class (`SilverBridge.java`, ~150 lines) wraps each Silver constructor with a
+Java-friendly signature taking `Object[]` arrays. The Java code handles Scala collection
+construction internally using `scala.jdk.CollectionConverters`. Go calls simple Java static
+methods instead of navigating Scala internals.
+
+```java
+// SilverBridge.java (excerpt)
+import scala.jdk.CollectionConverters;
+import java.util.Arrays;
+import viper.silver.ast.*;
+
+public class SilverBridge {
+    public static Method makeMethod(
+            String name, Object[] params, Object[] returns,
+            Object[] pres, Object[] posts, Object body,
+            Object pos, Object info) {
+        return new Method(name,
+            CollectionConverters.ListHasAsScala(Arrays.asList(params)).asScala().toList(),
+            CollectionConverters.ListHasAsScala(Arrays.asList(returns)).asScala().toList(),
+            CollectionConverters.ListHasAsScala(Arrays.asList(pres)).asScala().toList(),
+            CollectionConverters.ListHasAsScala(Arrays.asList(posts)).asScala().toList(),
+            (scala.Option) body, (Position) pos, (Info) info, ErrorTrafo$.MODULE$.apply());
+    }
+    // ... one method per Silver node type that Go needs to construct
+}
+```
+
+The JAR is compiled at build time (Makefile target), embedded in the Go binary via
+`//go:embed`, extracted to a temp directory at startup, and added to the JVM classpath.
+`scala.jdk.CollectionConverters` is available in the Silver/ViperServer fat JAR classpath.
+
 ## Key Implementation Notes
 
-- **Class caching**: JNI class lookups (`FindClass`) are expensive; cache all class and method
-  references at JVM startup, not per-call
+- **Go calls Java, Java calls Scala**: Go only calls `SilverBridge` static methods via jnigi.
+  `SilverBridge` calls Silver Scala constructors normally (Scala is callable from Java).
+- **Class caching**: cache the `SilverBridge` class reference and all static method IDs at JVM
+  startup; do not call `FindClass` or `GetStaticMethodID` per-call.
 - **Local vs. global references**: JNI local references are freed when the native frame exits;
-  use `NewGlobalRef` for objects that outlive a single call
-- **Error handling**: check for Java exceptions after every JNI call (`ExceptionCheck`);
-  convert them to Go errors
-- **Memory**: Silver AST objects are on the JVM heap; they are GC'd by the JVM; no manual
-  free needed, but the JVM GC must be allowed to run (don't hold the GIL equivalent)
-- **Array construction**: Silver constructors take Scala `Seq` arguments; construct these as
-  `scala.collection.immutable.Seq` via JNI or use the Java `Arrays.asList` bridge
+  use `NewGlobalRef` for the `SilverBridge` class reference and any cached objects.
+- **Error handling**: check for Java exceptions after every jnigi call; convert them to Go errors.
+- **Memory**: Silver AST objects live on the JVM heap and are GC'd by the JVM; no manual free.
+- **All JNI calls via JNI worker**: as specified in plan 15, route all calls through the
+  dedicated JNI worker goroutine; `Build()` sends a request and waits for the result.
 
 ## Deliverables
 
+- `internal/backend/silver/SilverBridge.java` — Java helper class (~150 lines)
+- `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
+  `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
 - `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (jobject, error)`
-- Cached class/method reference table initialized at JVM start
-- Tests: build a minimal Silver program (one method, one statement) via JNI; confirm no
-  exceptions are thrown and the resulting object passes `silver.ast.Program.checkTransitively()`
+  that calls SilverBridge methods via jnigi
+- Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
+  confirm the resulting object passes `silver.ast.Program.checkTransitively()`
 
 ## Open Questions
 
-- Scala collections (Seq, Set, Map) are needed to call Silver constructors; the easiest path
-  is to use `scala.jdk.CollectionConverters` to convert Java lists. Confirm this is available
-  in the Silver/Silicon JAR bundled classpath.
+- Should `SilverBridge.java` define one method per Silver node type, or group them
+  (e.g., one method for all statement types with a discriminant)? One method per type is
+  verbose but type-safe and easy to extend.

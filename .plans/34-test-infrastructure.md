@@ -15,11 +15,16 @@ on them, and compares results to the expected outcomes declared in `//@ expected
   - `//@ expectedError <errorId>` — expect a specific error at this line
   - `//@ unexpectedError` — expect no error at this line (regression guard)
   - `//@ expectedOutput <text>` — expect specific stdout
-- Run Go-Gobra on each file (invoking the pipeline from 33)
+- Run Go-Gobra on each file (invoking the pipeline from 33 via its Go API, not subprocess)
 - Compare actual errors to expected errors; report pass/fail per file
 - Integration with `go test`: implement as `TestMain` or table-driven tests so `go test ./...`
   runs the regression suite
-- Parallel test execution (Go's test framework supports `-parallel N`)
+- **JNI/JVM coordination for parallel tests**: The JVM is a process-wide singleton (plan 15);
+  all JNI calls are routed through a single JNI worker goroutine via a channel. Test goroutines
+  running in parallel safely share this single JNI worker — they block on the channel until
+  their JNI request is served. `go test -parallel N` is safe because the serialization happens
+  inside the JNI worker, not at the test level. The JVM is initialized once in `TestMain` and
+  shut down after all tests complete.
 - Differential mode: optionally run Scala Gobra on the same file and compare results
 
 **Out of scope:**

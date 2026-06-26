@@ -31,14 +31,31 @@ verified as a whole.
   integrates into the main type checker
 - `src/main/scala/viper/gobra/frontend/PackageResolver.scala` — how packages are linked
 
+## Key Implementation Notes
+
+- **Topological ordering (required)**: The package resolver (07) delivers packages in
+  dependency order. This checker processes them in that order: when type-checking package A,
+  all packages A imports already have a completed `ExternalTypeInfo`. Never type-check a
+  package before its dependencies.
+- **`go/types` importer**: The `go/types.Check` call for each package requires a
+  `types.Importer`. Implement a custom importer that serves `*types.Package` objects from
+  already-completed packages in this session, falling back to the stdlib importer for
+  standard library packages not being verified.
+- **Ghost info across packages**: `ExternalTypeInfo` must expose not just standard Go
+  exported symbols but also exported ghost declarations (predicates, ghost functions, ADT
+  types). These are not visible to `go/types` and must be handled separately.
+
 ## Deliverables
 
 - `ExternalTypeInfo` interface and implementation
-- Integration with 08's symbol table to expose imported symbols
+- Custom `types.Importer` bridging the package resolver to `go/types.Check`
+- Integration with 08's symbol table to expose imported symbols (both Go and ghost)
 - Tests: multi-package regression tests from `src/test/resources/regressions/`
 
 ## Open Questions
 
-- How to handle incremental verification: if package A imports package B, and B has already
-  been verified, should we re-type-check B or load its type info from a cache?
-  Start with always re-checking; caching is an optimization for later.
+- **Caching**: Once a package is type-checked, its `ExternalTypeInfo` could be cached to disk
+  (keyed by content hash) to avoid re-checking on subsequent runs. Start with no caching —
+  always re-check — but design the `ExternalTypeInfo` interface to be serializable so caching
+  can be added later without breaking the API. Mark the cache insertion point with a `// TODO: cache`
+  comment in the implementation.

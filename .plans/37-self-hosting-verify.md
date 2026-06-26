@@ -25,11 +25,25 @@ This is the project's completion milestone.
 
 - [36-self-hosting-annotations.md](36-self-hosting-annotations.md) — specs must be written
 
+## Bootstrapping Sequence
+
+This plan has two sub-milestones:
+
+1. **Phase 1 complete**: Scala Gobra verifies Go-Gobra's annotated source without errors.
+   This validates that the specs are correct and the implementation matches them. It is a
+   prerequisite for Phase 2.
+
+2. **Phase 2 complete (true self-hosting)**: Go-Gobra verifies its own annotated source and
+   agrees with Scala Gobra's results. Any divergence is a bug in Go-Gobra. This is the
+   project's completion milestone.
+
+If Go-Gobra and Scala Gobra disagree on a verification result, Scala Gobra is the oracle (D6).
+
 ## Success Criteria
 
-The milestone is achieved when Go-Gobra successfully verifies at least the core pipeline
-(parser through translator) using Silicon, with no `//@ assume` or `//@ trusted` shortcuts
-on the critical path.
+The milestone is achieved when Go-Gobra (Phase 2) successfully verifies at least the core
+pipeline (parser through translator) using Silicon, with no `//@ assume` or `//@ trusted`
+shortcuts on the critical path, and the result matches the Scala Gobra run (Phase 1).
 
 Stretch goal: verify the JNI backend layer (this requires specs for the JVM interaction,
 which is challenging but possible using ghost modeling of the JVM state).

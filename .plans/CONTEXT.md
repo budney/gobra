@@ -63,13 +63,14 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 | # | Decision | Choice |
 |---|----------|--------|
 | D1 | Scope | Rewrite Gobra only; Viper/Silver/Silicon/Carbon unchanged |
-| D2 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) — embed JVM in-process |
+| D2 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR (`SilverBridge.java`) |
 | D3 | Go parser | `go/parser` stdlib + custom recursive-descent annotation mini-parser |
 | D4 | Annotation syntax | **Pending** — recommendation is keep `//@ ...` unchanged |
-| D5 | Feature scope | Full parity with Scala Gobra, built incrementally |
+| D5 | Feature scope | Full parity with pinned Scala Gobra commit, built incrementally |
 | D6 | Testing | Port regression suite; Scala Gobra is the oracle |
 | D7 | Team/timeline | Solo, no hard deadline |
 | D8 | Code location | `gobra-go/` subdirectory; promoted to root at cut-over |
+| D9 | Frontend AST | Embed `go/ast` nodes; add Gobra-specific types alongside |
 
 **D4 (annotation syntax) must be resolved before any frontend work begins.**
 

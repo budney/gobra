@@ -33,12 +33,32 @@ Implement the encoding of Go pointer types and pointer operations into Silver.
   that holds the value; the value itself may be on the heap as another `Ref` or stored in
   a Silver field
 
+## Proposed Approach (from Scala source analysis)
+
+**Exclusive `*T°`** (a pointer value, not what it points to): encoded as **the same Silver
+type as `T` itself** (value semantics). The exclusive representation of a pointer *is* the
+value it points to — it is a pure mathematical value, not a heap location.
+
+**Shared `*T@`** (a pointer living on the heap, accessible by another pointer): encoded as
+`vpr.Ref`.
+
+**Dereferencing (`*p`):**
+- When `p` is an exclusive pointer, `*p` is just `p` itself (the value).
+- When `p` is a shared pointer (`Ref`), `*p` accesses the heap at `p`.
+
+**`nil` pointer:**
+- Exclusive: `dflt(T@)` — the default value of the shared version of `T`. For `Ref`-based
+  types this is Silver `null`.
+- Nil checks: compare against `null` for `Ref`-typed shared pointers.
+
+**`new(T)`:** Allocates a fresh `Ref`, inhales `acc(loc, write)` for all fields/locations,
+inhales default values for each field.
+
+**`*int` specifically (resolved):** Exclusive `*int` = `vpr.Int` (not a Ref + field). Shared
+`*int` = `vpr.Ref`. There is no synthetic field for exclusive pointer-to-primitive — the value
+itself is the pointer.
+
 ## Deliverables
 
 - `internal/translator/encodings/pointers.go`
-- Tests: encode `new(int)`, pointer dereference, `nil` check
-
-## Open Questions
-
-- How does Gobra encode a pointer to a primitive (e.g., `*int`)? A Silver `Ref` with a
-  synthetic field holding the integer? Confirm by reading the Scala code.
+- Tests: encode `new(int)`, exclusive pointer dereference, shared pointer dereference, nil check

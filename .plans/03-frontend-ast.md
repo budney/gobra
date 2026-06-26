@@ -59,9 +59,21 @@ type checker.
 - Position wrapper that maps nodes to source file + line + column
 - Unit tests confirming that key node types can be constructed and traversed
 
-## Open Questions
+## Design Decisions (Resolved)
 
-- Embed `go/ast` nodes directly (thin wrapper) or define parallel types for every Go construct?
-  Embedding is less code but couples the AST to stdlib; parallel types give full control.
-- Use tagged unions (interface + type switch) or a single large struct with optional fields?
-  Interface approach is idiomatic Go and mirrors the Scala sealed trait hierarchy.
+- **Embed `go/ast` nodes (resolved — see D9 in DECISIONS.md)**: The frontend AST wraps and
+  extends `go/ast` rather than defining parallel types for every Go construct. Gobra-specific
+  nodes (specifications, ghost constructs, ADTs, permission expressions) are defined as
+  additional types alongside the embedded stdlib nodes. This enables the type checker (08)
+  to drive `go/types` on the underlying `*ast.File` for standard Go type checking, avoiding
+  a full reimplementation of the Go type system from scratch.
+
+- **Tagged unions (resolved)**: Use `interface` + type switch for node polymorphism. This is
+  idiomatic Go and mirrors the Scala sealed trait hierarchy. Avoid large structs with optional
+  fields.
+
+- **Consequence for node shape**: For any Go construct that `go/ast` already represents (file,
+  function declaration, statement, expression, type), the Gobra frontend AST adds a thin wrapper
+  or companion struct carrying Gobra-specific data (attached specs, ghost markers). For constructs
+  `go/ast` has no representation for (predicates, magic wands, ADTs, ghost parameters), define
+  new types from scratch.

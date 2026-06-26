@@ -30,6 +30,23 @@ intellectual heart of the self-hosting milestone.
 - [35-regression-suite.md](35-regression-suite.md) — Go-Gobra must be functionally complete
   before self-hosting annotation begins
 
+## Bootstrapping Sequence
+
+Self-hosting has two distinct phases with different verifiers:
+
+1. **Phase 1 (Scala Gobra verifies Go-Gobra)**: The initial annotations are verified using
+   Scala Gobra as the verifier. This is the trusted baseline — Scala Gobra is the oracle for
+   all verification during the port (D6). This phase produces a Go-Gobra that is externally
+   verified to be correct in the specified properties.
+
+2. **Phase 2 (Go-Gobra verifies Go-Gobra)**: Once Go-Gobra is externally verified (Phase 1),
+   use Go-Gobra to re-verify its own source. If Go-Gobra is correct, both runs should agree.
+   Divergence between the two indicates a bug in Go-Gobra. This is true self-hosting and is
+   the milestone for plan 37.
+
+Start all annotation work targeting Scala Gobra as the verifier (Phase 1); Phase 2 follows
+naturally in plan 37.
+
 ## Notes
 
 This is the most open-ended and creative part of the project. There is no fixed checklist;

@@ -13,7 +13,12 @@ and achieve full pass rate parity with the Scala implementation.
   Scala Gobra's results
 - Track which tests pass, which fail, and which are known failures (skip list)
 - Identify gaps: tests that expose missing features and file them as sub-issues
-- Achieve 100% pass rate before proceeding to self-hosting (36)
+- Achieve ≥95% pass rate with a documented skip list before proceeding to self-hosting (36).
+  A 100% gate is impractical: obscure failures in channels, generics, or edge cases could
+  block the self-hosting milestone indefinitely. The skip list (`tests/testdata/skip.txt`)
+  must include an explanation for each skipped test.
+- Self-hosting annotation work (36) may begin in parallel once the skip list is stable and
+  the remaining failures are understood.
 - Run continuously in CI to prevent regressions
 
 **Out of scope:**
@@ -41,10 +46,11 @@ and achieve full pass rate parity with the Scala implementation.
 ## Deliverables
 
 - All test files copied/linked into `tests/testdata/regressions/`
+- `tests/testdata/skip.txt` — skip list with one entry per skipped test and a reason
 - Passing rate tracked in `tests/COVERAGE.md`
 - CI job running the full regression suite on every push
 
 ## Open Questions
 
-- Some regression tests may use features not yet implemented (e.g., generics, channels);
-  should these be skipped until the feature is ready, or fail loudly? Skip with explanation.
+- Some regression tests may use features not yet implemented (e.g., Go generics — see plan 30);
+  these must be skipped with an explanation. Mark them `SKIP: feature-not-implemented` in skip.txt.

@@ -16,7 +16,9 @@ process in a second pass.
   annotate, so 05 can parse them
 - Handle `.gobra` files (treated as Go with relaxed import rules — already handled upstream by
   the Gobrafier in 06, but the parser must accept the post-processed form)
-- Error recovery: surface parse errors as structured diagnostics
+- Error recovery: surface parse errors as structured diagnostics; accumulate all errors in
+  a file rather than stopping at the first. If a file has parse errors, return partial AST
+  and all errors — do not abort; the caller (07, 33) decides whether to continue.
 
 **Out of scope:**
 - Parsing annotation expressions (05-annotation-parser.md)
@@ -26,6 +28,8 @@ process in a second pass.
 ## Dependencies
 
 - [03-frontend-ast.md](03-frontend-ast.md) — target AST types
+- [06-gobrafier.md](06-gobrafier.md) — must preprocess input files before this parser sees
+  them; `.go` files pass through the Gobrafier first; `.gobra` files are handled directly
 
 ## Reference: Current Gobra
 

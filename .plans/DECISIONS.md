@@ -46,8 +46,21 @@ going through the ViperServer HTTP API.
 3. **Prusti-style JVM shim server** — a small JVM process accepting requests from Go. More
    moving parts than direct JNI with no clear advantage.
 
+**Thin Java helper JAR addendum**: Direct JNI construction of `scala.collection.immutable.Seq`
+objects (required by Silver constructors) is impractical from Go — it requires calling
+`Nil$.MODULE$` and `$colon$colon()` for every list element in reverse. A thin Java helper class
+(`SilverBridge.java`, ~150 lines) wraps Silver constructors with Java-friendly `Object[]`
+signatures and handles Scala collection construction internally. This is compiled into
+`SilverBridge.jar`, embedded in the Go binary via `//go:embed`, and loaded alongside the
+ViperServer JAR at startup. See [16-silver-jni-builder.md](16-silver-jni-builder.md).
+
+**jenv compatibility**: `JAVA_HOME` must resolve to the real JDK installation, not a shell
+shim. Users with jenv must enable the export plugin: `jenv enable-plugin export`. The
+`libjvm` locator uses runtime probing across multiple known paths rather than a hardcoded
+single path — see [15-jni-setup.md](15-jni-setup.md).
+
 **Consequence:** Go-Gobra requires CGo. Cross-compilation is limited to platforms where a
-JVM is available. `JAVA_HOME` must be set at runtime.
+JVM is available. `JAVA_HOME` must be set at runtime and resolve to the real JDK root.
 
 ---
 
@@ -103,8 +116,12 @@ See [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md).
 
 ## D5 — Feature scope: full parity, built incrementally
 
-**Decision:** The goal is full feature parity with the current Scala Gobra, achieved
+**Decision:** The goal is full feature parity with a pinned version of Scala Gobra, achieved
 incrementally. Self-hosting (Go-Gobra verifies its own source) is the completion milestone.
+
+**Version pin**: Record the target commit hash here when the project starts. Do not chase
+upstream Scala Gobra changes during the port; post-parity sync is a separate effort.
+Target commit: *(fill in when work begins on 01-project-setup.md)*
 
 **Rationale:** Full parity ensures the Go rewrite is a true replacement, not a subset tool.
 Incremental delivery allows early validation and keeps the project tractable.
@@ -167,6 +184,30 @@ not the repo root.
 3. Update `go.mod` path if needed
 4. Update CI to remove Scala jobs
 5. Tag the last Scala release before the cut-over
+
+---
+
+## D9 — Frontend AST: embed go/ast nodes
+
+**Decision:** The Gobra frontend AST wraps and extends `go/ast` rather than defining parallel
+types for every Go construct. Gobra-specific nodes (specifications, ghost constructs, ADTs,
+permission expressions) are defined as additional types alongside the embedded stdlib nodes.
+
+**Rationale:**
+- `go/types` can be called directly on the underlying `*ast.File`, avoiding a full
+  reimplementation of the Go type system (~10k lines, ongoing spec-tracking burden).
+- `go/parser` already produces `*ast.File`; a thin wrapper avoids a second full-tree walk
+  just to convert node types.
+- The Go AST is stable and well-documented; coupling to it is low-risk.
+
+**Alternatives considered:**
+1. **Parallel types** — full control but blocks `go/types` usage and requires implementing
+   the entire Go type system from scratch. Rejected: disproportionate effort for a solo project.
+
+**Consequence:** The type checker (08) uses `go/types` for standard Go constructs and a
+parallel `GhostTypeInfo` for Gobra-specific constructs. The two are combined into a unified
+`TypeInfo` output. The package resolver (07) must supply a `types.Importer` compatible with
+`go/types.Check` (see plan 10 for the topological ordering this implies).
 
 ---
 
