@@ -65,11 +65,37 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
 - Tests: construct a simple Silver program in Go structs; print it; verify the output is
   valid Silver by passing it to ViperServer
 
-## Resolved Questions
+## Position and Error-Backtranslation Design
 
-**Position design (resolved):** Each Silver Go node carries both a `GoPos` (the original Go
-source file/line/col, used by the reporter in plan 32) and an optional `SilverPos` (the Silver
-source location, used only for debugging translator output). The reporter uses `GoPos` to map
-Silicon errors back to Go source. The `GoPos` field must never be nil for nodes that originate
-from Go source; translator-internal synthetic nodes (e.g., auxiliary fields) may leave it nil
-and use a sentinel unknown position.
+Each Silver Go node carries a `NodeInfo` struct (not a bare `GoPos`). This is the Go
+equivalent of Scala Gobra's `Source.Verifier.Info`:
+
+```go
+type NodeInfo struct {
+    File string // Go source file path
+    Line int    // 1-based line in Go source
+    Col  int    // 1-based column in Go source
+    Tag  string // identifies which Go construct produced this node (see below)
+}
+```
+
+**Why `Tag`?** When Silicon reports an error on a Silver node, the error type alone (e.g.,
+"precondition might not hold") is not enough to generate the right Go-level message. A
+precondition violation could come from a Go function call, a fold/unfold, an interface method
+dispatch, a loop invariant check-on-entry, etc. The `Tag` string encodes which case applies,
+so the reporter can dispatch to the correct error message without needing to inspect the Silver
+AST structure. Tags are short identifiers like `"call"`, `"fold"`, `"return"`, `"loop-inv"`,
+`"assert"`, `"exhale"`. Each encoding plan (19–31) defines the tags it uses.
+
+**Synthesized nodes:** Translator-internal nodes with no direct Go source correspondence (e.g.,
+auxiliary domain functions, helper Silver fields) carry a `NodeInfo` with an empty `File` and
+`Tag = "synthetic"`. The reporter's `SearchInfo` function (see plan 32) walks a Silver AST
+subtree upward to find the nearest non-synthetic ancestor's `NodeInfo` when the immediate
+node's `NodeInfo` is synthetic.
+
+**Silver debug position:** For debugging translator output (e.g., pretty-printing with Silver
+line numbers), the pretty-printer assigns Silver line numbers as it serializes the AST. No
+Silver position field is needed on Go Silver nodes themselves.
+
+**`NodeInfo` must never be nil** on any Silver node. Synthetic nodes use the sentinel
+`NodeInfo{Tag: "synthetic"}`; every other node must have a valid File, Line, and Col.

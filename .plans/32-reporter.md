@@ -31,7 +31,8 @@ diagnostic output.
 
 ## Dependencies
 
-- [14-silver-ast.md](14-silver-ast.md) — Silver AST carries Go source positions
+- [14-silver-ast.md](14-silver-ast.md) — `NodeInfo` on every Silver node
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — JNI object-to-Go-node identity map
 - [17-silicon-backend.md](17-silicon-backend.md) — source of VerificationError objects
 
 ## Reference: Current Gobra
@@ -51,18 +52,73 @@ diagnostic output.
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
 
-## Resolved Questions
+## Error Backtranslation Design
 
-**Error position extraction (resolved):** Silicon returns a `VerificationError` with an
-`offendingNode` field (a Silver AST node). Each Silver node carries metadata set during
-translation: a `Source.Verifier.Info` containing the `frontend.PNode` and `AbstractOrigin`
-(file/line/col) of the Go construct that generated it. The reporter calls
-`Source.unapply(error.offendingNode)` (or its Go equivalent: read the `GoPos` field from the
-Silver node's metadata) to extract the Go source position.
+### How Silicon returns errors
 
-**Multi-position heuristic (resolved):** When a Silver node was generated from multiple Go
-constructs (e.g., a desugared multi-assignment), the position stored on the Silver node is that
-of the **outermost enclosing Go construct** — the statement or expression that triggered the
-desugaring, not the synthetic sub-nodes it produced. The translator must store the outermost
-position when constructing synthetic Silver nodes during desugaring. This matches the Scala
-Gobra's behavior.
+Silicon's `VerificationResult` is either `Success` or a list of `VerificationError` objects.
+Each `VerificationError` has:
+- An **error type** (e.g., `PreconditionInMightNotHold`, `PostconditionViolated`,
+  `AssertFailed`, `InsufficientPermission`, etc.) — determined by Silicon from the proof
+  obligation that failed.
+- An **offending node** — the Silver AST node that Silicon identified as the failure point.
+  This is the *same object* (by identity) that was passed to Silicon via JNI; it carries the
+  `NodeInfo` set by the translator.
+
+The reporter receives these errors via JNI (plan 17): for each error, it calls back through
+JNI to retrieve `error.offendingNode.info` (the `NodeInfo` stored on the Silver node). See
+plan 16 for the `SilverBridge.java` wrapper that exposes this.
+
+### Position extraction
+
+```go
+func extractInfo(node *silver.Node) *silver.NodeInfo {
+    if node.Info != nil && node.Info.File != "" {
+        return node.Info
+    }
+    return searchInfo(node) // walk subtree; see below
+}
+```
+
+`searchInfo` does a DFS over the Silver AST subtree rooted at `node`, returning the first
+non-synthetic `NodeInfo` found. This handles translator-internal synthesized nodes that don't
+carry a direct Go source position (their `Tag == "synthetic"`).
+
+### Error message dispatch
+
+The reporter dispatches on the pair `(silverErrorType, nodeInfo.Tag)` to produce a
+human-readable Go diagnostic. This matches how the Scala Gobra uses
+`DefaultErrorBackTranslator` with its chain of partial functions on `(VerificationError, Source.Verifier.Info)`.
+
+Representative dispatch table (not exhaustive — each encoding plan adds its own tags):
+
+| Silver error type | Tag | Go diagnostic |
+|-------------------|-----|---------------|
+| `PreconditionMightNotHold` | `"call"` | "Precondition of {fn} might not hold" |
+| `PostconditionViolated` | `"return"` | "Postcondition might not hold on return" |
+| `InsufficientPermission` | `"field"` | "Insufficient permission to access field" |
+| `AssertFailed` | `"assert"` | "Assert might fail" |
+| `AssertFailed` | `"loop-inv"` | "Loop invariant might not be maintained" |
+| `AssertFailed` | `"fold"` | "Fold might fail" |
+| `AssertFailed` | `"exhale"` | "Exhale might fail" |
+| `LoopInvariantNotEstablished` | `"loop-inv"` | "Loop invariant might not hold on entry" |
+| `TerminationFailed` | `"termination"` | "Termination measure might not decrease" |
+| `OverflowCheckFailed` | `"overflow"` | "Integer overflow might occur" |
+
+Unrecognized `(errorType, tag)` pairs fall through to a generic message:
+`"Viper error: {errorType.readableMessage} at {nodeInfo}"`.
+
+### Multi-position heuristic
+
+When a Silver node was generated from multiple Go constructs (e.g., a desugared
+multi-assignment), the `NodeInfo` stored on the Silver node is that of the **outermost
+enclosing Go construct** — the statement or expression that triggered the desugaring. The
+translator must propagate the outermost position when constructing synthetic Silver nodes.
+
+### JNI integration note
+
+The `offendingNode` returned by Silicon is the Java object originally passed to Silicon via
+JNI. Go-Gobra must maintain a map from JNI object identity (the Java object pointer returned
+when constructing Silver nodes in plan 16) to the corresponding `*silver.Node` Go struct.
+This map is populated during `SilverBridge.buildProgram(...)` (plan 16) and looked up here.
+This is the concrete mechanism that replaces the Scala `Source.unapply(offendingNode)` call.

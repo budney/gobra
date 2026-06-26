@@ -64,12 +64,19 @@ exit. The pool `Stop()` method closes the channel and waits for all workers to e
 
 ## Dispatch and Merge
 
+Naive fan-out (one goroutine per sub-program) would hold all sub-programs in memory
+simultaneously — a problem when there are many large sub-programs and few workers. Instead,
+use a semaphore to cap in-flight programs at `poolSize` (the number of workers):
+
 ```go
 func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult {
     type indexed struct{ idx int; res *VerificationResult }
     ch := make(chan indexed, len(progs))
+    sem := make(chan struct{}, p.poolSize) // semaphore: at most poolSize goroutines in-flight
     for i, prog := range progs {
+        sem <- struct{}{}
         go func(i int, prog *silver.Program) {
+            defer func() { <-sem }()
             ch <- indexed{i, p.Submit(prog)}
         }(i, prog)
     }

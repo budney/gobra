@@ -67,15 +67,16 @@ Silver members decompose into fine-grained **vertices** at sub-member granularit
 | Vertex | Contents |
 |--------|----------|
 | `MethodSpec(name)` | method signature: params, pre/post only |
-| `MethodBody(name)` | method body (depends on MethodSpec) |
+| `Method(name)` | method body (depends on MethodSpec) |
 | `FunctionSpec(name)` | function signature + postconditions |
-| `FunctionBody(name)` | function body (depends on FunctionSpec) |
+| `Function(name)` | function body (depends on FunctionSpec) |
 | `PredicateSig(name)` | predicate signature only |
 | `PredicateBody(name)` | predicate body (depends on PredicateSig) |
-| `DomainAxiom(domainName, axiomName)` | individual domain axiom |
-| `DomainFunction(domainName, funcName)` | individual domain function |
+| `DomainAxiom(*DomainAxiom, *Domain)` | individual domain axiom (identified by pointer, not name, because names are not unique across domains) |
+| `DomainFunction(funcName)` | individual domain function |
 | `Field(name)` | Silver field |
-| `DomainType(name)` | domain type declaration |
+| `DomainType(domainName)` | domain type declaration |
+| `Always` | sentinel: every node depends on this; ensures it appears in all sub-programs |
 
 **Dependency edges** are computed by traversing Silver AST references: a method body that
 calls function F has edges `MethodBody → FunctionSpec`. A function body that folds predicate
@@ -87,42 +88,88 @@ reachable from M's vertex in the dependency graph.
 
 ### Phase 3 — Greedy Merge
 
-Merge sub-programs to reduce total count while respecting the upper bound:
+Merge sub-programs to reduce total count while respecting the upper bound. The algorithm
+considers **all pairs**, not just adjacent ones. It uses a priority queue:
 
-1. Compute the merge penalty for each adjacent pair of sub-programs. Penalty = sum of
-   penalty weights of members that would be duplicated by the merge.
-2. Merge the pair with the lowest penalty if: (a) penalty ≤ 0 (free merge), or (b) the
+1. Initialize the queue with the merge penalty for every pair of distinct sub-programs.
+2. Pop the pair with the lowest penalty. If the merge is still valid (neither sub-program
+   has been consumed by an earlier merge), execute it:
+   - Remove both sub-programs; insert the merged result.
+   - Enqueue new penalties for the merged result paired with every surviving sub-program.
+3. Repeat while: (a) the lowest-penalty pair has penalty ≤ 0 (free merge), **or** (b) the
    current count exceeds `Bound`.
-3. Repeat until: (a) no pair has penalty ≤ 0, and (b) count ≤ `Bound` (if specified).
+4. Stop when: (a) no remaining pair has penalty ≤ 0, **and** (b) count ≤ `Bound`.
 
-**Default penalty weights** (from Scala `Penalty.Default`):
+This is the algorithm in `Cut.mergePrograms` (Scala `Chopper.scala`): a lazy priority queue
+of all pairs, with stale entries discarded on pop. The order of sub-programs entering phase 3
+is declaration order of important members in the Silver program — the DFS in phase 2
+processes `program.members` (filtered by the selection predicate) in order, and `notRoot`
+elimination preserves that order among dominating nodes.
 
-| Member type | Weight |
-|-------------|--------|
-| method body | 10 |
-| method spec | 1 |
-| function body | 3 |
-| function spec | 1 |
-| predicate body | 2 |
-| predicate spec | 1 |
-| field | 0 |
-| domain type | 0 |
-| domain function | 0 |
-| domain axiom | 0 |
-| shared threshold | 10 |
+**Merge penalty formula** (from `Penalty.DefaultImpl.mergePenalty`):
 
-An optional `GobraChopper.conf` Java properties file in the working directory overrides
-individual weights using the same key names as the columns above (e.g., `method_body=5`).
+```
+penalty(L, R) = (lhsExclusive + rhsExclusive) * ceil((sharedThreshold + shared) / sharedThreshold)
+```
+
+where `lhsExclusive`, `rhsExclusive`, `shared` are the sums of vertex weights for nodes
+only in L, only in R, or in both, respectively.
+
+**Default vertex weights** (from Scala `Penalty.defaultPenaltyConfig`):
+
+| Vertex type | Scala field | Weight |
+|-------------|-------------|--------|
+| `Method` (full body) | `method` | 0 |
+| `MethodSpec` (spec only) | `methodSpec` | 0 |
+| `Function` (full body) | `function` | 20 |
+| `FunctionSpec` (sig only) | `functionSig` | 5 |
+| `PredicateBody` | `predicate` | 10 |
+| `PredicateSig` | `predicateSig` | 2 |
+| `Field` | `field` | 1 |
+| `DomainType` | `domainType` | 1 |
+| `DomainFunction` | `domainFunction` | 1 |
+| `DomainAxiom` | `domainAxiom` | 5 |
+| `Always` (sentinel) | — | 0 |
+| shared threshold | `sharedThreshold` | 50 |
+
+`Always` is a sentinel vertex: every def-vertex and use-vertex has an edge to `Always`,
+ensuring that members with no other dependencies are still included in every sub-program.
+Its weight is 0 and it is never serialized to a Silver sub-program.
+
+An optional `gobra-chopper.json` file in the working directory overrides individual weights:
+
+```json
+{
+  "function": 15,
+  "domainAxiom": 3,
+  "sharedThreshold": 30
+}
+```
+
+Keys are the Scala field names from the table above. Unknown keys are ignored.
+
+**Default bound**: The Scala default is `bound = Some(1)` — a single merged program.
+Go-Gobra follows this: without `--chop`, `bound=1`; with `--chop`, `bound=nil` (unlimited)
+or `--chop-bound N` overrides it.
+
+**PluginAwareChopper**: Gobra uses `PluginAwareChopper`, not the base `Chopper`. This
+variant adds artificial edges from `Always` to any domain whose name ends in
+`WellFoundedOrder` (the termination plugin's convention), ensuring those domains and their
+axioms are never stripped by the chopper. The Go port must replicate this: after computing
+standard edges, for each domain whose name ends in `"WellFoundedOrder"`, add the edge
+`Always → DomainType(d)` plus edges from `DomainType(d)` to each of its axioms and functions.
 
 ## Deliverables
 
 - `internal/silver/chopper.go` — `Chop(prog *Program, cfg ChopConfig) []*Program`
-- `internal/silver/vertices.go` — `Vertex` type and dependency edge extraction
-- `internal/silver/penalty.go` — `PenaltyConfig` with defaults and config-file loader
+- `internal/silver/vertices.go` — `Vertex` type (with `Always` sentinel) and dependency
+  edge extraction, including the `PluginAwareEdges` logic for `WellFoundedOrder` domains
+- `internal/silver/penalty.go` — `PenaltyConfig` with defaults and `gobra-chopper.json` loader
 - `ChopConfig` struct: `{Bound *int, Penalty PenaltyConfig, Selection func(*Member) bool}`
 - Tests: chop a Silver program with 3 methods; verify each sub-program is self-contained;
   verify the union of sub-programs covers all members; test that greedy merging with
-  bound=2 reduces a 3-sub-program result to 2
+  bound=2 reduces a 3-sub-program result to 2; test that a `WellFoundedOrder` domain is
+  present in every sub-program when termination axioms are used
 
 ## Integration Note
 

@@ -77,6 +77,21 @@ layer. Gobra cannot currently reason about `unsafe.Pointer` semantics. For self-
 ## Open Questions
 
 - Which safety properties are most important to prove? Memory safety (no nil dereferences)
-  and type soundness of the Silver output are the highest-value targets.
-- Will any limitations of the current Gobra annotation language make certain invariants
-  inexpressible? Document these and consider whether they motivate annotation language changes.
+  and type soundness of the Silver output are the highest-value targets. Start with the Silver
+  printer (pure function, no heap mutation) and work inward toward the type checker.
+
+## Annotation Language Gaps
+
+If the current Gobra annotation language cannot express a required invariant, **extending the
+language is in scope** (see D11 in DECISIONS.md). When a gap is discovered:
+
+1. Document it in `SELF_HOSTING.md`: which invariant, which code path, why it can't be
+   expressed.
+2. Decide: is there a code refactoring that makes the invariant expressible within the
+   current language? If yes, prefer refactoring (it produces cleaner code). If no, extend
+   the annotation language.
+3. Track each extension as a deliverable in this plan. Extensions needed for self-hosting
+   are first-class features, not workarounds.
+
+The same applies to code structure: if a module in Go-Gobra has an invariant that requires
+deep changes to verify, refactoring is preferred over an ever-expanding `//@ trusted` boundary.

@@ -101,15 +101,39 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
 - **All JNI calls via JNI worker**: as specified in plan 15, route all calls through the
   dedicated JNI worker goroutine; `Build()` sends a request and waits for the result.
 
+## JNI Object Identity Map
+
+The reporter (plan 32) needs to retrieve the `NodeInfo` for an error's `offendingNode` — a
+Java object returned by Silicon. The builder maintains a map from Java object pointer
+(the `uintptr` of the JNI `jobject`) to the corresponding `*silver.Node` Go struct:
+
+```go
+type Builder struct {
+    jvm      *jvm.JVM
+    nodeMap  map[uintptr]*silver.Node // JNI jobject pointer → Go node
+}
+```
+
+Every Silver node constructed via `SilverBridge` is registered in `nodeMap` immediately after
+construction. When the reporter receives an offending node from Silicon, it extracts the
+`jobject` pointer via jnigi, looks up `nodeMap`, and retrieves the `NodeInfo`.
+
+**Lifetime:** The `nodeMap` is valid for the lifetime of the `Builder` and the corresponding
+Silver program object. It must not be garbage-collected while Silicon holds references to the
+Java Silver objects. The builder holds global JNI references (via `jnigi.NewGlobalRef`) on all
+constructed objects to prevent the JVM from GC'ing them during verification.
+
 ## Deliverables
 
 - `internal/backend/silver/SilverBridge.java` — Java helper class (~150 lines)
 - `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
   `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
-- `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (jobject, error)`
-  that calls SilverBridge methods via jnigi
+- `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (*BuiltProgram, error)`,
+  where `BuiltProgram{JavaObject jobject, NodeMap map[uintptr]*silver.Node}`
 - Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
-  confirm the resulting object passes `silver.ast.Program.checkTransitively()`
+  confirm the resulting object passes `silver.ast.Program.checkTransitively()`; confirm that
+  `NodeMap` contains an entry for the method's body statement whose `NodeInfo` matches the
+  Go source position used during construction
 
 ## Version Coupling Note
 

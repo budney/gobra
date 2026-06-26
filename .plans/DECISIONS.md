@@ -249,3 +249,35 @@ or depth-first execution by a single developer (or AI agent).
 **Consequence:** The plan does not optimize for parallel team execution. However, the
 dependency graph in [00-overview.md](00-overview.md) identifies workstreams that are
 independent and can be parallelized if the project gains contributors.
+
+---
+
+## D11 — Self-hosting may require extending the annotation language and refactoring Go-Gobra
+
+**Decision:** If Gobra's current annotation language cannot express a key invariant of
+Go-Gobra's own source, extending the annotation language is in scope for this project.
+Similarly, if Go-Gobra's internal structure makes certain invariants impossible to specify
+concisely, refactoring the code to make it more verifiable is in scope.
+
+**Rationale:**
+- Self-hosting is the completion milestone (D5). If limitations in the annotation language
+  block meaningful specs, extending the language is the correct response — not weakening the
+  specs or marking more code `//@ trusted`.
+- Go-Gobra is its own first customer. If annotation language gaps show up during self-hosting,
+  they are genuine language bugs that would also affect external users. Fixing them here is
+  doubly motivated.
+- Code refactoring for verifiability is a known practice in the formal verification community.
+  Restructuring to eliminate invariant-breaking patterns (e.g., replacing implicit shared
+  state with explicit parameters) produces cleaner code as a side effect.
+
+**Scope limitations:**
+- Annotation language extensions must be implemented in Go-Gobra itself (not backported to
+  Scala Gobra, which is frozen at commit `d7e0b582`).
+- Extensions needed for self-hosting should be documented in `SELF_HOSTING.md` with
+  rationale; they may warrant promotion to plan 36 deliverables.
+- Refactoring is bounded by the requirement that the refactored Go-Gobra still passes the
+  regression suite (D6).
+
+**Consequence:** Plans 36 and 37 are open-ended by design. The annotation language and
+Go-Gobra implementation are co-evolving artifacts during the self-hosting phase. A gap
+discovered in plan 36 may block plan 37 until resolved — this is expected, not a failure.
