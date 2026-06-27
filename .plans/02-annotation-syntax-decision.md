@@ -88,6 +88,16 @@ cut-over, the grammar sketch must be written into this file (or a companion file
 the annotation mini-parser has a grammar specification that survives after the Scala source
 is removed. **This is a blocking deliverable for cut-over.**
 
+**Gating condition**: The grammar sketch must be completed and committed to the `self-hosting`
+branch **before** the cut-over commit described in plan 37 and DECISIONS.md D8. Plan 37's
+success criteria include a checklist item: "annotation grammar sketch in `02-annotation-syntax-decision.md`
+is complete." The cut-over commit must be blocked until this item is checked.
+
+The grammar sketch must be written directly into this file in a `## Annotation Grammar`
+section using BNF or EBNF notation, covering all forms listed in the Deliverables section
+above. Reference `src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` while writing it —
+those files are the authoritative source until deletion.
+
 ## Resolved Questions
 
 **Inline (mid-statement) annotations**: In scope — full parity with the Scala implementation.

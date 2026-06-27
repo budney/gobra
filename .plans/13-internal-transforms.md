@@ -42,9 +42,15 @@ edge annotation.
 - Transforms are composed in a fixed order: constant propagation → call graph edges → overflow → termination
 - The call graph construction for termination requires a fixed-point analysis over mutually
   recursive functions
-- Diagnostics from each transform are appended to the accumulator; all transforms run even
-  when earlier ones emit diagnostics (the pipeline abort rule in `00-overview.md` applies at
-  the stage boundary, not inside the transform chain)
+- Diagnostics from each transform are appended to the accumulator with one important caveat:
+  constant propagation and call-graph edge computation are **pure transforms** (they produce no
+  diagnostics and cannot produce structurally invalid output). The overflow and termination
+  transforms may emit diagnostics. All four transforms always run — even when overflow or
+  termination emit diagnostics — because their diagnostics are user-visible errors (overflow or
+  termination violations) that do not make the resulting AST structurally invalid. The pipeline
+  abort rule from `00-overview.md` applies at the transform-chain boundary (i.e., if any
+  diagnostics exist after `Apply` returns, the pipeline does not proceed to translation), not
+  inside the chain itself.
 
 ## Deliverables
 

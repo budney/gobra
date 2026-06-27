@@ -97,44 +97,73 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
   startup; do not call `FindClass` or `GetStaticMethodID` per-call.
 - **Local vs. global references**: JNI local references are freed when the native frame exits;
   use `NewGlobalRef` for the `SilverBridge` class reference and any cached objects.
-- **`NewGlobalRef` for `nodeMap` entries**: every Java object added to `nodeMap` must be
-  promoted to a global reference via `jnigi.NewGlobalRef` *before* its pointer is stored as
-  the map key. A local reference pointer is only stable within the current JNI frame; after
-  the frame returns, the JVM may reuse the address for a different object, corrupting lookups.
-  Promote immediately after construction; the map then owns the global reference for the
-  object's lifetime. Call `DeleteGlobalRef` on all entries when the `Builder` is freed.
+- **Node ID approach for `nodeMap`**: every Java object added to `nodeMap` is keyed by a
+  unique `uint64` ID, NOT by its JNI object pointer. JNI does not guarantee that the `uintptr`
+  of a local reference returned by Silicon (for an offending node) equals the `uintptr` of the
+  global reference originally stored — the JNI spec requires `IsSameObject` for reference
+  comparison. Using pointer equality would cause nodeMap lookups to fail non-deterministically.
+  
+  The correct approach:
+  1. Assign a monotonically-increasing `uint64` ID to each Go Silver node at Build() time.
+  2. Embed the ID in the node's Viper `Info` chain as `AnnotationInfo("gobra_node_id", [id])`,
+     chained via `ConsInfo` ahead of any existing `VprInfo`.
+  3. The nodeMap key is the `uint64` ID: `nodeMap map[uint64]*silver.Node`.
+  4. `SilverBridge.getNodeId(node)` (see Deliverables) retrieves the ID from the node's
+     `Info` chain, enabling stable lookups regardless of JNI reference type.
+  
+  Global JNI references are still required for the Java Silver objects themselves (to prevent
+  GC while Silicon holds the program), but they are NOT used as map keys. Call
+  `jnigi.NewGlobalRef` on each constructed node for GC safety; call `DeleteGlobalRef` in
+  `BuiltProgram.Close()` to release them.
 - **Error handling**: check for Java exceptions after every jnigi call; convert them to Go errors.
 - **Memory**: Silver AST objects live on the JVM heap and are GC'd by the JVM; no manual free.
 - **All JNI calls via JNI worker**: as specified in plan 15, route all calls through the
   dedicated JNI worker goroutine; `Build()` sends a request and waits for the result.
 
-## JNI Object Identity Map
+## Node Identity Map
 
-The reporter (plan 32) needs to retrieve the `NodeInfo` for an error's `offendingNode` — a
-Java object returned by Silicon. The builder maintains a map from Java object pointer
-(the `uintptr` of the JNI `jobject`) to the corresponding `*silver.Node` Go struct:
+The worker (plan 15/17b) fills in `VerificationError.Pos` for each error returned by Silicon
+by resolving the error's offending node back to its Go Silver struct (which carries `NodeInfo`).
+This resolution uses a `uint64`-keyed node map, not JNI pointer comparison.
 
 ```go
 type Builder struct {
     jvm      *jvm.JVM
-    nodeMap  map[uintptr]*silver.Node // JNI jobject pointer → Go node
+    nextID   uint64
+    nodeMap  map[uint64]*silver.Node  // stable integer ID → Go Silver node
 }
 ```
 
-Every Silver node constructed via `SilverBridge` is registered in `nodeMap` immediately after
-construction. When the reporter receives an offending node from Silicon, it extracts the
-`jobject` pointer via jnigi, looks up `nodeMap`, and retrieves the `NodeInfo`.
+**Build-time registration (per Silver node):**
+1. Increment `nextID`; assign the current value as this node's ID.
+2. Wrap the node's existing `VprInfo` with the ID:
+   - `info = SilverBridge.makeConsInfo(SilverBridge.makeAnnotationInfo("gobra_node_id", id.toString()), existingVprInfo)`
+3. Pass the wrapped info to the Silver constructor via `SilverBridge.make*(...)`.
+4. Register: `nodeMap[id] = goSilverNode`.
+5. Promote the Java object to a global JNI reference via `jnigi.NewGlobalRef` for GC safety
+   (the global ref is NOT used as the map key).
 
-**Lifetime:** The `nodeMap` is valid for the lifetime of the `Builder` and the corresponding
-Silver program object. It must not be garbage-collected while Silicon holds references to the
-Java Silver objects. The builder holds global JNI references (via `jnigi.NewGlobalRef`) on all
-constructed objects to prevent the JVM from GC'ing them during verification.
+**Lookup (by the worker, plan 15/17b):**
+When Silicon returns an `AbstractError`, call `SilverBridge.getNodeId(offendingNode)` (see
+Deliverables) to retrieve the `uint64` ID from the node's `Info` chain, then look up
+`nodeMap[id]` to get the Go Silver node and its `NodeInfo`. This is O(1) and immune to JNI
+reference-type differences.
+
+The `searchInfo` DFS fallback (plan 32) also uses the nodeMap: when a synthetic node's `Pos`
+has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which calls
+`Children()` on Go Silver structs — requiring the nodeMap entry for the starting node.
+
+**Lifetime:** `nodeMap` is valid while `BuiltProgram` is alive (before `Close()` is called).
+`Close()` calls `DeleteGlobalRef` on all promoted Java objects and nils the nodeMap.
 
 ## Deliverables
 
-- `internal/backend/silver/SilverBridge.java` — Java helper class (~150 lines); includes
-  methods `makeNoInfo()`, `makeAnnotationInfo(key, values)`, `makeConsInfo(head, tail)` for
-  constructing the `@opaque`/`@reveal` info chains needed by plan 27
+- `internal/backend/silver/SilverBridge.java` — Java helper class (~175 lines); includes:
+  - Construction methods: `makeNoInfo()`, `makeAnnotationInfo(key, values)`, `makeConsInfo(head, tail)` for constructing info chains (including `@opaque`/`@reveal` annotations for plan 27 and `gobra_node_id` annotations for node identity)
+  - **`static long getNodeId(Object node)`** — reads the `gobra_node_id` annotation from a Silver node's `Info` chain and returns it as a `long`. Returns `-1` if no `gobra_node_id` annotation is present (indicating a node built outside Go-Gobra, which should not happen in practice). Implementation: walk the info chain (`ConsInfo`, `AnnotationInfo`) looking for key `"gobra_node_id"`; parse the first value as a long.
+  - **`static String getNodeFile(Object node)`**, **`static int getNodeLine(Object node)`**, **`static int getNodeCol(Object node)`**, **`static String getNodeTag(Object node)`** — extract individual `NodeInfo` fields stored as `gobra_node_file`, `gobra_node_line`, `gobra_node_col`, `gobra_node_tag` annotations (see note below). These allow the worker to populate `VerificationError.Pos` without a nodeMap lookup for the common non-synthetic case.
+  
+  **Note on NodeInfo in the Info chain:** In addition to `gobra_node_id`, the builder also embeds the `NodeInfo` fields as annotations: `AnnotationInfo("gobra_node_file", [file])`, `AnnotationInfo("gobra_node_line", [line])`, `AnnotationInfo("gobra_node_col", [col])`, `AnnotationInfo("gobra_node_tag", [tag])`, all chained before the existing `VprInfo`. The `getNode*` methods above retrieve these. This mirrors the Scala Gobra's approach of embedding Go source position directly in the Viper `Info` chain — the Go-side `nodeMap` is kept as a fallback for `searchInfo` DFS (which needs the Go Silver struct for `Children()`), not as the primary position source.
 - `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
   `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
 - `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (*BuiltProgram, error)`,
@@ -143,7 +172,7 @@ constructed objects to prevent the JVM from GC'ing them during verification.
   ```go
   type BuiltProgram struct {
       JavaObject jobject
-      NodeMap    map[uintptr]*silver.Node // JNI object pointer → Go Silver node
+      NodeMap    map[uint64]*silver.Node  // stable integer ID → Go Silver node
   }
 
   // Close releases all JNI global references held for the Java Silver objects.

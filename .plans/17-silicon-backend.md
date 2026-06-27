@@ -82,7 +82,7 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
   type VerificationResult struct {
       Success bool
       Errors  []VerificationError         // non-nil only when Success == false
-      NodeMap map[uintptr]*silver.Node    // JNI pointer → Go Silver node; for Reporter
+      NodeMap map[uint64]*silver.Node     // stable node ID → Go Silver node; for searchInfo fallback
       Close   func()                      // caller must defer result.Close() before Report()
   }
   type VerificationError struct {
@@ -92,6 +92,13 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
       Reason  string
   }
   ```
+  **Position filling**: for each `VerificationError` in `Errors`, the JNI worker fills in
+  `Pos` by calling `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` (plan 16) to
+  extract the `NodeInfo` embedded in the Java Silver node's `Info` chain. For synthetic nodes
+  (where `Tag == "synthetic"`), the reporter (plan 32) uses `NodeMap` and `searchInfo` DFS to
+  find a non-synthetic ancestor. `NodeMap` carries the full Go Silver struct (needed for
+  `Children()` calls) and is NOT used for primary position lookup.
+
   `NodeMap` and `Close` are set by the JNI worker (plan 15/17b); callers must `defer
   result.Close()` in the same stack frame as the `Report()` call — this releases JNI global
   references held for the Java Silver objects. Failure to call `Close()` leaks JNI memory.

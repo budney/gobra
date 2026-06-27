@@ -140,8 +140,13 @@ initialization order; they cannot be called explicitly by user code. Each `init`
 a package is encoded as a separate Silver method `{pkg}_init_N` (N = 0, 1, 2, … in source
 order of the files, then in source order within each file). The translator synthesizes a
 `{pkg}_run_inits` Silver method that calls each `{pkg}_init_N` in declaration order.
-Callers (the translator entry point in plan 33) invoke `{pkg}_run_inits` for each package
-before verifying any user method in that package.
+
+`{pkg}_run_inits` is a regular member of the `*silver.Program` returned by the translator —
+Silicon verifies it independently, like any other Silver method. **Plan 33 (pipeline) does NOT
+inject any explicit call to `{pkg}_run_inits` from other methods.** Cross-package init
+ordering (B's inits before A's) is ensured by translating packages in topological dependency
+order and including all dependencies in the same Silver program — Silicon verifies all methods
+in the program together.
 
 Constraints:
 - The translator must never emit a call to any `{pkg}_init_N` from anywhere except

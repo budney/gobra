@@ -100,11 +100,14 @@ is replaced by its unique `_u{HEX}_` encoding; the `gobra__` prefix is reserved 
 emitted for user names. **Do not use a simpler "replace `/` and `.` with `_`" rule** — that
 would collapse `a/b` and `a_b` to the same mangled string, breaking injectivity.
 
-**Residual collision note:** A Go identifier that literally contains `_u[0-9A-F]+_` as a
+**Residual collision note:** A Go identifier that literally contains the hex-escape pattern as a
 substring (e.g., a variable named `_u002F_`) would collide with a hex-escaped `/` in a
 package path after mangling. This is an obscure edge case; add a build-time assertion in the
-mangler that panics if any unqualified Go identifier matches `_u[0-9A-F]{4}_` to catch it
-early. The `gobra__` prefix for synthetic names avoids this issue for generator output.
+mangler that panics if any unqualified Go identifier matches the regex `_u[0-9A-F]{1,6}_`
+(1–6 hex digits, covering the full Unicode range U+0000 through U+10FFFF) to catch it early.
+Do NOT use `_u[0-9A-F]{4}_` — that only covers the Basic Multilingual Plane and silently
+misses code points above U+FFFF (e.g., emoji at U+1F600 would be encoded as `_u1F600_`, five
+digits). The `gobra__` prefix for synthetic names avoids this issue for generator output.
 
 **Note on collision with Scala Gobra**: The Scala Gobra uses a similar but not identical
 mangling scheme. Differential testing (plan 34) compares verification *results*, not Silver
@@ -138,7 +141,10 @@ functions must include a **"Bodyless Functions"** subsection that lists each fun
 its required postconditions (matching the Scala source), and the Scala file and line where
 those postconditions can be verified. This table is the audit checklist for the oracle-test
 procedure. An encoding plan is not complete until every row of its "Bodyless Functions" table
-has been checked against the Scala Gobra. Plans with this requirement: 20, 23, 25, 27, 29.
+has been checked against the Scala Gobra. Plans with this requirement: **20, 23, 25, 27, 29**.
+(Plan 24 uses Silver's built-in `Map` type operations — no bodyless Viper functions are
+generated for runtime maps. Plan 21 generates `sharedStructConversion` and `sharedStructDefault`
+which must also be audited; plan 21 must add its own "Bodyless Functions" subsection.)
 
 ## Resolved Questions
 

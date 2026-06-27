@@ -61,6 +61,21 @@ which is challenging but possible using ghost modeling of the JVM state).
 - CI job: `gobra-self-verify` running on every push to `master`
 - `SELF_HOSTING.md` document describing what is proved, what is trusted, and known limitations
 
+## Cut-Over Checklist
+
+Before the cut-over commit (delete Scala source, promote `gobra-go/` to repo root — see
+DECISIONS.md D8), all of the following must be satisfied:
+
+- [ ] Annotation grammar sketch is complete in `02-annotation-syntax-decision.md` (a
+      `## Annotation Grammar` section with full BNF/EBNF coverage of all annotation forms).
+      This is a **hard gate** — the cut-over deletes `src/main/antlr4/GobraParser.g4` and
+      `GobraLexer.g4`, which are the only complete specification of the annotation grammar.
+- [ ] Phase 2 self-hosting verification succeeds (Go-Gobra verifies its own source).
+- [ ] CI job `gobra-self-verify` is passing for all blocking-tier modules.
+- [ ] `SELF_HOSTING.md` is written and up-to-date.
+- [ ] All regression tests pass (or are in `skip.txt` with documented reasons).
+- [ ] Last Scala release is tagged (e.g., `v0.9.9-scala-final`) before the cut-over commit.
+
 ## CI Gate Strategy
 
 The `gobra-self-verify` CI job has two tiers:

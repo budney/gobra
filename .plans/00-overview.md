@@ -85,7 +85,7 @@ self-hosting: Go-Gobra verifies its own source code.
 ### Group 7: CLI & Integration
 | File | Title | Blocked by |
 |------|-------|------------|
-| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 13, 19, 27, 32 |
+| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 13, 15, 16, 17, 17b, 19, 27, 32 |
 
 ### Group 8: Testing
 | File | Title | Blocked by |
@@ -138,7 +138,10 @@ errors exist before moving to the next stage. Panics (not errors) are reserved f
 consistency violations that cannot be recovered from.
 
 **Bodyless Viper functions**: See the critical warning in plan 19 — missing postconditions
-on bodyless Viper functions silently weaken verification. This affects plans 20, 23, 24, 25.
+on bodyless Viper functions silently weaken verification. This affects plans 20, 23, 25, 27, 29.
+(Plan 24 uses Silver built-in `Map` type operations with no bodyless functions. Plan 21
+generates `sharedStructConversion` and `sharedStructDefault` — also subject to this invariant;
+see plan 19 for the full list.)
 
 ## Unblocked Work (can start immediately)
 

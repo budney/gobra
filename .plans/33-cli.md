@@ -43,6 +43,10 @@ status code.
 
 - [07-package-resolver.md](07-package-resolver.md) — package loading
 - [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline
+- [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and WorkerPool
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver JNI builder (Build + nodeMap)
+- [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)
+- [17b-parallel-workers.md](17b-parallel-workers.md) — parallel worker pool (--workers N)
 - [19-translator-core.md](19-translator-core.md) — translation
 - [27-encoding-methods.md](27-encoding-methods.md) — encoding must be substantially complete
 - [32-reporter.md](32-reporter.md) — output

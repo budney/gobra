@@ -46,16 +46,24 @@ diagnostic output.
 
 ## Deliverables
 
-- `internal/reporting/reporter.go` — `Report(result *VerificationResult, nodeMap map[uintptr]*silver.Node, info *TypeInfo) []Diagnostic`
+- `internal/reporting/reporter.go` — `Report(result *VerificationResult, nodeMap map[uint64]*silver.Node, info *TypeInfo) []Diagnostic`
 - `Diagnostic` type: `{File, Line, Col, Message, Category}`
 - Text formatter and JSON formatter
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
 
 **Note on the `nodeMap` parameter:** `nodeMap` is the `BuiltProgram.NodeMap` from plan 16,
-populated during `Build()`. It maps JNI `jobject` pointers (as `uintptr`) to the
-corresponding `*silver.Node` Go structs. The reporter uses it to resolve `offendingNode`
-(a Java object returned by Silicon) back to a `NodeInfo` carrying Go source position and tag.
+populated during `Build()`. It maps stable `uint64` node IDs to the corresponding
+`*silver.Node` Go structs. The reporter uses it **only for the `searchInfo` DFS fallback**
+(when an error's `Pos.Tag == "synthetic"`): it retrieves the Go Silver node and calls
+`Children()` to walk the subtree looking for a non-synthetic descendant with a real `NodeInfo`.
+
+**Primary position path**: `VerificationError.Pos` is already populated by the JNI worker
+(plan 17) before `Report` is called — the worker extracts `NodeInfo` directly from the
+offending node's Viper `Info` chain via `SilverBridge.getNodeFile/Line/Col/Tag`. The reporter
+does NOT call back through JNI to get position for the primary case. The `nodeMap` is a
+supplementary structure needed only for `searchInfo`.
+
 `Report` must be called before `BuiltProgram.Close()` — see plan 16 for the correct call
 ordering. Callers in plan 33 (`pipeline.go`) and plan 17b (`dispatch.go`) must pass
 `built.NodeMap` explicitly; it is not stored globally.
@@ -66,16 +74,17 @@ ordering. Callers in plan 33 (`pipeline.go`) and plan 17b (`dispatch.go`) must p
 
 Silicon's `VerificationResult` is either `Success` or a list of `VerificationError` objects.
 Each `VerificationError` has:
-- An **error type** (e.g., `PreconditionInMightNotHold`, `PostconditionViolated`,
+- An **error type** (e.g., `PreconditionMightNotHold`, `PostconditionViolated`,
   `AssertFailed`, `InsufficientPermission`, etc.) — determined by Silicon from the proof
   obligation that failed.
 - An **offending node** — the Silver AST node that Silicon identified as the failure point.
-  This is the *same object* (by identity) that was passed to Silicon via JNI; it carries the
-  `NodeInfo` set by the translator.
 
-The reporter receives these errors via JNI (plan 17): for each error, it calls back through
-JNI to retrieve `error.offendingNode.info` (the `NodeInfo` stored on the Silver node). See
-plan 16 for the `SilverBridge.java` wrapper that exposes this.
+The JNI worker (plan 17) processes Silicon's raw errors before handing `VerificationResult`
+to the reporter: for each raw error, the worker calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)`
+to extract the `NodeInfo` that was embedded in the node's Viper `Info` chain during Build()
+(plan 16), and stores it as `VerificationError.Pos`. By the time `Report()` is called,
+every `VerificationError.Pos` is already populated. The reporter does NOT make additional JNI
+calls for primary position lookup.
 
 ### Position extraction
 
@@ -132,8 +141,6 @@ translator must propagate the outermost position when constructing synthetic Sil
 
 ### JNI integration note
 
-The `offendingNode` returned by Silicon is the Java object originally passed to Silicon via
-JNI. Go-Gobra must maintain a map from JNI object identity (the Java object pointer returned
-when constructing Silver nodes in plan 16) to the corresponding `*silver.Node` Go struct.
-This map is populated during `SilverBridge.buildProgram(...)` (plan 16) and looked up here.
-This is the concrete mechanism that replaces the Scala `Source.unapply(offendingNode)` call.
+The Scala Gobra uses `Source.unapply(offendingNode)` — which calls `node.getPrettyMetadata._2.getUniqueInfo[Verifier.Info]` — to extract Go source info directly from a Silver node's Viper `Info` field. Go-Gobra uses the analogous approach: the builder (plan 16) embeds `NodeInfo` as `AnnotationInfo` entries in each node's Viper `Info` chain during construction, and the worker (plan 17) calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` to retrieve those fields after Silicon reports errors.
+
+The `nodeMap` (`map[uint64]*silver.Node`) is a supplementary structure for `searchInfo` DFS: when an error's `Pos.Tag == "synthetic"`, the reporter uses `nodeMap` to get the Go Silver struct (carrying `Children()`) to walk the subtree for a non-synthetic descendant. For the common case (non-synthetic offending node), `Pos` is already populated and the nodeMap is not needed.

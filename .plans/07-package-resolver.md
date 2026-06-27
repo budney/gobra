@@ -79,9 +79,23 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 ## Deliverables
 
-- `internal/frontend/packageresolver.go`
-- `PackageInfo` type and topologically-sorted `[]*PackageInfo` result
+- `internal/frontend/packageresolver.go` — main entry point:
+  ```go
+  // Resolve loads, preprocesses, and parses all packages transitively imported
+  // by the given entry-point paths (file paths or import paths). Returns packages
+  // in topological order (dependencies before dependents) and all accumulated
+  // diagnostics. A non-empty []Diagnostic does not prevent returning a partial
+  // result; callers (plan 33 pipeline) abort if any diagnostics are present.
+  func Resolve(inputs []string, cfg *ResolverConfig) ([]*PackageInfo, []Diagnostic)
+  ```
+  `ResolverConfig` includes: stub directory (embedded), Go module root, any `--include`/
+  `--exclude` patterns, and a reference to the type-checked package cache for plan 10.
+- `PackageInfo` type: `{ImportPath string, Files []*frontend.PFile, Deps []string}`
+- `ResolverConfig` type (see above)
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
+- Coordination note: for each file, `Resolve` calls `Gobrafy(filename, rawBytes)` (plan 06)
+  receiving preprocessed `[]byte`, then immediately passes those bytes to
+  `ParseFile(filename, preprocessedBytes)` (plan 04) — **no temp file is written**.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
   the correct set of files is loaded in dependency order
 

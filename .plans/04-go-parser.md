@@ -10,7 +10,8 @@ process in a second pass.
 ## Scope
 
 **In scope:**
-- Drive `go/parser.ParseFile` with `parser.ParseComments` mode
+- Drive `go/parser.ParseFile` with `parser.ParseComments` mode, passing the preprocessed
+  source bytes directly via `go/parser`'s `src interface{}` parameter — **no temp file needed**
 - Walk the `go/ast` tree and produce Gobra frontend AST nodes
 - Collect all `//@ ...` comment groups and attach them (by position) to the AST nodes they
   annotate, so 05 can parse them
@@ -18,11 +19,11 @@ process in a second pass.
   the Gobrafier in 06, but the parser must accept the post-processed form)
 - Error recovery: surface parse errors as structured diagnostics; accumulate all errors in
   a file rather than stopping at the first. If a file has parse errors, return partial AST
-  and all errors — do not abort; the caller (07, 33) decides whether to continue.
+  and all diagnostics — do not abort; the caller (07, 33) decides whether to continue.
 
 **Out of scope:**
 - Parsing annotation expressions (05-annotation-parser.md)
-- Preprocessing `.go` files (06-gobrafier.md) — the parser receives already-preprocessed input
+- Preprocessing `.go` files (06-gobrafier.md) — the parser receives already-preprocessed bytes
 - Type checking (08)
 
 ## Dependencies
@@ -32,12 +33,17 @@ process in a second pass.
   them; `.go` files pass through the Gobrafier first; `.gobra` files are handled directly
 
 **Coordination model:** Plan 07 (Package Resolver) is the caller that coordinates the three
-steps. For each file, plan 07 calls: (1) Gobrafier (06) to preprocess the file to a temp
-location, then (2) this parser's `ParseFile` with the preprocessed path, then (3) the
-annotation parser (05) on the collected `//@ ` comment strings. `ParseFile` does NOT call
-the Gobrafier internally — it receives already-preprocessed input. Plan 06 is listed as a
-dependency because the Gobrafier must exist before plan 07 can orchestrate the full pipeline,
-not because `ParseFile` calls it.
+steps. For each file, plan 07 calls: (1) Gobrafier (06) to preprocess the file, receiving
+preprocessed `[]byte` in return, then (2) this parser's `ParseFile(filename, src)` with the
+original filename and preprocessed bytes (no temp file), then (3) the annotation parser (05)
+on the collected `//@ ` comment strings. `ParseFile` does NOT call the Gobrafier internally —
+it receives already-preprocessed bytes. Plan 06 is listed as a dependency because the Gobrafier
+must exist before plan 07 can orchestrate the full pipeline, not because `ParseFile` calls it.
+
+`go/parser.ParseFile` accepts a `src interface{}` parameter; passing `[]byte` makes it parse
+from memory rather than the filesystem. The `filename` argument is still required for
+`token.FileSet` position attribution and error-message formatting — pass the original source
+file path, not any temp-file path.
 
 ## Reference: Current Gobra
 
@@ -60,9 +66,12 @@ not because `ParseFile` calls it.
 
 ## Deliverables
 
-- `internal/frontend/parser.go` — `ParseFile(path string) (*frontend.PFile, error)`
+- `internal/frontend/parser.go` — `ParseFile(filename string, src []byte) (*frontend.PFile, []Diagnostic)`
+  - `filename` is the original source path (for position tracking and error messages).
+  - `src` is the Gobrafier-preprocessed content (passed directly to `go/parser.ParseFile` as the `src` parameter — no temp file).
+  - Returns a partial `*frontend.PFile` and all parse-error diagnostics. A non-empty `[]Diagnostic` does not necessarily mean `*frontend.PFile` is nil; callers decide whether to abort.
 - Association of raw `//@ ...` comment strings to their enclosing AST scope
-- Structured parse error type with file/line/column
+- Structured `Diagnostic` type re-exported from `internal/reporting` (see plan 00 cross-cutting contract)
 - Tests: parse a representative set of `.go` and `.gobra` files from
   `src/test/resources/regressions/` and verify the AST shape
 

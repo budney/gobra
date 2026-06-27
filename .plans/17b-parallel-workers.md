@@ -35,6 +35,8 @@ not a concurrent development.
 ## Dependencies
 
 - [15-jni-setup.md](15-jni-setup.md) — pool-ready `WorkerPool` API (pool-size=1 baseline)
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — `silver.NewBuilder`, `BuiltProgram`
+  (carries `NodeMap` and `Close`); consumed directly in worker goroutine template
 - [16b-silver-chopper.md](16b-silver-chopper.md) — produces `[]*silver.Program` to dispatch
 - [17-silicon-backend.md](17-silicon-backend.md) — single-worker baseline; provides
   `SiliconConfig` and `VerificationResult` types reused here
@@ -44,7 +46,7 @@ not a concurrent development.
 Each of the N workers follows the same pattern:
 
 ```go
-func runWorker(jvm *JVM, cfg SiliconConfig, jobs <-chan verifyJob) {
+func runWorker(jvm *JVM, cfg SiliconConfig, jobs <-chan workerJob) {
     runtime.LockOSThread()
     jvm.AttachCurrentThread()
     defer jvm.DetachCurrentThread()

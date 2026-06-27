@@ -47,9 +47,19 @@ value it points to — it is a pure mathematical value, not a heap location.
 - When `p` is a shared pointer (`Ref`), `*p` accesses the heap at `p`.
 
 **`nil` pointer:**
-- Exclusive: `dflt(T@)` — the default value of the shared version of `T`. For `Ref`-based
-  types this is Silver `null`.
-- Nil checks: compare against `null` for `Ref`-typed shared pointers.
+- Exclusive: `dflt(T°)` — the default value of the **exclusive** encoding of the pointed-to
+  type `T`. This is the zero value of whatever Silver type `T°` maps to:
+  - `*int`: `dflt(Int)` = 0
+  - `*bool`: `dflt(Bool)` = false
+  - `*S` (struct): `dflt(Tuple[...])` = default tuple (via `TupleDomain`)
+  - `*[]int`: `dflt(Slice[Int])` = `nilSlice_{Int}()`
+  - `*Ref`-typed T: `null`
+  
+  **Do not use `dflt(T@)`** (the default of the shared encoding). For primitive types, `T@` is
+  `Ref` and `dflt(Ref) = null`, which has Silver type `Ref` — but exclusive `*int` has Silver
+  type `Int`, producing a type error. Always use `dflt(T°)` for exclusive nil pointers.
+- Nil checks: exclusive `*T == nil` is `v == dflt(T°)`. Shared nil pointer: compare against
+  `null` (since shared `*T@` = `Ref` for all T).
 
 **`new(T)`:** Allocates a fresh `Ref`, inhales `acc(loc, write)` for all fields/locations,
 inhales default values for each field.

@@ -58,7 +58,8 @@ overflow checks stubs), and produces the flat, uniform representation the transl
 
 ## Deliverables
 
-- `internal/desugar/desugar.go` — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, error)`
+- `internal/desugar/desugar.go` — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, []Diagnostic)`
+  - The desugarer should not encounter type errors (those are caught by the type checker). If an unexpected node is encountered (a bug), panic with a clear message rather than returning a diagnostic — panics are reserved for internal consistency violations (see plan 00 cross-cutting contract). The `[]Diagnostic` return is for the rare case where desugaring discovers a structural invariant that the type checker should have caught; in practice it should always be empty.
 - Tests: for each major desugaring rule, a before/after pair showing frontend → internal AST
 
 ## Resolved Questions

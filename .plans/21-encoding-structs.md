@@ -57,6 +57,20 @@ value equal to the source and exhaling from the target.
 **Embedded fields:** Access via the embedding chain; generates a sequence of field accesses
 through the embedding path.
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference: `src/main/scala/viper/gobra/translator/encodings/structs/StructEncoding.scala`.
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| `sharedStructConversion_{S}(x: Ref): S°` | `acc(x.f1, wildcard) && acc(x.f2, wildcard) && ...` (wildcard perm on all fields) | `result == Tuple(x.f1, x.f2, ...)` (exclusive tuple equals the field values) — verify exact form against Scala | `StructEncoding.scala` |
+| `sharedStructDefault_{S}(): Ref` | none | `result == null` or a specific null-ref sentinel — verify exact postcondition against Scala | `StructEncoding.scala` |
+
+**Audit checklist:** For each row, open `StructEncoding.scala`, find the bodyless function
+definition, and confirm every postcondition in the Go implementation matches exactly. Mark ✓
+when confirmed. Do not mark this encoding complete until all rows are checked.
+
 ## Deliverables
 
 - `internal/translator/encodings/structs.go`
