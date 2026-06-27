@@ -48,8 +48,13 @@ constructs. These have their own typing rules that differ from standard Go.
 - Structural constraint checks integrated into the checker pass
 - Tests: annotation-heavy regression files from `src/test/resources/regressions/features/`
 
-## Open Questions
+## Resolved Questions
 
-- Should spec type checking be a separate checker pass that runs after the core Go type checker,
-  or integrated into a single pass? A separate pass is cleaner and matches the current Gobra
-  architecture.
+**Separate pass vs. integrated (resolved):** Spec type checking runs as a **separate pass**
+after the core Go type checker (plan 08). Plan 08's `Check` function returns a `*TypeInfo`
+covering standard Go constructs; plan 09 takes that `TypeInfo` plus the Gobra-specific AST
+nodes and runs a second pass to annotate ghost/spec types. The two passes share the same
+`TypeInfo` output struct (plan 09 fills in the `GhostTypeInfo` portion). This matches the
+current Gobra architecture and avoids complicating the core type checker with spec-specific
+rules. Plan 08 need not expose extension hooks beyond returning a partial `TypeInfo` — plan 09
+reads it and appends to it.

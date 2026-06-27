@@ -38,8 +38,8 @@ edge annotation.
 
 ## Key Implementation Notes
 
-- Each transform is a function `*internal.Program → *internal.Program` (or in-place mutation)
-- Transforms are composed in a fixed order: constant propagation → overflow → termination
+- Each transform is a function `*internal.Program → *internal.Program` (returns a new tree; the internal AST is immutable — see Resolved Questions below)
+- Transforms are composed in a fixed order: constant propagation → call graph edges → overflow → termination
 - The call graph construction for termination requires a fixed-point analysis over mutually
   recursive functions
 

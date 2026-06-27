@@ -47,11 +47,16 @@ Chopping and parallel verification are layered on top in separate plans:
 ## Key Silicon API (via JNI)
 
 ```
-silicon.Silicon.newInstance() → Silicon instance
-silicon.start(args: Array[String])
+SiliconFrontendAPI(reporter: viper.silver.reporter.Reporter) → SiliconFrontendAPI instance
+silicon.initialize(args: Seq[String])
 silicon.verify(program: silver.ast.Program) → VerificationResult
 silicon.stop()
 ```
+
+Note: `SiliconFrontendAPI` is instantiated directly (no factory method). The startup method
+is `initialize`, not `start`. Do NOT call `silicon.Silicon.newInstance()` — no such static
+factory exists. See `viperserver/silicon/src/main/scala/Silicon.scala` for the correct class
+hierarchy (`SiliconFrontendAPI` extends `ViperFrontendAPI` which provides `initialize`).
 
 `VerificationResult` is either:
 - `silver.verifier.Success`
@@ -62,7 +67,24 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
 ## Deliverables
 
 - `internal/backend/silicon/silicon.go` — `Verify(prog jobject, cfg SiliconConfig) (*VerificationResult, error)`
-- `VerificationResult` Go type: success flag + slice of `VerificationError{Pos, FullID, Message, Reason}`
+- `VerificationResult` Go type:
+  ```go
+  type VerificationResult struct {
+      Success bool
+      Errors  []VerificationError         // non-nil only when Success == false
+      NodeMap map[uintptr]*silver.Node    // JNI pointer → Go Silver node; for Reporter
+      Close   func()                      // caller must defer result.Close() before Report()
+  }
+  type VerificationError struct {
+      Pos     NodeInfo
+      FullID  string
+      Message string
+      Reason  string
+  }
+  ```
+  `NodeMap` and `Close` are set by the JNI worker (plan 15/17b); callers must `defer
+  result.Close()` in the same stack frame as the `Report()` call — this releases JNI global
+  references held for the Java Silver objects. Failure to call `Close()` leaks JNI memory.
 - `SiliconConfig` struct, including a `Instance *SiliconFrontendAPI` field for the warm path:
 
   ```go

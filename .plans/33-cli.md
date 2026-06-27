@@ -19,14 +19,18 @@ status code.
   - Performance: `--parallelizeBranches` (see note below), `--cacheFile`
 - Pipeline orchestration: Gobrafier → Parser → Type Checker → Desugarer → Transforms →
   Translator → JNI Backend → Reporter
-- **`{pkg}_run_inits` invocation**: after translation, and before dispatching to Silicon,
-  the pipeline must invoke the synthesized `{pkg}_run_inits` Silver method for each package
-  in dependency order (innermost dependencies first). This drives verification of all `init`
-  functions. See plan 27 ("init function encoding") for the Silver method naming convention.
-  Concretely: `internal/pipeline/pipeline.go` calls the translator to get a `*silver.Program`,
-  then prepends a `MethodCall` to `{pkg}_run_inits` at the start of the verification entry
-  point for each package. If the program has no `init` functions, `{pkg}_run_inits` is an
-  empty Silver method and the call is a no-op; emit it anyway to keep the logic uniform.
+- **`{pkg}_run_inits` invocation**: the translator (plan 27) synthesizes a Silver method
+  `{pkg}_run_inits` for each package. This method is a regular member of the `*silver.Program`
+  returned by the translator — Silicon verifies it independently, like any other Silver method.
+  `pipeline.go` does NOT need to inject a call into any entry point; `{pkg}_run_inits` is
+  verified by Silicon automatically because it is present in the Silver program. The pipeline's
+  only responsibility is to ensure packages are translated in dependency order (innermost
+  dependencies first), so that `{pkg}_run_inits` for an imported package is part of the Silver
+  program before the importer's methods reference it. If the program has no `init` functions,
+  `{pkg}_run_inits` is an empty Silver method with no body; it still verifies trivially.
+  Note: Silver has no global "entry point" that Silicon verifies first — every method in the
+  program is verified in isolation. Do NOT attempt to prepend a `MethodCall` node into any
+  existing method; the synthesized `{pkg}_run_inits` method is self-contained.
 - Exit code: 0 on verification success, non-zero on failure or error
 - `--printViper`: print the generated Silver text (using the Silver printer from 14) without
   verifying; useful for debugging

@@ -218,6 +218,10 @@ giving the type checker (08) and desugarer (12) one traversal mechanism.
 **Nodes that get wrappers** (only those Gobra actually extends):
 - `PFuncDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec`
 - `PMethodDecl` wraps `*ast.FuncDecl` + receiver + `*PFunctionSpec`
+  (The `receiver` field is a Gobra-specific `*PReceiver` carrying ghost annotations on the
+  receiver, e.g., ghost type assertions or spec-level permission info. It is distinct from
+  `ast.FuncDecl.Recv`, which holds the standard Go receiver parameter list. Both fields are
+  needed: `FuncDecl.Recv` for Go type checking; `PMethodDecl.receiver` for spec checking.)
 - `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
 - `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
 - `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements

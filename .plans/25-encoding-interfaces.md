@@ -40,10 +40,26 @@ the need to encode method contracts for dynamic dispatch.
 
 ## Proposed Approach (from Scala source analysis)
 
-**Interface value representation:** A Go interface value is encoded as a Silver **2-tuple**:
-`(polyVal: Ref, dynType: Type)` where:
-- `polyVal` is the universally-boxed concrete value (see `Poly[T]` domain below).
-- `dynType` is a term of the `Type` domain (see below) carrying the runtime type tag.
+**Interface value representation:** A Go interface value is encoded as a value of a dedicated
+`InterfaceDomain` Silver domain (not `TupleDomain(2)` — using TupleDomain would create a type
+collision with exclusive 2-field structs encoded by plan 21). The domain is:
+
+```silver
+domain InterfaceDomain {
+  function iface(polyVal: Ref, dynType: Type): InterfaceDomain
+  function iPolyVal(i: InterfaceDomain): Ref
+  function iDynType(i: InterfaceDomain): Type
+  axiom { forall v: Ref, t: Type :: {iface(v, t)} iPolyVal(iface(v, t)) == v && iDynType(iface(v, t)) == t }
+}
+```
+
+`InterfaceDomain` is emitted once as a global singleton (like `TupleDomain`). Do NOT use
+`TupleDomain(2)` for interface values — the Silver types would be indistinguishable from
+exclusive 2-field structs, breaking type safety in the Silver program.
+
+The two fields of an interface value are:
+- `iPolyVal(i)`: the universally-boxed concrete value (see `Poly[T]` domain below).
+- `iDynType(i)`: a term of the `Type` domain (see below) carrying the runtime type tag.
 
 **`Poly[T]` domain** (one per concrete type `T` that is boxed):
 ```silver
@@ -124,7 +140,8 @@ Silver predicate, with the body as a chain of
 postconditions `typeOf(itf) == T_Type() ==> result == proof_{T}_{I}_{M}(valueOf(itf, T), args)`
 for each implementing type `T`.
 
-**Nil interface:** `tuple2(null, nilType())` where `nilType()` is a domain function.
+**Nil interface:** `iface(null, nilType())` where `nilType()` is a domain function in the
+`Type` domain returning the unique nil type tag.
 
 ## Bodyless Functions
 

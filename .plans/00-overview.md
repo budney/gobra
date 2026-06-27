@@ -33,7 +33,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [04-go-parser.md](04-go-parser.md) | Go Parser Integration | 03, 06 |
 | [05-annotation-parser.md](05-annotation-parser.md) | Annotation Mini-Parser | 02, 03 |
 | [06-gobrafier.md](06-gobrafier.md) | Go File Preprocessor (Gobrafier) | 01 |
-| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 04, 06 |
+| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 04, 05, 06 |
 
 ### Group 2: Type Checker
 | File | Title | Blocked by |

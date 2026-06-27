@@ -62,9 +62,11 @@ largest single unit of work in the frontend.
   `[]Diagnostic` accumulator passed through the checker; continue checking after an error where
   doing so produces meaningful additional diagnostics. Abort (do not proceed to desugaring) if
   any errors are present.
-- **Side-table for type info**: Attach type information via a `map[ast.Node]types.Type`
+- **Side-table for type info**: Attach type information via a `map[PNode]types.Type`
   side table (pointer identity as key), not via fields on AST nodes. This keeps AST nodes
-  immutable and decouples type info from the AST definition.
+  immutable and decouples type info from the AST definition. `PNode` (defined in plan 03)
+  covers both `go/ast` nodes and Gobra ghost nodes — do not use `ast.Node` as the key type
+  since ghost nodes do not implement it.
 
 ## Deliverables
 
@@ -110,8 +112,14 @@ Concrete implementations:
 | permission amount   | `PermissionType{}` |
 | magic wand          | `WandType{Left, Right types.Type}` |
 
-These satisfy `types.Type` and can be stored in the same `map[ast.Node]types.Type` side table
-alongside `go/types` results. The `GhostTypeInfo` wraps `map[ast.Node]GhostType` for
+These satisfy `types.Type` and can be stored in the same `map[PNode]types.Type` side table
+alongside `go/types` results. The `GhostTypeInfo` wraps `map[PNode]GhostType` for
 ghost-only constructs; combined with the `*types.Info` from `go/types.Check`, they form the
 unified `TypeInfo` output. All `GhostType` implementations live in
 `internal/info/ghosttypes.go`.
+
+**Note on `PNode` key type**: `ast.Node` (the `go/ast` node interface) cannot be used as the
+map key because Gobra ghost nodes (`PForall`, `PAccess`, etc.) do not implement it. Instead,
+use `PNode` — a unified interface defined in plan 03 that both `go/ast` nodes and Gobra ghost
+nodes implement. See plan 03 ("PNode Interface") for the definition. Map keys use pointer
+identity (concrete types are always pointer types), so no custom equality is needed.

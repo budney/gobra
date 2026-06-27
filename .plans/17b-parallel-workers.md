@@ -22,7 +22,7 @@ not a concurrent development.
   across jobs (matching plan 17's "warm path" design; do not init/stop Silicon per job)
 - Result merging: success iff all sub-programs succeed; errors accumulated across all workers
 - Error deduplication: shared members (fields, domains, predicate signatures) appear in
-  multiple sub-programs and may produce duplicate errors; deduplicate by `(GoPos, errorID)`
+  multiple sub-programs and may produce duplicate errors; deduplicate by `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`
 - `--workers N` CLI flag (wired in plan 33); default = `min(runtime.NumCPU(), numSubPrograms)`
 - Non-chopped path unchanged: when `--chop` is not set, pool dispatches to a single worker
   exactly as plan 17 does
@@ -52,8 +52,19 @@ func runWorker(jvm *JVM, cfg SiliconConfig, jobs <-chan verifyJob) {
     silicon.initialize(cfg.Args)
     defer silicon.stop()
 
+    builder := silver.NewBuilder(jvm)
+
     for job := range jobs {
-        result := silicon.verify(job.prog)
+        // Build: Go Silver structs → Java Silver objects (plan 16)
+        built, err := builder.Build(job.prog, jvm)
+        if err != nil {
+            job.result <- &VerificationResult{Err: err}
+            continue
+        }
+        // Verify: call Silicon with the Java Silver program object (plan 17)
+        result := silicon.verify(built.JavaObject)
+        result.NodeMap = built.NodeMap  // carry NodeMap to caller for Reporter
+        result.Close = built.Close      // caller must defer result.Close() before Report()
         job.result <- result
     }
 }
@@ -90,7 +101,7 @@ func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResul
 ```
 
 `mergeResults` folds results left: success if all succeed; accumulated + deduplicated errors
-otherwise. Deduplication key: `(GoPos.File, GoPos.Line, GoPos.Col, errorID)`.
+otherwise. Deduplication key: `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`.
 
 ## Z3 API Mode Caveat
 

@@ -138,7 +138,7 @@ functions must include a **"Bodyless Functions"** subsection that lists each fun
 its required postconditions (matching the Scala source), and the Scala file and line where
 those postconditions can be verified. This table is the audit checklist for the oracle-test
 procedure. An encoding plan is not complete until every row of its "Bodyless Functions" table
-has been checked against the Scala Gobra. Plans with this requirement: 20, 23, 25, 27.
+has been checked against the Scala Gobra. Plans with this requirement: 20, 23, 25, 27, 29.
 
 ## Resolved Questions
 

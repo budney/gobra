@@ -61,7 +61,7 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 
 ## Deliverables
 
-- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) (SpecNode, error)`
+- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) ([]SpecNode, error)`
 - Full grammar coverage of the Gobra annotation language
 - Position-accurate error messages (column relative to comment start)
 - Table-driven tests covering each annotation form, including error cases

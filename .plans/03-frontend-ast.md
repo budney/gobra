@@ -84,6 +84,12 @@ type checker.
   **Which nodes get wrappers** (only nodes Gobra actually extends):
   - `PFuncDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec`
   - `PMethodDecl` wraps `*ast.FuncDecl` + receiver + `*PFunctionSpec`
+    (Note: `ast.FuncDecl.Recv` holds the standard Go receiver parameter list. The additional
+    `receiver` field on `PMethodDecl` is a Gobra-specific extension — it carries ghost
+    annotations on the receiver, such as a ghost type assertion or a permission annotation
+    on the receiver value. It is NOT redundant with `FuncDecl.Recv`; standard Go receivers
+    are read from `FuncDecl.Recv` while Gobra-specific receiver info is in this field.
+    Define it as `*PReceiver` containing the ghost marker and any spec-level receiver info.)
   - `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
   - `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
   - `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
@@ -99,6 +105,31 @@ type checker.
   For constructs `go/ast` has no representation for (predicates, magic wands, ADTs, ghost
   parameters), define new Gobra types from scratch. The `go/types.Check` call in plan 08 runs
   on the embedded `*ast.File` directly, independent of the Gobra wrapper layer.
+
+## PNode Interface
+
+The type checker (plan 08) maintains side-tables keyed by AST node identity. Because the
+Gobra AST mixes `go/ast` node types and Gobra-specific ghost/spec node types, the key cannot
+be `ast.Node` (which ghost nodes do not implement). Define a unified `PNode` interface that
+both universes satisfy:
+
+```go
+// PNode is implemented by both go/ast nodes and Gobra ghost/spec nodes.
+// It is the key type for all AST-node-keyed side-tables (type info, ghost type info, etc.).
+// Pointer identity is used for equality; all concrete PNode types are pointer types.
+type PNode interface {
+    Pos() token.Pos
+    End() token.Pos
+}
+```
+
+All `go/ast` node types already implement `PNode` via `ast.Node`. Gobra ghost/spec node types
+must implement `Pos()` and `End()` — they already carry `token.Pos` for position tracking
+(required by the source-position invariant in this plan). Both methods must return the node's
+source span in the original file.
+
+`PNode` is defined in `internal/ast/frontend/pnode.go`. All side-table maps that were
+previously typed `map[ast.Node]T` must use `map[PNode]T`.
 
 ## Traversal Model (Critical Design Note)
 

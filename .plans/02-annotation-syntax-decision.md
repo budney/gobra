@@ -80,6 +80,14 @@ implementation effort.
   - Assertion operators (`&&`, `||`, `==>`, `!`)
   - Gobra-specific: `seq`, `set`, `mset`, `dict`, `option`, ADT constructors
 
+**Note on grammar sketch:** This grammar sketch has NOT been written yet (it is a
+deliverable, not completed above). The annotation parser (plan 05) currently references
+`src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` as the definitive grammar. Those files
+reside in the Scala source tree scheduled for deletion at cut-over (DECISIONS.md D8). Before
+cut-over, the grammar sketch must be written into this file (or a companion file) so that
+the annotation mini-parser has a grammar specification that survives after the Scala source
+is removed. **This is a blocking deliverable for cut-over.**
+
 ## Resolved Questions
 
 **Inline (mid-statement) annotations**: In scope — full parity with the Scala implementation.

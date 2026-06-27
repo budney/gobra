@@ -107,6 +107,22 @@ domain Option_{T} {
 }
 ```
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference:
+`src/main/scala/viper/gobra/translator/encodings/sequences/` and
+`src/main/scala/viper/gobra/translator/encodings/adts/`.
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| `emptySeq_{T}(n: Int): Seq[T]` | `n >= 0` | `\|result\| == n`, `forall i: Int :: {result[i]} 0 <= i && i < n ==> result[i] == dflt(T)` — verify exact form against Scala | `SequenceEncoding.scala` |
+
+**Audit checklist:** For this row, open `SequenceEncoding.scala`, find the `emptySeq` function
+definition, and confirm every postcondition in the Go implementation matches exactly.
+Mark ✓ when confirmed. The quantifier trigger `{result[i]}` is critical — omitting it can
+cause Z3 to time out. Do not mark this encoding complete until the row is checked.
+
 ## Deliverables
 
 - `internal/translator/encodings/adts.go` (ADT domain generation + match encoding)

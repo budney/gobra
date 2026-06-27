@@ -102,6 +102,16 @@ auxiliary domain functions, helper Silver fields) carry a `NodeInfo` with an emp
 subtree **downward** (DFS over children) to find the nearest non-synthetic descendant's `NodeInfo`
 when the immediate node's `NodeInfo` is synthetic. Parent pointers are not required.
 
+**Children() method for DFS:** `SearchInfo` requires the ability to enumerate a node's
+children. Every Silver node type must implement a `Children() []Node` method returning its
+direct child nodes in declaration order. This method is also used by the chopper (plan 16b)
+and the Silver printer (plan 14). Add `Children() []Node` to the `Node` interface in
+`internal/silver/ast.go` and implement it on every concrete Silver node type. Structural
+(non-leaf) nodes return their child slices concatenated; leaf nodes (IntLit, BoolLit,
+NullLit, LocalVar, etc.) return nil. A missing `Children()` implementation on a new node
+type is a compile error (the interface is not satisfied), so the requirement is
+self-enforcing.
+
 **Design invariant**: nodes that Silicon can directly cite as `offendingNode` (Assert, Exhale,
 MethodCall, FieldAccess, etc.) must always carry a non-synthetic `NodeInfo`. Only structural
 wrapper nodes (Seqn generated for control flow, synthetic If for desugaring) may be synthetic.

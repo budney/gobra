@@ -77,6 +77,22 @@ inhales `RecvGotPerm()(v)`.
 Gobra does not encode a happens-before relation in Silver; soundness for concurrent programs
 depends on the user-supplied predicates being correct.
 
+**`close(ch)`**: exhales `SendChannel(ch)` (the sender's permission to send is consumed) and
+inhales `ClosedChannel(ch)`. `ClosedChannel` is a new predicate defined alongside the other
+channel predicates:
+
+```
+predicate ClosedChannel(c: Int)
+```
+
+The `ClosedChannel(ch)` predicate represents the fact that channel `ch` has been closed.
+Attempting to send on a closed channel is caught because the `send` encoding requires
+`acc(SendChannel(ch), wildcard)` and `ClosedChannel` and `SendChannel` are disjoint — the
+user's annotations must establish that both predicates cannot hold simultaneously. Attempting
+to receive from a closed channel and the "comma-ok" case (`v, ok := <-ch` where `ok == false`
+on a closed channel) must be handled via user-supplied ghost annotations; the encoding itself
+does not model the receive-from-closed behavior automatically (document in KNOWN_LIMITATIONS.md).
+
 **`select` with `default`**: the default case represents non-blocking behaviour. Encode as
 a Silver `if` with a non-deterministic boolean `b` selecting between the channel operation
 and the default. Both branches must verify independently.
@@ -88,4 +104,6 @@ in this plan must include user-written `SendChannel`/`RecvChannel` predicates.
 
 - `internal/translator/encodings/channels.go`
 - Tests: encode a simple channel send/receive pair with explicit `SendChannel`/`RecvChannel`
-  predicate annotations; encode a buffered channel `make`; encode `select` with default
+  predicate annotations; encode a buffered channel `make`; encode `select` with default;
+  encode `close(ch)` and verify that a subsequent send is rejected by the verifier (requires
+  a test that annotates the disjointness of `SendChannel` and `ClosedChannel`)

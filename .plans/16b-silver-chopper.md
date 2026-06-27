@@ -18,7 +18,7 @@ the resulting sub-programs is handled by plan 17b.
 - Dependency graph construction over Silver Go AST members (who references whom)
 - Transitive closure (reachability) to compute minimal sub-programs per important member
 - Greedy merging of sub-programs subject to a penalty function and an upper bound
-- Selection predicate: identify important members by Go source position (using `GoPos` on
+- Selection predicate: identify important members by Go source position (using `NodeInfo` on
   Silver nodes, set by the translator — plan 14)
 - Penalty configuration: default values (from Scala's `Penalty.Default`) and optional
   config file (`GobraChopper.conf`) in the working directory for tuning
@@ -33,17 +33,16 @@ the resulting sub-programs is handled by plan 17b.
 
 ## Dependencies
 
-- [14-silver-ast.md](14-silver-ast.md) — input: Go Silver AST types; `GoPos` field on each
+- [14-silver-ast.md](14-silver-ast.md) — input: Go Silver AST types; `NodeInfo` struct on each
   node is used by the selection predicate to identify members belonging to the input package
 
 ## Reference: Scala Implementation
 
 - `viperserver/silicon/silver/src/main/scala/viper/silver/ast/utility/chopper/Chopper.scala`
-  — three-phase algorithm (selection → per-member sub-programs → greedy merge)
-- `viperserver/silicon/silver/src/main/scala/viper/silver/ast/utility/chopper/Vertices.scala`
-  — vertex types for fine-grained dependency units
-- `viperserver/silicon/silver/src/main/scala/viper/silver/ast/utility/chopper/Penalty.scala`
-  — default penalty configs and `PenaltyConfig` struct
+  — the single source file containing all chopper logic: the three-phase algorithm
+  (selection → per-member sub-programs → greedy merge), plus the `Vertices`, `Edges`, and
+  `Penalty` traits/objects (all defined inside `Chopper.scala` — there are no separate
+  `Vertices.scala`, `Penalty.scala`, or `Edges.scala` files in this directory)
 - `src/main/scala/viper/gobra/util/ChopperUtil.scala` — Gobra's wrapper; study
   `computeIsolateMap` for the selection predicate logic based on Go source positions
 
@@ -53,11 +52,11 @@ the resulting sub-programs is handled by plan 17b.
 
 Identify "important members": those to be actively verified. Two modes:
 
-- **Default (no `--isolate`)**: all methods, functions, and predicates whose `GoPos` points
-  to a file in the input package being verified. Members from imported/dependency packages
+- **Default (no `--isolate`)**: all methods, functions, and predicates whose `NodeInfo.File`
+  names a file in the input package being verified. Members from imported/dependency packages
   are included only as dependencies, not as important members.
-- **Isolate mode (`--isolate <positions>`)**: only members whose `GoPos` falls within the
-  specified file/line ranges. Implement after default mode is working.
+- **Isolate mode (`--isolate <positions>`)**: only members whose `NodeInfo` (File/Line/Col)
+  falls within the specified file/line ranges. Implement after default mode is working.
 
 ### Phase 2 — Per-Member Sub-Programs
 
@@ -81,7 +80,7 @@ Silver members decompose into fine-grained **vertices** at sub-member granularit
 **Dependency edges** are computed by traversing Silver AST references: a method body that
 calls function F has edges `MethodBody → FunctionSpec`. A function body that folds predicate
 P has edges `FunctionBody → PredicateSig`. A domain axiom using a type T has edges to
-`DomainType(T)`. See Scala `Edges.scala` for the complete edge set.
+`DomainType(T)`. See `Edges` trait inside `Chopper.scala` for the complete edge set.
 
 **Implementation note — pointer-keyed `DomainAxiom` vertices:** `DomainAxiom` vertices are
 keyed by `(*silver.DomainAxiom, *silver.Domain)` pointer pairs, not by name. The dependency

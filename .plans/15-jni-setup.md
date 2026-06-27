@@ -78,6 +78,9 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
 - `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(prog *silver.Program) *VerificationResult` (blocking — callers provide their own goroutines for parallelism; see plan 17b); `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
+  `VerificationResult` carries a `Close func()` field set by the worker to `built.Close`.
+  Callers must `defer result.Close()` before calling the reporter. Failure to call `Close()`
+  leaks JNI global references.
 - Worker goroutine template — the inner loop of each worker executes the full
   Build → Verify → Close chain on the JNI-attached OS thread:
 
@@ -104,19 +107,19 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
           }
           // Verify: call Silicon with the Java Silver program object (plan 17)
           result := silicon.verify(built.JavaObject)
-          result.NodeMap = built.NodeMap  // carry nodeMap to caller for Reporter
-          // Close: release JNI global refs AFTER result is sent (caller reads NodeMap)
-          // Caller (DispatchChopped or Submit) must call built.Close() after Report().
-          job.built = built   // returned so caller can Close() after Report()
+          result.NodeMap = built.NodeMap  // carry NodeMap to caller for Reporter
+          result.Close = built.Close      // caller must defer result.Close() before Report()
           job.result <- result
       }
   }
   ```
 
-  The `workerJob` struct carries `prog *silver.Program`, a `result chan *VerificationResult`,
-  and a `built *BuiltProgram` return slot. `Submit` sends the job, blocks on `result`, then
-  calls `built.Close()` after the caller's `Report()` returns. This is the only correct
-  ordering; see plan 16 for the `Close()` contract.
+  The `workerJob` struct carries `prog *silver.Program` and a `result chan *VerificationResult`.
+  The worker sets `result.Close = built.Close` before sending the result, so the caller of
+  `Submit` receives a `*VerificationResult` that carries its own cleanup function. The caller
+  is responsible for `defer result.Close()` in its own stack frame — this must fire after
+  `Report()` returns (see plan 16 for the `Close()` contract). `Submit` itself must NOT call
+  `built.Close()` — it has no visibility into when the caller finishes with `NodeMap`.
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns

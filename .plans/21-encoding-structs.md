@@ -64,6 +64,9 @@ through the embedding path.
 
 ## Field Name Mangling (Resolved)
 
-Field names are qualified: `{packagePath}_{TypeName}_{FieldName}` with dots in package paths
-replaced by underscores. This mirrors the Scala Gobra convention and avoids Silver's global
-field namespace collisions.
+Field names are qualified: `{mangledPkg}_{TypeName}_{FieldName}` where `{mangledPkg}` is the
+package path run through the name mangling scheme defined in plan 19 (non-`[a-zA-Z0-9_$]`
+characters including `.` and `/` are hex-encoded as `_u{HEX}_`, not replaced with bare
+underscores). This preserves injectivity across package paths and avoids Silver's global field
+namespace collisions. Do NOT replace dots with bare underscores before mangling — use the
+full hex-encoding rule from plan 19.

@@ -31,6 +31,14 @@ process in a second pass.
 - [06-gobrafier.md](06-gobrafier.md) — must preprocess input files before this parser sees
   them; `.go` files pass through the Gobrafier first; `.gobra` files are handled directly
 
+**Coordination model:** Plan 07 (Package Resolver) is the caller that coordinates the three
+steps. For each file, plan 07 calls: (1) Gobrafier (06) to preprocess the file to a temp
+location, then (2) this parser's `ParseFile` with the preprocessed path, then (3) the
+annotation parser (05) on the collected `//@ ` comment strings. `ParseFile` does NOT call
+the Gobrafier internally — it receives already-preprocessed input. Plan 06 is listed as a
+dependency because the Gobrafier must exist before plan 07 can orchestrate the full pipeline,
+not because `ParseFile` calls it.
+
 ## Reference: Current Gobra
 
 - `src/main/scala/viper/gobra/frontend/Parser.scala` — main parser; uses ANTLR4 grammar +
