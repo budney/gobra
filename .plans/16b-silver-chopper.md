@@ -106,6 +106,14 @@ is declaration order of important members in the Silver program — the DFS in p
 processes `program.members` (filtered by the selection predicate) in order, and `notRoot`
 elimination preserves that order among dominating nodes.
 
+**Iteration order over `Program` members (resolved):** The Go Silver `Program` struct (plan 14)
+stores members in separate slices: `Methods`, `Functions`, `Predicates`, `Domains`, `Fields`.
+For the chopper's phase 2 DFS, iterate in a fixed, deterministic order:
+`Functions` → `Methods` → `Predicates` (matching the Scala `program.members` ordering, which
+lists functions before methods before predicates). `Domains` and `Fields` are not "important
+members" (they cannot be individually selected) but appear as dependency vertices. The merged
+result preserves this ordering when assembling sub-programs.
+
 **Merge penalty formula** (from `Penalty.DefaultImpl.mergePenalty`):
 
 ```

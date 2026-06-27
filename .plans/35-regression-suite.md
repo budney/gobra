@@ -89,3 +89,13 @@ Fields (tab- or space-separated):
 The CI job that runs the suite must fail if a test in the skip list now passes (i.e., skip
 entries must be pruned as features are implemented). This prevents the skip list from silently
 accumulating stale entries.
+
+**Test runner requirement**: the runner (plan 34) must run skip-listed tests and compare their
+result to the skip expectation, not simply omit them. Concretely:
+- Load `skip.txt` at startup.
+- For each skip-listed test, run Go-Gobra normally but mark the test as "expected to fail."
+- If the test *passes* (no errors when errors were expected, or vice versa), report it as an
+  **unexpected pass** and fail the CI job.
+- If the test *fails as expected*, report it as skipped (not counted against pass rate).
+This two-mode design means adding a new feature automatically flags stale skip entries on the
+next CI run without any manual bookkeeping.

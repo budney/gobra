@@ -97,6 +97,12 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
   startup; do not call `FindClass` or `GetStaticMethodID` per-call.
 - **Local vs. global references**: JNI local references are freed when the native frame exits;
   use `NewGlobalRef` for the `SilverBridge` class reference and any cached objects.
+- **`NewGlobalRef` for `nodeMap` entries**: every Java object added to `nodeMap` must be
+  promoted to a global reference via `jnigi.NewGlobalRef` *before* its pointer is stored as
+  the map key. A local reference pointer is only stable within the current JNI frame; after
+  the frame returns, the JVM may reuse the address for a different object, corrupting lookups.
+  Promote immediately after construction; the map then owns the global reference for the
+  object's lifetime. Call `DeleteGlobalRef` on all entries when the `Builder` is freed.
 - **Error handling**: check for Java exceptions after every jnigi call; convert them to Go errors.
 - **Memory**: Silver AST objects live on the JVM heap and are GC'd by the JVM; no manual free.
 - **All JNI calls via JNI worker**: as specified in plan 15, route all calls through the
@@ -126,11 +132,14 @@ constructed objects to prevent the JVM from GC'ing them during verification.
 
 ## Deliverables
 
-- `internal/backend/silver/SilverBridge.java` — Java helper class (~150 lines)
+- `internal/backend/silver/SilverBridge.java` — Java helper class (~150 lines); includes
+  methods `makeNoInfo()`, `makeAnnotationInfo(key, values)`, `makeConsInfo(head, tail)` for
+  constructing the `@opaque`/`@reveal` info chains needed by plan 27
 - `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
   `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
 - `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (*BuiltProgram, error)`,
-  where `BuiltProgram{JavaObject jobject, NodeMap map[uintptr]*silver.Node}`
+  where `BuiltProgram{JavaObject jobject, NodeMap map[uintptr]*silver.Node}`. Every entry in
+  `NodeMap` uses a `NewGlobalRef`-promoted pointer as the key (see Key Implementation Notes).
 - Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
   confirm the resulting object passes `silver.ast.Program.checkTransitively()`; confirm that
   `NodeMap` contains an entry for the method's body statement whose `NodeInfo` matches the

@@ -57,6 +57,15 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
   `FuncApp`, `DomainFuncApp`, sequence/set/multiset operations
 - **Types**: `Int`, `Bool`, `Perm`, `Ref`, `SeqType`, `SetType`, `MultisetType`,
   `MapType`, `DomainType`, `FunctionType`
+- **Info chain** (backend annotations): Silver nodes carry an `Info` field. Two info types
+  are needed beyond `NodeInfo` (which is a Go-level concept layered on top):
+  - `NoInfo` — the empty info; used when no annotation is needed
+  - `AnnotationInfo{Key string, Values []string}` — carries a backend annotation such as
+    `@opaque` or `@reveal` (see plan 27)
+  - `ConsInfo{Head Info, Tail Info}` — chains multiple info objects together
+  The Go Silver AST must model these: `NodeInfo` is stored alongside a `VprInfo interface`
+  that represents the Viper-level info chain (`NoInfo | AnnotationInfo | ConsInfo`).
+  `SilverBridge.java` exposes methods to construct each type (see plan 16).
 
 ## Deliverables
 

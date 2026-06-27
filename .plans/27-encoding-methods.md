@@ -93,3 +93,24 @@ flags, not soundness caveats that users need to read before writing specs).
 method parameters passed by reference (`Ref`). The closure's Silver method takes these as extra
 `Ref` arguments alongside the explicit parameters. Study `ClosureEncoding.scala` in the Scala
 translator for the exact lifting strategy before implementing.
+
+**`opaque` pure functions (resolved):** The `opaque` modifier is only valid on `pure`
+functions and `pure` methods — the type checker (plan 09) enforces this. The encoding is:
+
+1. **Function declaration**: emit a Silver `Function` exactly as for a non-opaque pure
+   function, but attach an `@opaque` backend annotation to its `Info` chain:
+   ```
+   info = ConsInfo(AnnotationInfo{"opaque", []}, NodeInfo{...})
+   ```
+   Silicon treats `@opaque` functions as unfolded only at explicitly `reveal`ed call sites;
+   callers otherwise see only the spec.
+
+2. **Call sites with `reveal f(args)`**: the internal AST carries `reveal=true` on
+   `PureFunctionCall` / `PureMethodCall` nodes (set by the desugarer from the `reveal`
+   keyword). The translator attaches `@reveal` to the Silver `FuncApp`'s `Info` chain:
+   ```
+   info = ConsInfo(AnnotationInfo{"reveal", []}, NodeInfo{...})
+   ```
+
+The Silver `ConsInfo` / `AnnotationInfo` types must be defined in the Go Silver AST (plan 14)
+and constructable via `SilverBridge.java` `makeAnnotationInfo` / `makeConsInfo` methods (plan 16).

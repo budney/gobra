@@ -42,8 +42,9 @@ sub-slicing).
 **Exclusive `[]T°`**: a value of the parametric Silver domain `Slice[T]`, which is a 4-tuple
 `(array: Array[T], offset: Int, len: Int, cap: Int)` with domain functions:
 - `sarray(s: Slice[T]): Array[T]`, `soffset(s)`, `slen(s)`, `scap(s)`
-- `sconstruct(a, offset, len, cap): Slice[T]` — Viper function with pre/postconditions
-  fixing projections to arguments
+- `sconstruct(a, offset, len, cap): Slice[T]` — Viper **function** (pure, no body) with
+  pre/postconditions fixing projections to arguments; falls under the bodyless-function
+  invariant from plan 19 — every postcondition must match the Scala implementation exactly
 - `nilSlice_{T}(): Slice[T]` — the nil slice per element type
 - Sub-slicing operations: `ssliceFromSlice(s, lo, hi)`, `sfullSliceFromSlice(s, lo, hi, max)`,
   `ssliceFromArray(a, lo, hi)`, `sfullSliceFromArray(a, lo, hi, max)`

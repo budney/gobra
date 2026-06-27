@@ -49,6 +49,22 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - **Error accumulation**: If one package fails to parse or resolve, record the error and
   continue resolving other packages where possible. Report all errors at the end rather than
   stopping at the first failure.
+- **Stub package resolution (resolved):** In the Scala Gobra, stub packages use *standard Go
+  import paths* (e.g., `"sync"`, `"fmt"`) and shadow the real stdlib: the resolver searches
+  `stubs/` directories before GOPATH, so `import "sync"` resolves to `stubs/sync/*.gobra`
+  rather than the real Go `sync` package.
+
+  The Go-Gobra equivalent: implement a custom `types.Importer` (required by plan 10 for
+  `go/types.Check`) that checks the embedded stubs directory *first* for every import path.
+  If `stubs/<importPath>/` contains any `.gobra` files, load and return those (as a virtual
+  `*types.Package` built from the stub's exported declarations). Otherwise, fall through to
+  `go/packages` for real Go packages. This custom importer is shared between the package
+  resolver and the type checker (plan 10).
+
+  The `BuiltInImport` package (Gobra's own built-in declarations, separate from stdlib stubs)
+  is resolved via a special sentinel import path `"gobra/builtin"` that always maps to the
+  embedded `builtin/` directory — never to a real Go package.
+
 - Built-in stubs (Go stdlib ghost specs) ship as embedded resources in the Go binary using
   `//go:embed`; they are parsed the same way as user packages.
 - The resolver produces a `PackageInfo` list in topological order: each entry is

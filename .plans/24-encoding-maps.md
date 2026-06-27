@@ -28,9 +28,6 @@ Implement the encoding of Go map types into Silver.
   `isComparable` predicate are defined by the interface encoding and emitted at every map lookup
   and key-in-map check; plan 24 cannot emit correct Silver without plan 25 having run first
 
-Note: the WBS in plan 00 lists only `19` as a dependency of plan 24; this was incorrect.
-The actual minimum is `19, 25`.
-
 ## Reference: Current Gobra
 
 - `src/main/scala/viper/gobra/translator/encodings/maps/` — map encoding
