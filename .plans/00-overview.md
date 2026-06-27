@@ -99,6 +99,15 @@ self-hosting: Go-Gobra verifies its own source code.
 | [36-self-hosting-annotations.md](36-self-hosting-annotations.md) | Self-Hosting: Write Specs | 35 |
 | [37-self-hosting-verify.md](37-self-hosting-verify.md) | Self-Hosting: Achieve Verification | 36 |
 
+## Reference Documents (not implementation plans)
+
+These files have no Objective/Scope/Deliverables — they provide background context only.
+
+| File | Purpose |
+|------|---------|
+| [CONTEXT.md](CONTEXT.md) | Project orientation for new contributors and AI agents |
+| [DECISIONS.md](DECISIONS.md) | Log of resolved architectural decisions (D1–D11+) |
+
 ## Key Reference: Current Gobra Pipeline
 
 ```

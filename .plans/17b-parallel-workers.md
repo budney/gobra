@@ -18,8 +18,9 @@ not a concurrent development.
 - Expand `WorkerPool` (plan 15) from `poolSize=1` to configurable `poolSize=N`
 - Dispatch layer: given `[]*silver.Program` from the chopper (plan 16b), submit each
   sub-program to an available pool worker; await all results
-- Each pool worker initializes its own `SiliconFrontendAPI` at pool startup and reuses it
-  across jobs (matching plan 17's "warm path" design; do not init/stop Silicon per job)
+- Each pool worker initializes its own Silicon instance (a SiliconFrontendAPI, defined in
+  plan 17) at pool startup and reuses it across jobs (matching plan 17's "warm path" design;
+  do not init/stop Silicon per job)
 - Result merging: success iff all sub-programs succeed; errors accumulated across all workers
 - Error deduplication: shared members (fields, domains, predicate signatures) appear in
   multiple sub-programs and may produce duplicate errors; deduplicate by `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`

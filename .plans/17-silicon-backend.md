@@ -25,6 +25,16 @@ return structured verification results (success or a list of errors with positio
 ## Dependencies
 
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — provides the Java Silver AST object
+- [15-jni-setup.md](15-jni-setup.md) — `WorkerPool` that invokes `Verify`; establishes the
+  thread-locking contract that `Verify` relies on
+
+## Threading Precondition
+
+`Verify` makes JNI calls and **must be invoked from a goroutine that has already called
+`runtime.LockOSThread()` and `jvm.AttachCurrentThread()`**. This precondition is established
+by the `WorkerPool` worker goroutines defined in plan 15 (and expanded in plan 17b). `Verify`
+itself does not call `LockOSThread` — callers are responsible. Violating this precondition
+will corrupt JNI thread state and crash the JVM.
 
 ## Relationship to Chopping and Parallelism
 

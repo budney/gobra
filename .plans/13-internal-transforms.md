@@ -38,16 +38,20 @@ edge annotation.
 
 ## Key Implementation Notes
 
-- Each transform is a function `*internal.Program → *internal.Program` (returns a new tree; the internal AST is immutable — see Resolved Questions below)
+- Each transform is a function `(*internal.Program, []Diagnostic) → (*internal.Program, []Diagnostic)` (returns a new tree plus accumulated diagnostics; the internal AST is immutable — see Resolved Questions below)
 - Transforms are composed in a fixed order: constant propagation → call graph edges → overflow → termination
 - The call graph construction for termination requires a fixed-point analysis over mutually
   recursive functions
+- Diagnostics from each transform are appended to the accumulator; all transforms run even
+  when earlier ones emit diagnostics (the pipeline abort rule in `00-overview.md` applies at
+  the stage boundary, not inside the transform chain)
 
 ## Deliverables
 
 - `internal/transform/` package with one file per transform
-- `internal/transform/pipeline.go` — `Apply(prog *internal.Program, cfg Config) *internal.Program`
-- Tests: verify that overflow assertions are inserted correctly; verify constant folding
+- `internal/transform/pipeline.go` — `Apply(prog *internal.Program, cfg Config) (*internal.Program, []Diagnostic)`
+- Tests: verify that overflow assertions are inserted correctly; verify constant folding;
+  verify that a diagnostic-producing transform does not suppress output from subsequent transforms
 
 ## Resolved Questions
 

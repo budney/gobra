@@ -61,6 +61,10 @@ good first target — it's a pure function with no heap allocation beyond string
 - Gobra annotations throughout `internal/` and `cmd/` packages
 - Ghost helper library in `internal/ghost/` (predicates, lemmas)
 - Document which properties are proved vs. trusted
+- **Validation**: run `scala-gobra -i internal/...` (Phase 1) and confirm zero verification
+  errors on each annotated module before moving to the next. Each module must pass in
+  isolation using Scala Gobra as the verifier before the full-program self-hosting run in
+  plan 37.
 
 ## Unsafe Operations
 
