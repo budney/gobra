@@ -82,9 +82,16 @@ or not associated with any Go declaration) and by their leading keyword. The par
 dispatch on the first token of each `//@ ` block at file scope to determine whether it is an
 inline spec clause or a top-level ghost declaration.
 
-## Open Questions
+## Resolved Questions
 
-- Should the annotation parser produce a separate AST that is later merged into the frontend AST,
-  or should it produce frontend AST nodes directly? Direct production is simpler.
-- How to handle annotations that span constructs (e.g., a `requires` on a method vs. on a
-  closure literal)? Let the type checker sort it out; the parser just produces nodes.
+**Separate AST vs. direct frontend AST production (resolved):** The annotation parser produces
+frontend AST specification nodes directly (the types defined in plan 03 — `PFunctionSpec`,
+`PAssertion`, `PGhostStatement`, etc.). There is no intermediate annotation-specific AST that
+is merged in a later pass. Direct production is simpler: fewer types to define, no merge step,
+and error positions are attached to nodes at the point of construction.
+
+**Annotations spanning constructs (resolved):** The parser does not attempt to resolve which
+construct an annotation belongs to. It produces nodes and attaches them to the enclosing AST
+scope by source position. The type checker (plan 09) is responsible for validating structural
+constraints — e.g., that `requires` appears only on function/method declarations, that
+`invariant` appears only in loop bodies, and that `old(e)` appears only in postconditions.

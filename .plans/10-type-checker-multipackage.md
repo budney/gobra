@@ -47,54 +47,52 @@ verified as a whole.
 
 ## Deliverables
 
-- `ExternalTypeInfo` interface and implementation, including `Serialize() ([]byte, error)`
-  and the package-level `DeserializeExternalTypeInfo` + `ErrStaleCacheEntry` (see Resolved
-  Questions above for signatures)
+- `ExternalTypeInfo` interface and implementation
+- `Serialize() ([]byte, error)` and `DeserializeExternalTypeInfo` / `ErrStaleCacheEntry`
+  as **stubs only** in this plan (see note below)
 - Custom `types.Importer` bridging the package resolver to `go/types.Check`
 - Integration with 08's symbol table to expose imported symbols (both Go and ghost)
 - Commented-out `// TODO: cache` insertion point in the type-checker after each package
   completes (see Resolved Questions)
 - Tests:
   - Multi-package regression tests from `src/test/resources/regressions/`
-  - Round-trip unit test: type-check a small multi-package program, serialize the
-    `ExternalTypeInfo` of the dependency package, deserialize it, and verify the result is
-    equal to the original (same exported symbols, same ghost declarations). This test validates
-    the serialization format without requiring a live disk cache.
+
+**Serialization stub note:** The `Serialize()` and `DeserializeExternalTypeInfo` functions
+are delivered as stubs in this plan:
+
+```go
+func (e *externalTypeInfo) Serialize() ([]byte, error) {
+    return nil, errors.New("ExternalTypeInfo serialization not yet implemented")
+}
+
+func DeserializeExternalTypeInfo(data []byte, sourceHashes map[string][32]byte) (ExternalTypeInfo, error) {
+    return nil, ErrStaleCacheEntry
+}
+```
+
+The concrete format (magic number, version fields, SHA-256 hashes) is deferred until a disk
+cache caller exists to drive the design. The `// TODO: cache` insertion point is present so
+the call site is already wired; the stubs ensure the `ErrStaleCacheEntry` fallback path is
+exercised from day one. Implement the real serialization format when adding the disk cache.
+Do not write a round-trip unit test until the format is non-stub; a test of the stub would
+only verify that `Serialize` returns an error.
 
 ## Resolved Questions
 
-**Caching (resolved):** Implement the `ExternalTypeInfo` serialization interface as a
-deliverable in this plan, but defer the disk-cache implementation to a later optimization
-pass. Rationale: Silicon/Z3 time dominates verification time by orders of magnitude;
-type-checking time is negligible in comparison. The cache introduces asymmetric correctness
-risk — a stale hit silently skips type errors — and the invalidation logic is non-trivial.
-The serialization interface is the hard design question; once it exists, the cache
-implementation is mechanical.
+**Caching (resolved):** Defer the disk-cache implementation to a later optimization pass.
+Rationale: Silicon/Z3 time dominates verification time by orders of magnitude; type-checking
+time is negligible in comparison. The cache introduces asymmetric correctness risk — a stale
+hit silently skips type errors — and the invalidation logic is non-trivial.
 
-**`ExternalTypeInfo` serialization interface (add to deliverables):**
+**`ExternalTypeInfo` serialization (resolved):** Deliver `Serialize()` and
+`DeserializeExternalTypeInfo` as stubs in this plan (see Deliverables). The concrete wire
+format — magic number, Go-Gobra version, Silver version string, SHA-256 source hashes — is
+deferred until a disk-cache caller exists to drive the design. When the cache is added, update
+the stubs to the real format and add a round-trip unit test (serialize → deserialize →
+compare). Do not design or test the format now; a test of the current stubs would only verify
+that `Serialize` returns an error.
 
-```go
-// Serialize encodes the ExternalTypeInfo to a portable, versioned byte
-// representation. The format is self-describing: it includes a magic number,
-// a Go-Gobra format version, the Silver version string (from the ViperServer
-// JAR manifest), and the SHA-256 content hashes of all source files that
-// were type-checked to produce this ExternalTypeInfo.
-//
-// Stale entries are detected at deserialization time: if the format version,
-// Silver version, or content hashes do not match, DeserializeExternalTypeInfo
-// returns ErrStaleCacheEntry and the caller must re-type-check.
-Serialize() ([]byte, error)
-
-// DeserializeExternalTypeInfo reconstructs an ExternalTypeInfo from bytes
-// previously produced by Serialize. Returns ErrStaleCacheEntry if the format
-// version or Silver version does not match, or if any source file hash in the
-// serialized data does not match the current file content.
-func DeserializeExternalTypeInfo(data []byte, sourceHashes map[string][32]byte) (ExternalTypeInfo, error)
-
-var ErrStaleCacheEntry = errors.New("cache entry is stale or from a different version")
-```
-
-The cache insertion point in the type-checker implementation is a single function call after
+**`// TODO: cache` insertion point:** The type-checker leaves one commented-out block after
 type-checking each package:
 
 ```go
@@ -103,6 +101,5 @@ type-checking each package:
 // _ = os.WriteFile(cachePath, eti, 0644)
 ```
 
-Leave this as a commented-out `// TODO: cache` block. The serialization interface is tested
-by a round-trip unit test (serialize → deserialize → compare), not by an end-to-end cache
-test. Do not implement the disk cache until profiling shows type-checking is a bottleneck.
+This is the only change needed in the type-checker to wire a future cache. Do not implement
+the disk cache until profiling shows type-checking is a bottleneck.

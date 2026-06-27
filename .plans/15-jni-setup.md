@@ -78,14 +78,60 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
 - `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(prog *silver.Program) *VerificationResult` (blocking — callers provide their own goroutines for parallelism; see plan 17b); `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
-- Worker goroutine template: `runtime.LockOSThread()` at startup, `AttachCurrentThread`, request loop, `DetachCurrentThread` on exit
+- Worker goroutine template — the inner loop of each worker executes the full
+  Build → Verify → Close chain on the JNI-attached OS thread:
+
+  ```go
+  func runWorker(jvm *JVM, siliconCfg SiliconConfig, jobs <-chan workerJob) {
+      runtime.LockOSThread()
+      jvm.AttachCurrentThread()
+      defer jvm.DetachCurrentThread()
+
+      // Warm Silicon instance: initialized once per worker, reused across jobs.
+      // Pass via SiliconConfig.Instance (plan 17) to avoid re-initialization.
+      silicon := newSiliconFrontendAPI(jvm)
+      silicon.initialize(siliconCfg.Args)
+      defer silicon.stop()
+
+      builder := silver.NewBuilder(jvm)
+
+      for job := range jobs {
+          // Build: Go Silver structs → Java Silver objects (plan 16)
+          built, err := builder.Build(job.prog, jvm)
+          if err != nil {
+              job.result <- &VerificationResult{Err: err}
+              continue
+          }
+          // Verify: call Silicon with the Java Silver program object (plan 17)
+          result := silicon.verify(built.JavaObject)
+          result.NodeMap = built.NodeMap  // carry nodeMap to caller for Reporter
+          // Close: release JNI global refs AFTER result is sent (caller reads NodeMap)
+          // Caller (DispatchChopped or Submit) must call built.Close() after Report().
+          job.built = built   // returned so caller can Close() after Report()
+          job.result <- result
+      }
+  }
+  ```
+
+  The `workerJob` struct carries `prog *silver.Program`, a `result chan *VerificationResult`,
+  and a `built *BuiltProgram` return slot. `Submit` sends the job, blocks on `result`, then
+  calls `built.Close()` after the caller's `Report()` returns. This is the only correct
+  ordering; see plan 16 for the `Close()` contract.
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns
   a non-empty string; confirm probe succeeds under a jenv-managed `JAVA_HOME`
 
-## Open Questions
+## Resolved Questions
 
-- Should the JVM be a global singleton (one per Go-Gobra process) or allow multiple instances?
-  JNI only supports one JVM per process; singleton is correct.
-- CGo complicates cross-compilation; document this limitation explicitly in the README.
+**JVM singleton (resolved):** JNI supports at most one JVM per OS process. `JNI_CreateJavaVM`
+returns an error if called a second time in the same process. Go-Gobra therefore uses a
+process-wide JVM singleton: `jvm.Start()` creates it on first call and subsequent calls return
+the existing instance. Expose it via a package-level `var` (not a struct field) so all callers
+share the same instance without threading it through the call graph. `jvm.Stop()` is called
+once at process exit via `defer` in `main`.
+
+**CGo and cross-compilation (resolved):** CGo is required (jnigi depends on it). Cross-
+compilation is limited to target platforms where a JVM is available. Document in the README:
+"Go-Gobra requires CGo and cannot be cross-compiled to platforms without JVM support. Set
+`CGO_ENABLED=1` (the default) when building."

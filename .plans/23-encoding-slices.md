@@ -85,6 +85,36 @@ sizes or element types generate separate `box/unbox` function pairs.
 
 **Resolved**: slices use the `Slice[T]` domain (not `Seq`); exclusive arrays use `Seq[T]` (not the `Array[T]` domain).
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference: `src/main/scala/viper/gobra/translator/encodings/slices/`
+and `src/main/scala/viper/gobra/translator/encodings/arrays/`.
+
+### Slice bodyless functions
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| `sconstruct_{T}(a: Array[T], offset, len, cap: Int): Slice[T]` | `0 <= offset`, `0 <= len`, `len <= cap` | `sarray(result) == a`, `soffset(result) == offset`, `slen(result) == len`, `scap(result) == cap` | `SliceEncoding.scala` |
+| `nilSlice_{T}(): Slice[T]` | none | `slen(result) == 0`, `scap(result) == 0` | `SliceEncoding.scala` |
+| `ssliceFromSlice_{T}(s: Slice[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= slen(s)` | `slen(result) == hi - lo`, `scap(result) == scap(s) - lo - soffset(s)` — verify exact form against Scala | `SliceEncoding.scala` |
+| `sfullSliceFromSlice_{T}(s: Slice[T], lo, hi, max: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= max`, `max <= scap(s)` | `slen(result) == hi - lo`, `scap(result) == max - lo` — verify exact form | `SliceEncoding.scala` |
+| `ssliceFromArray_{T}(a: Array[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= alen(a)` | `slen(result) == hi - lo`, `sarray(result) == a`, `soffset(result) == lo` — verify | `SliceEncoding.scala` |
+| `sfullSliceFromArray_{T}(a, lo, hi, max): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= max`, `max <= alen(a)` | `slen(result) == hi - lo`, `scap(result) == max - lo` — verify | `SliceEncoding.scala` |
+
+### Array bodyless functions (per `(n, T)` pair)
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| `box_{n}_{T}(x: Seq[T]): BoxedArray` | `\|x\| == n` | `unbox_{n}_{T}(result) == x` | `ArrayEncoding.scala` |
+| `unbox_{n}_{T}(y: BoxedArray): Seq[T]` | none | `\|result\| == n` | `ArrayEncoding.scala` |
+| `arrayConversion_{n}_{T}(x: Array[T]): Seq[T]` | `acc(x, wildcard)`, `alen(x) == n` | `\|result\| == n`, `forall i :: 0 <= i < n ==> result[i] == loc(x, i)` — verify | `ArrayEncoding.scala` |
+| `arrayDefault_{n}_{T}(): Seq[T]` | none | `\|result\| == n`, `forall i :: 0 <= i < n ==> result[i] == dflt(T)` — verify | `ArrayEncoding.scala` |
+
+**Audit checklist:** For each row, verify every postcondition against the Scala source.
+Mark each row ✓ when confirmed. This is the highest-risk encoding in the system; missing
+postconditions on bodyless slice functions are the most likely source of silent unsoundness.
+
 ## Deliverables
 
 - `internal/translator/encodings/slices.go` — `Slice[T]` domain + all slice operations

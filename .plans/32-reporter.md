@@ -46,11 +46,19 @@ diagnostic output.
 
 ## Deliverables
 
-- `internal/reporting/reporter.go` — `Report(result *VerificationResult, info *TypeInfo) []Diagnostic`
+- `internal/reporting/reporter.go` — `Report(result *VerificationResult, nodeMap map[uintptr]*silver.Node, info *TypeInfo) []Diagnostic`
 - `Diagnostic` type: `{File, Line, Col, Message, Category}`
 - Text formatter and JSON formatter
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
+
+**Note on the `nodeMap` parameter:** `nodeMap` is the `BuiltProgram.NodeMap` from plan 16,
+populated during `Build()`. It maps JNI `jobject` pointers (as `uintptr`) to the
+corresponding `*silver.Node` Go structs. The reporter uses it to resolve `offendingNode`
+(a Java object returned by Silicon) back to a `NodeInfo` carrying Go source position and tag.
+`Report` must be called before `BuiltProgram.Close()` — see plan 16 for the correct call
+ordering. Callers in plan 33 (`pipeline.go`) and plan 17b (`dispatch.go`) must pass
+`built.NodeMap` explicitly; it is not stored globally.
 
 ## Error Backtranslation Design
 

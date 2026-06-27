@@ -29,6 +29,27 @@ for concurrent communication; their verification requires modeling ownership tra
 - `src/main/scala/viper/gobra/translator/encodings/channels/` — channel encoding
 - `src/main/scala/viper/gobra/translator/encodings/programs/` — goroutine encoding
 
+## Important Limitation: No Automatic Soundness for Concurrent Code
+
+**All channel and goroutine verification in Go-Gobra depends entirely on user-supplied ghost
+predicates.** Go-Gobra does not automatically encode Go's memory model, happens-before
+guarantees, or channel communication protocols in Silver axioms. A concurrent Go program with
+channels but without `SendChannel`/`RecvChannel`/`SendGivenPerm`/`RecvGotPerm` predicate
+annotations will pass Go-Gobra's channel encoding with no errors — not because it is
+correct, but because there is nothing to check.
+
+**Consequence for users:** Concurrent programs verified by Go-Gobra are only as sound as
+their ghost predicate annotations. An under-annotated concurrent program can pass verification
+while containing data races or protocol violations. Document this prominently in:
+- The README ("Concurrency Verification" section)
+- A `KNOWN_LIMITATIONS.md` file at the repo root
+- The `--help` output for any flag that affects concurrent verification
+
+**Consequence for self-hosting (plan 36/37):** Go-Gobra uses goroutines internally (the JNI
+worker pool, plan 15). These goroutines must either be annotated with the full permission
+protocol or marked `//@ trusted` at the package boundary. Marking `internal/backend/jvm/`
+as trusted (plan 36) is the expected approach; document the reason.
+
 ## Proposed Approach (from Scala source analysis)
 
 **Channel type encoding (resolved):**

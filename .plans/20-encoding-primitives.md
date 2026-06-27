@@ -73,6 +73,34 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 
 **`byte` / `rune`:** Aliases for `uint8` / `int32` respectively; use those encodings.
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference: `src/main/scala/viper/gobra/translator/encodings/`
+(look for integer and string encoding files).
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| `goIntDiv(l, r: Int): Int` | `r != 0` | Truncation semantics: `result == l - r * (if l >= 0 && r > 0 \|\| l <= 0 && r < 0 then l / r else -((-l) / r))` — verify exact form against Scala | Integer encoding |
+| `goIntMod(l, r: Int): Int` | `r != 0` | `result == l - r * goIntDiv(l, r)` | Integer encoding |
+| `bitwiseAnd(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
+| `bitwiseOr(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
+| `bitwiseXor(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
+| `bitwiseAndNot(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
+| `shiftLeft(l, r: Int): Int` | `r >= 0` | none (uninterpreted) | Integer encoding |
+| `shiftRight(l, r: Int): Int` | `r >= 0` | none (uninterpreted) | Integer encoding |
+| `strSlice(s, lo, hi: Int): Int` | `0 <= lo && lo <= hi` | `strLen(result) == hi - lo` — verify exact postconditions against Scala | String encoding |
+
+**Audit checklist:** For each row, open the Scala source file named in the reference column,
+find the bodyless function definition, and confirm every postcondition in the Go implementation
+matches exactly. Mark each row ✓ when confirmed. Do not mark this encoding complete until all
+rows are checked.
+
+**Uninterpreted bitwise/shift functions:** These have NO postconditions by design — the
+SMT solver treats them as opaque. This means proofs involving bitwise operations will not
+go through unless the user adds `//@ assume` or the spec avoids bitwise results. Document
+this limitation in `KNOWN_LIMITATIONS.md`.
+
 ## Deliverables
 
 - `internal/translator/encodings/primitives.go` (integers, booleans, floats, byte, rune)

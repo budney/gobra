@@ -59,6 +59,47 @@ method M(r: Ref, x: Int) returns (y: Bool)
 { ... }
 ```
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference:
+`src/main/scala/viper/gobra/translator/encodings/` (function/method encoding files).
+
+Two categories of bodyless Silver constructs arise in this plan:
+
+### `trusted` Go functions
+
+A Go function marked `//@ trusted` emits a Silver Method or Function with no body — only
+its preconditions and postconditions, exactly as the user wrote them. There are no
+translator-generated postconditions to audit here; correctness is the user's responsibility.
+The translator must ensure:
+- A `trusted` Silver method has `body = None` (passed as `null` to `SilverBridge.makeMethod`)
+- No synthetic assertions are injected into a `trusted` method body
+- The `NodeInfo` tag is `"trusted"` so the reporter can identify errors from trusted specs
+
+### `opaque` pure Go functions
+
+An `opaque` Go function emits a Silver Function with a body (the function definition), but
+Silicon treats it as uninterpreted at call sites without `reveal`. The Silver function IS
+given a body; it is not bodyless in the Silver sense. The `@opaque` info annotation causes
+Silicon to hide the body from callers. No additional postconditions beyond what the user
+wrote are generated. This is NOT subject to the bodyless-function invariant from plan 19.
+
+### Translator-generated Silver functions with no body
+
+If the method encoding generates any bodyless Silver functions (e.g., for closure lifting or
+method-value encoding), they must be listed here with their required postconditions. At the
+time of writing, no such functions are anticipated beyond what is already covered by plans 20
+and 23–25. If any are discovered during implementation, add them to this table:
+
+| Function | Preconditions | Required postconditions | Scala reference |
+|----------|--------------|-------------------------|-----------------|
+| _(none anticipated — update if found)_ | | | |
+
+**Audit checklist:** Confirm no translator-generated bodyless Silver functions arise from
+this plan beyond `trusted` functions (user-specified specs). If any are found, add them to
+the table above and verify against the Scala source before marking this encoding complete.
+
 ## Deliverables
 
 - `internal/translator/encodings/methods.go`

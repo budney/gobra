@@ -58,7 +58,13 @@ process in a second pass.
 - Tests: parse a representative set of `.go` and `.gobra` files from
   `src/test/resources/regressions/` and verify the AST shape
 
-## Open Questions
+## Resolved Questions
 
-- How to handle Gobra ghost type declarations in `.gobra` files that aren't valid Go? The
-  Gobrafier should strip or transform them first; confirm the handoff contract.
+**Ghost type declarations in `.gobra` files (resolved — see plan 06):** The Gobrafier
+handles `.gobra` files with a dedicated transformation mode: ghost top-level constructs
+(`adt`, `ghost func`, `pred`) are converted into `//@ ...` comment blocks plus blank Go stubs,
+producing output that is valid Go and parseable by `go/parser`. This parser (plan 04) therefore
+never sees raw `.gobra`-specific syntax; it always receives Gobrafier-preprocessed input.
+The full handoff contract — including which constructs are transformed and how line counts are
+preserved — is specified in plan 06 ("For `.gobra` files (resolved)" and "Position Mapping
+Strategy").

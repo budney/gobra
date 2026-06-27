@@ -63,6 +63,23 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
 
 - `internal/backend/silicon/silicon.go` — `Verify(prog jobject, cfg SiliconConfig) (*VerificationResult, error)`
 - `VerificationResult` Go type: success flag + slice of `VerificationError{Pos, FullID, Message, Reason}`
+- `SiliconConfig` struct, including a `Instance *SiliconFrontendAPI` field for the warm path:
+
+  ```go
+  type SiliconConfig struct {
+      Args     []string           // Silicon startup flags (Z3 path, timeout, etc.)
+      Instance *SiliconFrontendAPI // non-nil: reuse this already-started instance (warm path)
+                                   // nil: start a fresh Silicon instance (cold path)
+  }
+  ```
+
+  When `Instance` is non-nil, `Verify` skips `silicon.initialize(cfg.Args)` and uses the
+  provided instance directly. When `Instance` is nil, `Verify` calls `initialize` and `stop`
+  around the verification call (cold path; slower, used only for one-off invocations).
+  The test infrastructure (`TestMain` in plan 34) creates one `SiliconFrontendAPI`, starts it
+  once, and passes it as `Instance` in every test call. This is the primary motivation for the
+  warm-path design.
+
 - Silicon initialization and teardown integrated with JVM lifecycle (15)
 - Tests: verify a trivially correct Silver program → expect Success; verify a trivially
   incorrect one → expect Failure with at least one error

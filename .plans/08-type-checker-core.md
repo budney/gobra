@@ -95,8 +95,6 @@ been caught as a "type not found" error earlier.
 This two-stub-pass approach handles all patterns the Scala checker handles, including
 self-recursive ADTs (`adt Tree { Leaf{}; Node{left Tree; right Tree} }`).
 
-## Resolved Questions
-
 **Ghost types with no `go/types` representation (resolved):** Define a `GhostType` interface
 extending `types.Type` (implementing `Underlying() types.Type` and `String() string`).
 Concrete implementations:

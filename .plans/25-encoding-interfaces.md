@@ -126,6 +126,34 @@ for each implementing type `T`.
 
 **Nil interface:** `tuple2(null, nilType())` where `nilType()` is a domain function.
 
+## Bodyless Functions
+
+Per plan 19: every bodyless Viper function must be verified against the Scala source before
+this encoding is considered complete. Scala reference:
+`src/main/scala/viper/gobra/translator/encodings/interfaces/`.
+
+Interface methods encoded as Silver functions (pure interface methods, not concrete
+implementations) are bodyless. Each such function has postconditions of the form:
+`typeOf(recv) == T_Type() ==> result == proof_{T}_{I}_{M}(valueOf(recv, T), args)` for each
+implementing type `T`. The exact postcondition set for a given interface method grows as
+implementing types are added; the encoding module must emit one postcondition clause per
+known implementor.
+
+| Item | Nature | Required postconditions | Scala reference |
+|------|--------|-------------------------|-----------------|
+| Silver function for pure interface method `I.M` | Bodyless Silver function | One clause per implementing type (see above) — verify clause shape against Scala | `InterfaceEncoding.scala` |
+| `Poly[T].box` / `Poly[T].unbox` | Domain functions (axioms, not postconditions) | Round-trip axiom: `forall x: T :: {box(x)} unbox(box(x)) == x` — verify this is the only axiom (no converse) | `InterfaceEncoding.scala` |
+
+**`Poly[T]` domain functions note:** `box` and `unbox` are Silver domain functions, not
+Silver functions, so they are governed by domain axioms rather than pre/postconditions.
+The "bodyless functions" invariant from plan 19 does not apply to them directly, but the
+axiom content is equally critical for soundness. Verify the axiom set (one round-trip axiom,
+no converse) against the Scala source before marking this encoding complete.
+
+**Audit checklist:** For each pure interface method encoded, verify the postcondition clause
+shape matches the Scala `InterfaceEncoding.scala`. Verify `Poly[T]` has exactly one axiom
+(round-trip, no converse). Mark ✓ when confirmed.
+
 ## Deliverables
 
 - `internal/translator/encodings/interfaces.go`

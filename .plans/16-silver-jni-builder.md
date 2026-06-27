@@ -147,16 +147,25 @@ constructed objects to prevent the JVM from GC'ing them during verification.
   }
 
   // Close releases all JNI global references held for the Java Silver objects.
-  // Must be called after Silicon has finished verifying this program AND after
-  // the reporter has completed all NodeMap lookups. Calling Close while the
-  // reporter is still running is a data race. Typically called in a defer
-  // immediately after Verify() returns:
+  // Must be called after BOTH:
+  //   1. Silicon has finished verifying (Verify() has returned), AND
+  //   2. The reporter has completed all NodeMap lookups (Report() has returned).
+  //
+  // After Close() returns, NodeMap entries are invalid and must not be accessed.
+  // Close() must NOT be called concurrently with any NodeMap lookup — doing so
+  // is a data race.
+  //
+  // Correct usage pattern (defer fires after both Verify and Report return):
   //
   //   built, err := builder.Build(prog, jvm)
   //   if err != nil { ... }
-  //   defer built.Close()
+  //   defer built.Close()                              // runs after Report() returns
   //   result := silicon.Verify(built.JavaObject, cfg)
   //   diagnostics := reporter.Report(result, built.NodeMap, info)
+  //   return diagnostics  // defer fires here, after Report() has completed
+  //
+  // Do NOT call Close() in a separate goroutine or before Report() returns,
+  // even if Verify() has already returned.
   func (b *BuiltProgram) Close()
   ```
 
@@ -184,8 +193,12 @@ To prevent silent breakage:
 - When the `viperserver/` submodule is updated, re-running `make SilverBridge.jar` is
   mandatory; document this in the repo README.
 
-## Open Questions
+## Resolved Questions
 
-- Should `SilverBridge.java` define one method per Silver node type, or group them
-  (e.g., one method for all statement types with a discriminant)? One method per type is
-  verbose but type-safe and easy to extend.
+**One method per Silver node type vs. grouped (resolved):** `SilverBridge.java` defines one
+static method per Silver node type. Grouping (e.g., a single `makeStmt` with a discriminant
+integer) would require casting on both sides and loses the type-safety that makes JNI code
+auditable. One method per type is verbose (~150 lines for the full Silver AST) but each
+method is trivially correct, independently testable, and easy to extend when a new Silver node
+type is needed. Name each method `make{NodeType}` (e.g., `makeMethod`, `makeSeqn`,
+`makeFuncApp`) for consistency.

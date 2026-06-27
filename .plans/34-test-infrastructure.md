@@ -49,6 +49,24 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 - `tests/regression_test.go` — Go test file that plugs the runner into `go test`
 - Documentation on how to add new test cases
 
+### Required output format for skip-list integration (plan 35 depends on this)
+
+The runner must emit the following sentinel lines to stdout for the `prune-skips` Makefile
+target (plan 35) to function correctly:
+
+```
+UNEXPECTED_PASS: tests/testdata/regressions/features/generics/basic.gobra
+UNEXPECTED_FAIL: tests/testdata/regressions/features/foo/bar.gobra
+```
+
+- `UNEXPECTED_PASS:` — emitted when a test is in `skip.txt` but passes (stale skip entry).
+- `UNEXPECTED_FAIL:` — emitted when a test is NOT in `skip.txt` but fails (regression).
+
+Both are emitted in addition to the normal `go test` output (not instead of it). The
+`prune-skips` target greps for `UNEXPECTED_PASS:` lines; CI failure checks grep for
+`UNEXPECTED_FAIL:` lines. Do not use any other prefix for these sentinel lines — the
+`prune-skips` implementation and CI scripts depend on exact string matching.
+
 ## Resolved Questions
 
 **Differential testing cadence (resolved):** Differential testing against Scala Gobra runs

@@ -136,7 +136,9 @@ on bodyless Viper functions silently weaken verification. This affects plans 20,
 **D4 is resolved.** After completing 01 (project setup), all of the following are unblocked
 and independent of each other:
 - 03 (Frontend AST)
-- 05 (Annotation Parser) — previously blocked on D4; now unblocked
+- 05 (Annotation Parser) — **design is unblocked** (D4/plan 02 resolved the grammar); but
+  **implementation is blocked on 03** (the parser produces 03's node types — `PFunctionSpec`,
+  `PAssertion`, etc. — which must be defined first). Do not start coding 05 until 03 is done.
 - 06 (Gobrafier)
 - 11 (Internal AST)
 - 14 (Silver IR)

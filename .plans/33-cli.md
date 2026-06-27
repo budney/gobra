@@ -19,6 +19,14 @@ status code.
   - Performance: `--parallelizeBranches` (see note below), `--cacheFile`
 - Pipeline orchestration: Gobrafier → Parser → Type Checker → Desugarer → Transforms →
   Translator → JNI Backend → Reporter
+- **`{pkg}_run_inits` invocation**: after translation, and before dispatching to Silicon,
+  the pipeline must invoke the synthesized `{pkg}_run_inits` Silver method for each package
+  in dependency order (innermost dependencies first). This drives verification of all `init`
+  functions. See plan 27 ("init function encoding") for the Silver method naming convention.
+  Concretely: `internal/pipeline/pipeline.go` calls the translator to get a `*silver.Program`,
+  then prepends a `MethodCall` to `{pkg}_run_inits` at the start of the verification entry
+  point for each package. If the program has no `init` functions, `{pkg}_run_inits` is an
+  empty Silver method and the call is a no-op; emit it anyway to keep the logic uniform.
 - Exit code: 0 on verification success, non-zero on failure or error
 - `--printViper`: print the generated Silver text (using the Silver printer from 14) without
   verifying; useful for debugging

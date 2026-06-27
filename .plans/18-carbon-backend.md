@@ -33,7 +33,11 @@ working.
 - `internal/backend/carbon/carbon.go` — `Verify(prog jobject, cfg CarbonConfig) (*VerificationResult, error)`
 - Both Silicon and Carbon implement a common `Backend` interface
 
-## Open Questions
+## Resolved Questions
 
-- Is Carbon a target for self-hosting verification, or only Silicon? Deferring Carbon until
-  after self-hosting is achieved is reasonable.
+**Carbon and self-hosting (resolved):** Carbon is not a target for self-hosting verification.
+Self-hosting (plans 36/37) uses Silicon exclusively. Carbon is an optional backend for users
+who prefer VCG; it is implemented after Silicon is fully stable and the regression suite
+passes. The CI self-hosting job (`gobra-self-verify`, plan 37) runs Silicon only. If a user
+passes `--backend carbon` to verify their own code, that is supported but not part of the
+self-hosting milestone.

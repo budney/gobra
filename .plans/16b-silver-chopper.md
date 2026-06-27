@@ -189,6 +189,29 @@ standard edges, for each domain whose name ends in `"WellFoundedOrder"`, add the
   bound=2 reduces a 3-sub-program result to 2; test that a `WellFoundedOrder` domain is
   present in every sub-program when termination axioms are used
 
+## Performance Note
+
+The greedy merge (phase 3) initializes a priority queue with all O(n²) pairs of sub-programs,
+where n is the number of important members produced by phase 2. After each merge, new pairs
+are enqueued for the merged result against all remaining sub-programs (O(n) new entries per
+merge), so total queue operations are O(n² log n) in the worst case.
+
+In practice n is small: it is bounded by the number of public methods, functions, and
+predicates in the package being verified, not the total Silver program size. For typical Go
+packages (n < 200), the algorithm is fast. For very large packages (n > 500), profiling may
+show this step as a bottleneck.
+
+**Implemented fast paths that avoid the full O(n²) setup:**
+- With the default `bound=1` (no `--chop`), the merge is skipped entirely: `Chop` returns a
+  single sub-program equal to the full input program. Phase 3 only runs when `bound > 1` or
+  `bound=nil` (unlimited).
+- If `len(progs) <= 1` after phase 2, skip phase 3 unconditionally.
+- With `--isolate`, only one member is important, so phase 2 produces one sub-program;
+  phase 3 is a no-op.
+
+Add a `debug`-level log line at the start of phase 3 reporting `n` (sub-program count before
+merging) so slow runs are diagnosable.
+
 ## Integration Note
 
 The chopper is called by the backend dispatcher (plan 17b) before dispatching to JNI workers.

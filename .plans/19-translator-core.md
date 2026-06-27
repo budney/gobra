@@ -83,19 +83,28 @@ Unicode characters; Go package paths contain `/` and `.`. The mangling scheme mu
 
 **Rules (applied in order):**
 
-1. Replace `/` with `_` and `.` with `_` in package paths.
-2. Replace any character not in `[a-zA-Z0-9_$]` with `_u{hex}_` where `{hex}` is the
-   Unicode code point in uppercase hex (e.g., `α` → `_u03B1_`).
-3. Prepend `G_` if the result starts with a digit (Silver identifiers cannot start with a digit).
-4. Silver field names are globally scoped; qualify them as `{mangledPkg}_{TypeName}_{FieldName}`
+1. Replace any character not in `[a-zA-Z0-9_$]` with `_u{HEX}_` where `{HEX}` is the
+   Unicode code point in uppercase hex (e.g., `α` → `_u03B1_`, `/` → `_u002F_`,
+   `.` → `_u002E_`). This includes package path separators — do NOT replace `/` or `.`
+   with bare `_` before this step; they must go through hex-encoding to preserve injectivity.
+2. Prepend `G_` if the result starts with a digit (Silver identifiers cannot start with a digit).
+3. Silver field names are globally scoped; qualify them as `{mangledPkg}_{TypeName}_{FieldName}`
    to avoid collisions across packages (same convention as plan 21).
-5. Silver method and function names: `{mangledPkg}_{funcName}` for package-level functions;
+4. Silver method and function names: `{mangledPkg}_{funcName}` for package-level functions;
    `{mangledPkg}_{TypeName}_{methodName}` for methods.
-6. Auxiliary generated names (tuple domains, box/unbox functions, etc.) use a `gobra__` prefix
+5. Auxiliary generated names (tuple domains, box/unbox functions, etc.) use a `gobra__` prefix
    to avoid collisions with user-defined Silver names.
 
-This scheme is injective because: package separators (`/`, `.`) become `_`; the `_u{hex}_`
-encoding is unambiguous; the `gobra__` prefix is reserved and never emitted for user names.
+This scheme is injective because: every non-`[a-zA-Z0-9_$]` character (including `/` and `.`)
+is replaced by its unique `_u{HEX}_` encoding; the `gobra__` prefix is reserved and never
+emitted for user names. **Do not use a simpler "replace `/` and `.` with `_`" rule** — that
+would collapse `a/b` and `a_b` to the same mangled string, breaking injectivity.
+
+**Residual collision note:** A Go identifier that literally contains `_u[0-9A-F]+_` as a
+substring (e.g., a variable named `_u002F_`) would collide with a hex-escaped `/` in a
+package path after mangling. This is an obscure edge case; add a build-time assertion in the
+mangler that panics if any unqualified Go identifier matches `_u[0-9A-F]{4}_` to catch it
+early. The `gobra__` prefix for synthetic names avoids this issue for generator output.
 
 **Note on collision with Scala Gobra**: The Scala Gobra uses a similar but not identical
 mangling scheme. Differential testing (plan 34) compares verification *results*, not Silver

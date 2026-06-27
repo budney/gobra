@@ -42,6 +42,13 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   with a clear message if `go` is not found in `$PATH`. Note this also means Go-Gobra cannot
   be used in environments where only a pre-compiled binary is deployed without a Go toolchain
   (e.g., some CI containers) — document this as a known limitation.
+- **Bootstrap / self-hosting implication**: Because Go-Gobra calls `go list` at runtime, a
+  pre-built Go-Gobra binary cannot verify Go programs on a system where the Go toolchain is
+  not installed. This means the self-hosting CI job (plan 37) requires Go to be installed
+  on the CI runner — not just the Go-Gobra binary. This is expected (Go-Gobra is a
+  development-time tool, not a production runtime), but document it in the CI workflow so
+  the requirement is explicit. The bootstrap sequence for plan 37 is therefore:
+  build Go-Gobra with Go → run Go-Gobra (requires Go in PATH) → verify Go-Gobra source.
 - **Topological ordering**: The resolver must produce packages in dependency order (a
   topological sort of the import graph). The type checker (10) requires that all imported
   packages are type-checked before the importing package. Detect and report import cycles as

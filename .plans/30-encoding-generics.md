@@ -15,23 +15,30 @@ feature. This plan must be designed from first principles.
 All regression tests using Go generics must be marked `SKIP: generics-not-implemented` in
 `tests/testdata/skip.txt` (see plan 35). Do not block the main port on this plan.
 
-**Audit requirement (before implementing):** Before beginning this plan, audit Go-Gobra's own
-source (`gobra-go/internal/`) for use of Go generics — specifically, type parameter lists on
-`func` or `type` declarations. Run:
+**Audit requirement — blocking prerequisite before plan 36:** Before beginning self-hosting
+annotation work (plan 36), audit Go-Gobra's own source for use of Go generics. This audit
+is **not optional**: if Go-Gobra uses generics that it cannot yet verify, plan 36 is blocked
+until either the generics are removed or this plan is implemented. Run the audit as the first
+action when plan 36 is scheduled:
 
 ```bash
 grep -rE '^\s*(func|type)\s+\w+\s*\[' gobra-go/internal/ gobra-go/cmd/
 ```
 
-If any generics are found in Go-Gobra's own source:
+**If generics are found in Go-Gobra's own source:**
 - Option A (preferred): replace them with concrete types or interfaces. Go-Gobra has no
-  stability requirement on internal APIs; the rewrite cost is low.
-- Option B: prioritize this plan before plan 36 (self-hosting annotations), since Go-Gobra
-  cannot verify code it cannot handle.
+  stability requirement on internal APIs; the rewrite cost is low. Prefer this option — it
+  unblocks plan 36 without requiring this plan to be complete.
+- Option B: implement this plan before plan 36. Only choose this option if Option A is
+  impractical (e.g., a key algorithm is significantly cleaner with generics).
 
-If the audit finds no generics in Go-Gobra's source, this plan can be deferred to after the
-self-hosting milestone without blocking plan 36 or 37. Record the audit result here when
-completed.
+**If no generics are found:** this plan can be deferred to after the self-hosting milestone
+without blocking plan 36 or 37.
+
+**Record the audit result here** (update this file when the audit is completed):
+- Audit status: _not yet run_
+- Generics found in Go-Gobra source: _unknown_
+- Chosen option if generics found: _N/A_
 
 ## Scope
 

@@ -61,9 +61,35 @@ which is challenging but possible using ghost modeling of the JVM state).
 - CI job: `gobra-self-verify` running on every push to `master`
 - `SELF_HOSTING.md` document describing what is proved, what is trusted, and known limitations
 
-## Open Questions
+## CI Gate Strategy
 
-- If Z3 cannot prove certain goals within a reasonable timeout, is it acceptable to add
-  `//@ assume` for those specific goals? Yes, but document each one as a known gap.
-- Should the self-hosting CI job block merges (like a test failure), or run as advisory?
-  Block on a reduced scope; full self-hosting as advisory until stable.
+The `gobra-self-verify` CI job has two tiers:
+
+**Blocking tier** (fails the build if it regresses): verification of the following modules,
+which are pure functional code with no CGo or concurrency:
+- `internal/silver/` — Silver printer (pure function, no heap mutation)
+- `internal/ast/internal/` — internal AST traversal
+- `internal/desugar/` — desugarer (pure tree transformation)
+- `internal/translator/mangle.go` — name mangler (pure function)
+
+These are the recommended starting points from plan 37's "Approach" section. Once each module
+verifies successfully, it is added to the blocking tier. The blocking tier starts empty and
+grows as modules are verified; it never shrinks.
+
+**Advisory tier** (runs on every push, reports results, does not block merges): everything
+outside the blocking tier, including the type checker, the full translator, and any module
+with `//@ trusted` boundaries. Advisory failures are tracked in `SELF_HOSTING.md` as known
+gaps; they are not ignored, but they do not block development.
+
+This two-tier structure allows CI to be useful from the first verified module while not
+blocking merges on the harder modules that are still being annotated.
+
+## Resolved Questions
+
+**`//@ assume` for Z3 timeouts (resolved):** Yes, add `//@ assume` for specific goals that
+Z3 cannot prove within a 60-second timeout. Document each one in `SELF_HOSTING.md` with the
+goal text, the timeout observed, and any Z3 tuning attempted. Do not leave undocumented
+assumptions in the code.
+
+**CI blocking scope (resolved):** See "CI Gate Strategy" above. Block on the pure functional
+modules; run full self-hosting as advisory until stable.
