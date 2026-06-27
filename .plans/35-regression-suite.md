@@ -65,6 +65,20 @@ line as a declaration), then add confirmed generics tests to `tests/testdata/ski
 - `tests/testdata/skip.txt` — skip list with one entry per skipped test and a reason
 - Passing rate tracked in `tests/COVERAGE.md`
 - CI job running the full regression suite on every push
+- `Makefile` target `prune-skips`: runs the full suite, identifies skip-listed tests that
+  now pass (unexpected passes), and prints the `skip.txt` lines that should be removed.
+  Does **not** modify `skip.txt` automatically — the developer reviews the output and removes
+  entries manually, preserving intentional review of "why is this now passing?" Example output:
+
+  ```
+  PRUNE: tests/testdata/regressions/features/generics/basic.gobra
+         reason was: generics-not-implemented
+         test now passes — remove from skip.txt
+  ```
+
+  Implement as a thin shell wrapper around `go test -run TestRegression ./tests/... -v 2>&1
+  | grep UNEXPECTED_PASS`; the test runner (plan 34) already emits `UNEXPECTED_PASS:` lines
+  for unexpected passes.
 
 ## Skip List Format (Resolved)
 

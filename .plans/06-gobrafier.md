@@ -94,3 +94,9 @@ transformation is found that changes line counts.
   (no PositionMap needed for the initial implementation; see position mapping note above)
 - Tests: compare preprocessed output for a selection of `.go` and `.gobra` test files against
   expected output (golden files); verify line count is preserved in all cases
+- **Required golden-file test**: include at least one `.gobra` input containing all three
+  top-level ghost constructs — an `adt` declaration, a `ghost func`, and a `pred` — and verify
+  the Gobrafier output exactly matches the golden file. This test guards the `.gobra`
+  transformation mode (ghost → `//@ ` comment + blank stub). Regenerate goldens with
+  `GOBRAFY_UPDATE=1 go test ./internal/frontend/` when the transformation changes intentionally.
+  Golden files live in `internal/frontend/testdata/gobrafy/`.

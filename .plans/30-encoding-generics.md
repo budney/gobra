@@ -15,6 +15,24 @@ feature. This plan must be designed from first principles.
 All regression tests using Go generics must be marked `SKIP: generics-not-implemented` in
 `tests/testdata/skip.txt` (see plan 35). Do not block the main port on this plan.
 
+**Audit requirement (before implementing):** Before beginning this plan, audit Go-Gobra's own
+source (`gobra-go/internal/`) for use of Go generics — specifically, type parameter lists on
+`func` or `type` declarations. Run:
+
+```bash
+grep -rE '^\s*(func|type)\s+\w+\s*\[' gobra-go/internal/ gobra-go/cmd/
+```
+
+If any generics are found in Go-Gobra's own source:
+- Option A (preferred): replace them with concrete types or interfaces. Go-Gobra has no
+  stability requirement on internal APIs; the rewrite cost is low.
+- Option B: prioritize this plan before plan 36 (self-hosting annotations), since Go-Gobra
+  cannot verify code it cannot handle.
+
+If the audit finds no generics in Go-Gobra's source, this plan can be deferred to after the
+self-hosting milestone without blocking plan 36 or 37. Record the audit result here when
+completed.
+
 ## Scope
 
 **In scope (when this plan is implemented):**

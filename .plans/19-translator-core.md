@@ -124,6 +124,13 @@ the `Poly[T]` domain (plan 25), the `Type` domain (plan 25), string domain funct
 before considering that encoding complete.** Use the Scala Gobra as oracle: if a regression
 test passes Scala but fails Go-Gobra, check for a missing postcondition first.
 
+**Per-encoding documentation requirement:** Every encoding plan that emits bodyless Viper
+functions must include a **"Bodyless Functions"** subsection that lists each function by name,
+its required postconditions (matching the Scala source), and the Scala file and line where
+those postconditions can be verified. This table is the audit checklist for the oracle-test
+procedure. An encoding plan is not complete until every row of its "Bodyless Functions" table
+has been checked against the Scala Gobra. Plans with this requirement: 20, 23, 25, 27.
+
 ## Resolved Questions
 
 **Encoding state (resolved):** Encodings are stateful objects (matching the Scala implementation).

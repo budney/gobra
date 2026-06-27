@@ -72,7 +72,7 @@ Silver members decompose into fine-grained **vertices** at sub-member granularit
 | `Function(name)` | function body (depends on FunctionSpec) |
 | `PredicateSig(name)` | predicate signature only |
 | `PredicateBody(name)` | predicate body (depends on PredicateSig) |
-| `DomainAxiom(*DomainAxiom, *Domain)` | individual domain axiom (identified by pointer, not name, because names are not unique across domains) |
+| `DomainAxiom(*DomainAxiom, *Domain)` | individual domain axiom (identified by pointer pair, not name, because axiom names are not unique across domains — see implementation note below) |
 | `DomainFunction(funcName)` | individual domain function |
 | `Field(name)` | Silver field |
 | `DomainType(domainName)` | domain type declaration |
@@ -82,6 +82,16 @@ Silver members decompose into fine-grained **vertices** at sub-member granularit
 calls function F has edges `MethodBody → FunctionSpec`. A function body that folds predicate
 P has edges `FunctionBody → PredicateSig`. A domain axiom using a type T has edges to
 `DomainType(T)`. See Scala `Edges.scala` for the complete edge set.
+
+**Implementation note — pointer-keyed `DomainAxiom` vertices:** `DomainAxiom` vertices are
+keyed by `(*silver.DomainAxiom, *silver.Domain)` pointer pairs, not by name. The dependency
+graph must therefore hold actual pointers into the Go Silver AST (plan 14), not copies. This
+is safe because the Silver AST is immutable — all fields are set at construction with no
+post-construction mutation (plan 14) — so pointer values remain stable for the entire chopper
+lifetime. Always reference axioms as `prog.Domains[i].Axioms[j]` directly; never copy or
+reconstruct Silver nodes when building the dependency graph. Using a copy would create a
+different pointer, causing the vertex to be treated as a new, distinct axiom and breaking
+deduplication in the merge phase.
 
 The sub-program for M is assembled from all Silver members that contain at least one vertex
 reachable from M's vertex in the dependency graph.

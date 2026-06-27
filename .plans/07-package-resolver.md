@@ -78,8 +78,15 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
   the correct set of files is loaded in dependency order
 
-## Open Questions
+## Resolved Questions
 
-- Should package resolution be lazy (resolve on demand) or eager (resolve all transitively at
-  startup)? Eager is simpler and matches the current Gobra behavior.
-- How to handle packages that are only partially annotated (some files have specs, others don't)?
+**Lazy vs. eager (resolved):** Eager — load and parse all transitively imported packages at
+startup before type checking begins. This matches the Scala Gobra behavior and is simpler to
+implement: one linear phase of loading, one phase of type checking in topological order.
+If profiling later shows that loading unused packages is a bottleneck (e.g., in `--parseOnly`
+or `--typeCheckOnly` mode), add lazy loading as an optimization at that time.
+
+**Partially-annotated packages:** Treat all files in a package uniformly — parse and type-check
+them all together, regardless of whether individual files contain Gobra annotations. Files with
+no `//@ ` comments simply produce no ghost AST nodes. This is the simplest approach and
+matches the current Gobra behavior.

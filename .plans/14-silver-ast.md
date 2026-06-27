@@ -113,3 +113,30 @@ Silver position field is needed on Go Silver nodes themselves.
 
 **`NodeInfo` must never be nil** on any Silver node. Synthetic nodes use the sentinel
 `NodeInfo{Tag: "synthetic"}`; every other node must have a valid File, Line, and Col.
+
+**Centralized tag registry:** The `Tag` strings set during translation (`"call"`, `"fold"`,
+`"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table (plan 32).
+To prevent typos from silently falling through to the generic error message, define all valid
+tag strings as named constants in `internal/reporting/tags.go`:
+
+```go
+package reporting
+
+const (
+    TagCall        = "call"
+    TagReturn      = "return"
+    TagField       = "field"
+    TagAssert      = "assert"
+    TagLoopInv     = "loop-inv"
+    TagFold        = "fold"
+    TagExhale      = "exhale"
+    TagTermination = "termination"
+    TagOverflow    = "overflow"
+    TagSynthetic   = "synthetic"
+    // Each encoding plan (20–31) adds its own tags here.
+)
+```
+
+Encoding modules import `reporting.TagXxx` constants when constructing `NodeInfo`; the
+reporter imports the same constants for its dispatch table. No bare string literals for tags
+anywhere outside `tags.go`.

@@ -99,3 +99,84 @@ type checker.
   For constructs `go/ast` has no representation for (predicates, magic wands, ADTs, ghost
   parameters), define new Gobra types from scratch. The `go/types.Check` call in plan 08 runs
   on the embedded `*ast.File` directly, independent of the Gobra wrapper layer.
+
+## Traversal Model (Critical Design Note)
+
+The Gobra frontend AST mixes two node universes: Gobra wrapper/ghost types and `go/ast` types.
+The `Visitor` interface covers only Gobra node types; `go/ast` traversal uses `ast.Inspect`
+(or equivalent) directly. The two mechanisms are kept separate intentionally.
+
+**Type checker (plan 08):**
+- Go type checking: `go/types.Check` drives traversal of the underlying `*ast.File` — no
+  Gobra visitor needed.
+- Ghost type checking: the Gobra visitor traverses spec/ghost nodes only.
+- These are two separate, non-interleaved passes over the same source. No coordination needed.
+
+**Desugarer (plan 12):**
+- Drives the Gobra visitor for all wrapper and ghost nodes.
+- Inside each wrapper node handler, calls `ast.Inspect` to recurse into the embedded `go/ast`
+  subtree for the Go-side content.
+- This two-dispatch model is the intended implementation pattern; do not attempt to unify them.
+
+### Interleaved content: PBlockStmt
+
+The most important structural consequence of the two-universe mixing is `PBlockStmt`. A Go
+block statement contains regular Go statements (`ast.Stmt`) and Gobra ghost statements
+interleaved in source order. A pure `*ast.BlockStmt` cannot express this ordering; a side
+table keyed by position would require callers to sort on every traversal.
+
+**Resolution: `PStmt` interface with a thin `PGoStmt` wrapper.**
+
+```go
+// PStmt is either a regular Go statement or a Gobra ghost statement.
+// It is the element type of PBlockStmt.Stmts, preserving source order.
+type PStmt interface {
+    pStmt()
+    Pos() token.Pos
+}
+
+// PGoStmt wraps an ast.Stmt for interleaving in PBlockStmt.Stmts.
+// This is the ONLY go/ast node type that receives a wrapper purely for
+// ordering purposes (not because Gobra extends it). All other go/ast leaf
+// types that do not appear in interleaved position (BasicLit, Ident, etc.)
+// remain unwrapped.
+type PGoStmt struct{ Stmt ast.Stmt }
+func (PGoStmt) pStmt() {}
+func (s PGoStmt) Pos() token.Pos { return s.Stmt.Pos() }
+
+// Gobra ghost statement types also implement PStmt.
+// e.g.: func (*PAssert) pStmt() {}
+```
+
+`PBlockStmt` holds:
+
+```go
+type PBlockStmt struct {
+    Stmts          []PStmt    // ordered mix of PGoStmt and ghost statement types
+    Lbrace, Rbrace token.Pos
+}
+```
+
+The parser (plan 04) constructs `PBlockStmt.Stmts` from the `*ast.BlockStmt.List` and any
+`//@ ` ghost statements whose `token.Pos` falls within the block, sorting by `Pos()` to
+recover source order.
+
+The `Visitor` interface includes a `VisitPGoStmt(*PGoStmt)` method so the desugarer can
+dispatch on it and invoke `ast.Inspect` for the wrapped Go statement.
+
+### Loop invariants: PForStmt / PRangeStmt
+
+Loop invariants are **not** interleaved within the body; they appear in `//@ invariant P`
+comment lines immediately preceding the opening `{`. They are attached as a field on the
+wrapper — not as `PStmt` entries in the body's `PBlockStmt`:
+
+```go
+type PForStmt struct {
+    GoFor      *ast.ForStmt
+    Invariants []PAssertion  // from //@ invariant comments before the body
+    Body       *PBlockStmt   // the loop body, interleaving Go and ghost stmts
+}
+```
+
+`PRangeStmt` follows the same pattern. The body's `PBlockStmt` contains only statements
+inside the braces, not the invariants.

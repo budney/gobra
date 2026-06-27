@@ -22,7 +22,7 @@ is required before any end-to-end verification is possible.
 - `trusted` functions: no body generated, only spec
 - Function literals (closures): encode as Silver methods with captured variables as parameters
 - `defer` statement encoding (execute-on-return semantics)
-- `init` functions
+- `init` functions (see encoding note below)
 - Method expressions and method values
 
 **Out of scope:**
@@ -93,6 +93,23 @@ flags, not soundness caveats that users need to read before writing specs).
 method parameters passed by reference (`Ref`). The closure's Silver method takes these as extra
 `Ref` arguments alongside the explicit parameters. Study `ClosureEncoding.scala` in the Scala
 translator for the exact lifting strategy before implementing.
+
+**`init` function encoding (resolved):** Go's `init` functions run automatically in package
+initialization order; they cannot be called explicitly by user code. Each `init` function in
+a package is encoded as a separate Silver method `{pkg}_init_N` (N = 0, 1, 2, … in source
+order of the files, then in source order within each file). The translator synthesizes a
+`{pkg}_run_inits` Silver method that calls each `{pkg}_init_N` in declaration order.
+Callers (the translator entry point in plan 33) invoke `{pkg}_run_inits` for each package
+before verifying any user method in that package.
+
+Constraints:
+- The translator must never emit a call to any `{pkg}_init_N` from anywhere except
+  `{pkg}_run_inits`, enforcing Go's "init is not callable" rule at the Silver level.
+- Specs on `init` functions should be kept minimal; `init` functions commonly have
+  side effects (registering handlers, setting global state) that are difficult to specify
+  formally. Mark heavily-specced `init` functions `//@ trusted` when necessary.
+- If an `init` function has no meaningful spec, emit it with empty pre/postconditions.
+  Silicon will still verify that the body does not violate any implicit permissions.
 
 **`opaque` pure functions (resolved):** The `opaque` modifier is only valid on `pure`
 functions and `pure` methods — the type checker (plan 09) enforces this. The encoding is:

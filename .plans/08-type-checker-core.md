@@ -95,8 +95,25 @@ been caught as a "type not found" error earlier.
 This two-stub-pass approach handles all patterns the Scala checker handles, including
 self-recursive ADTs (`adt Tree { Leaf{}; Node{left Tree; right Tree} }`).
 
-## Open Questions
+## Resolved Questions
 
-- How to handle Gobra ghost types that have no `go/types` representation (e.g., `seq[T]`,
-  `set[T]`, ADT types)? Define a parallel `GhostType` interface extending `types.Type` so
-  they can coexist in the same type-info map.
+**Ghost types with no `go/types` representation (resolved):** Define a `GhostType` interface
+extending `types.Type` (implementing `Underlying() types.Type` and `String() string`).
+Concrete implementations:
+
+| Go-Gobra ghost type | GhostType implementation |
+|---------------------|--------------------------|
+| `seq[T]`            | `SeqType{Elem types.Type}` |
+| `set[T]`            | `SetType{Elem types.Type}` |
+| `mset[T]`           | `MSetType{Elem types.Type}` |
+| `dict[K]V`          | `DictType{Key, Val types.Type}` |
+| `option[T]`         | `OptionType{Elem types.Type}` |
+| ADT types           | `ADTType{Name string, Constructors []ADTConstructor}` |
+| permission amount   | `PermissionType{}` |
+| magic wand          | `WandType{Left, Right types.Type}` |
+
+These satisfy `types.Type` and can be stored in the same `map[ast.Node]types.Type` side table
+alongside `go/types` results. The `GhostTypeInfo` wraps `map[ast.Node]GhostType` for
+ghost-only constructs; combined with the `*types.Info` from `go/types.Check`, they form the
+unified `TypeInfo` output. All `GhostType` implementations live in
+`internal/info/ghosttypes.go`.

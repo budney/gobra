@@ -58,7 +58,36 @@ inhales default values for each field.
 `*int` = `vpr.Ref`. There is no synthetic field for exclusive pointer-to-primitive — the value
 itself is the pointer.
 
+## Worked Example: Pointer to Slice (`*[]int`)
+
+The exclusive/shared duality compounds for nested types. Here is how `*[]int` is encoded in
+both modes, to make the recursion concrete:
+
+**Exclusive `*[]int°`** — a pointer value used as a pure mathematical value (not yet on the
+heap). The encoding rule is "exclusive `*T` = exclusive `T`" applied recursively:
+- exclusive `[]int` = a `Slice[Int]` domain value (plan 23)
+- therefore exclusive `*[]int` = `Slice[Int]`
+
+**Shared `*[]int@`** — the pointer itself lives on the heap (e.g., as a field of a shared
+struct). The rule "shared `*T` = Ref" applies:
+- `vpr.Ref`
+- Dereferencing it yields the exclusive `Slice[Int]` value stored at that location.
+- Ownership: `acc(p, write)` where `p: Ref`.
+
+**Dereferencing `*p` where `p: *[]int`:**
+- If `p` is exclusive: `*p` is just `p` itself (the `Slice[Int]` value — no heap access).
+- If `p` is shared: `p` is a `Ref`; `*p` reads the heap at `p`, yielding `Slice[Int]`.
+
+**`new([]int)`:** Allocates a fresh `Ref`, inhales `acc(ref, write)`, inhales the default
+`Slice[Int]` value (nil slice) at that `Ref`, and returns the `Ref`.
+
+**Practical heuristic:** If you are unsure whether a type is in exclusive or shared mode at a
+given program point, ask: "Is this value reachable by another pointer?" If yes → shared. If
+it is a local variable on the Go stack, not pointed to by anything in scope → exclusive.
+
 ## Deliverables
 
 - `internal/translator/encodings/pointers.go`
-- Tests: encode `new(int)`, exclusive pointer dereference, shared pointer dereference, nil check
+- Tests: encode `new(int)`, exclusive pointer dereference, shared pointer dereference, nil check,
+  and a round-trip through `*[]int` (new, write via pointer, read via pointer) to validate the
+  nested exclusive/shared encoding

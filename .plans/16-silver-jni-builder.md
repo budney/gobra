@@ -138,8 +138,31 @@ constructed objects to prevent the JVM from GC'ing them during verification.
 - `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
   `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
 - `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (*BuiltProgram, error)`,
-  where `BuiltProgram{JavaObject jobject, NodeMap map[uintptr]*silver.Node}`. Every entry in
-  `NodeMap` uses a `NewGlobalRef`-promoted pointer as the key (see Key Implementation Notes).
+  where:
+
+  ```go
+  type BuiltProgram struct {
+      JavaObject jobject
+      NodeMap    map[uintptr]*silver.Node // JNI object pointer → Go Silver node
+  }
+
+  // Close releases all JNI global references held for the Java Silver objects.
+  // Must be called after Silicon has finished verifying this program AND after
+  // the reporter has completed all NodeMap lookups. Calling Close while the
+  // reporter is still running is a data race. Typically called in a defer
+  // immediately after Verify() returns:
+  //
+  //   built, err := builder.Build(prog, jvm)
+  //   if err != nil { ... }
+  //   defer built.Close()
+  //   result := silicon.Verify(built.JavaObject, cfg)
+  //   diagnostics := reporter.Report(result, built.NodeMap, info)
+  func (b *BuiltProgram) Close()
+  ```
+
+  Every entry in `NodeMap` uses a `NewGlobalRef`-promoted pointer as the key (see Key
+  Implementation Notes). `Close()` calls `DeleteGlobalRef` on every entry. The `Builder`
+  type itself is stateless after `Build()` returns and does not need a `Close()` method.
 - Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
   confirm the resulting object passes `silver.ast.Program.checkTransitively()`; confirm that
   `NodeMap` contains an entry for the method's body statement whose `NodeInfo` matches the

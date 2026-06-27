@@ -16,7 +16,7 @@ status code.
     `VIPERSERVER_JAR` env var); `--jvmArgs` (additional JVM flags)
   - Verification: `--overflow`, `--checkConsistency`, `--module`, `--assumeInjectivityOnInhale`
   - Output: `--logLevel`, `--printViper`, `--parseOnly`, `--typeCheckOnly`, `--noVerify`
-  - Performance: `--parallelizeBranches`, `--cacheFile`
+  - Performance: `--parallelizeBranches` (see note below), `--cacheFile`
 - Pipeline orchestration: Gobrafier → Parser → Type Checker → Desugarer → Transforms →
   Translator → JNI Backend → Reporter
 - Exit code: 0 on verification success, non-zero on failure or error
@@ -61,3 +61,17 @@ subcommands; `flag` is sufficient and keeps the codebase simpler to verify.
 3. Fatal error if neither is set.
 
 Document this precedence in `--help` output and the README.
+
+**`--parallelizeBranches` (resolved):** This flag enables Silicon's internal branch-level
+parallelism within a single Silicon verification job. It is a Silicon-side option, not a
+Gobra-level chopping option. Implementation: append the string `"--parallelizeBranches"` to
+the `SiliconConfig.Args` slice that is passed to Silicon at startup (plan 17). No Gobra-level
+logic is needed beyond that passthrough.
+
+This is **distinct** from `--workers N` (plan 17b):
+- `--parallelizeBranches`: parallelism *within* one Silicon call, managed by Silicon's own
+  branch-exploration logic.
+- `--workers N`: parallelism *across* multiple chopped sub-programs, managed by Go-Gobra.
+
+Both can be set simultaneously. Document in `--help` for both flags that combining them
+multiplies thread usage and the total should not exceed available CPU cores.

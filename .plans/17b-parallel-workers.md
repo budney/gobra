@@ -111,7 +111,10 @@ Document this constraint in `--help` for both flags.
     serial verification (plan 17 baseline)
   - Confirm deduplication removes exactly the expected duplicate errors for a program
     where two sub-programs both include the same predicate with an error
-  - Confirm `--z3APIMode --workers 3` falls back to `--workers 1` with a warning
+  - Confirm `--z3APIMode --workers 3` logs exactly one warning containing both flag names,
+    forces `--workers 1`, and still produces a correct verification result — i.e., the
+    forced fallback does not break verification. Use a trivially correct Silver program for
+    the result check so the test is fast and deterministic.
 
 ## Scaling Note
 
