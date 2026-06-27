@@ -77,7 +77,7 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
-- `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(job VerifyJob) <-chan Result`; `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
+- `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(prog *silver.Program) *VerificationResult` (blocking — callers provide their own goroutines for parallelism; see plan 17b); `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
 - Worker goroutine template: `runtime.LockOSThread()` at startup, `AttachCurrentThread`, request loop, `DetachCurrentThread` on exit
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency

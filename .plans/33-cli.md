@@ -43,7 +43,8 @@ status code.
 ## Deliverables
 
 - `cmd/gobra/main.go` — entry point
-- `internal/config/config.go` — `Config` struct and flag parsing
+- `internal/config/config.go` — `Config` struct and flag parsing; includes `--workers N` flag
+  (default = `min(runtime.NumCPU(), numSubPrograms)`; wired to `WorkerPool` in plan 17b)
 - `internal/pipeline/pipeline.go` — `Run(cfg *Config) error` orchestrating all stages
 - Tests: integration tests running the full pipeline on small `.gobra` files
 

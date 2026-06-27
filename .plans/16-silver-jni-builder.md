@@ -63,8 +63,9 @@ public class SilverBridge {
         // scala.Option$.MODULE$.apply(x) returns Some(x) when x != null, None when x == null.
         // This is the correct Java interop idiom for Scala Option.
         scala.Option<Seqn> bodyOpt = scala.Option$.MODULE$.apply(body);
-        // ErrTrafo.id is the identity error transformation (no re-labelling).
-        ErrTrafo errT = ErrTrafo$.MODULE$.id();
+        // NoTrafos$.MODULE$ is the identity error transformation (no re-labelling).
+        // Do NOT use ErrTrafo — that is a separate case class for custom transformations.
+        Object errT = viper.silver.ast.NoTrafos$.MODULE$;
         return new Method(name,
             CollectionConverters.ListHasAsScala(Arrays.asList(params)).asScala().toList(),
             CollectionConverters.ListHasAsScala(Arrays.asList(returns)).asScala().toList(),

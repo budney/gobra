@@ -63,7 +63,25 @@ the Scala implementation's behavior and is acceptable in practice because most G
 messages are reported at line granularity, and the transformed content is typically at
 end-of-line positions.
 
-**For `.gobra` files:** no transformation is applied; source positions are direct.
+**For `.gobra` files (resolved):** The Scala Gobra passes `.gobra` files directly to the
+ANTLR4 grammar, bypassing the Gobrafier entirely. The Go rewrite cannot do this — `go/parser`
+cannot parse `.gobra`-specific syntax (`adt`, top-level `ghost func`, top-level `pred`, etc.).
+
+**Resolution:** The Gobrafier handles `.gobra` files with a separate transformation mode that
+converts Gobra-specific top-level constructs into `//@ ` annotated Go stubs:
+- `adt Tree { Leaf{}; Node{l Tree; r Tree} }` → `//@ adt Tree ...` comment + blank
+  `type Tree struct{}` placeholder
+- `ghost func f() { ... }` → `//@ ghost func f() { ... }` comment + blank stub
+- `pred P(x *int) { ... }` → `//@ pred P(x *int) { ... }` comment + blank stub
+
+This keeps the pipeline uniform: **both `.go` and `.gobra` files go through Gobrafier →
+`go/parser` → annotation parser**. The annotation parser (plan 05) picks up ghost top-level
+declarations from the `//@ ` comments it finds at file scope. The annotation parser's scope
+must be extended to handle top-level ghost declarations (ADTs, predicates, ghost functions),
+not only inline spec clauses.
+
+Source positions in the transformed output preserve line counts (blank stubs are one line per
+original declaration line), so position mapping remains the identity as stated below.
 
 `PositionMap` is therefore a simple line-delta table (preprocessed line → original line).
 In practice, since line counts are preserved, the table is the identity mapping and can be

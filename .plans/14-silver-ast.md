@@ -90,8 +90,13 @@ AST structure. Tags are short identifiers like `"call"`, `"fold"`, `"return"`, `
 **Synthesized nodes:** Translator-internal nodes with no direct Go source correspondence (e.g.,
 auxiliary domain functions, helper Silver fields) carry a `NodeInfo` with an empty `File` and
 `Tag = "synthetic"`. The reporter's `SearchInfo` function (see plan 32) walks a Silver AST
-subtree upward to find the nearest non-synthetic ancestor's `NodeInfo` when the immediate
-node's `NodeInfo` is synthetic.
+subtree **downward** (DFS over children) to find the nearest non-synthetic descendant's `NodeInfo`
+when the immediate node's `NodeInfo` is synthetic. Parent pointers are not required.
+
+**Design invariant**: nodes that Silicon can directly cite as `offendingNode` (Assert, Exhale,
+MethodCall, FieldAccess, etc.) must always carry a non-synthetic `NodeInfo`. Only structural
+wrapper nodes (Seqn generated for control flow, synthetic If for desugaring) may be synthetic.
+`SearchInfo` is a fallback for unexpected cases, not the primary path.
 
 **Silver debug position:** For debugging translator output (e.g., pretty-printing with Silver
 line numbers), the pretty-printer assigns Silver line numbers as it serializes the AST. No

@@ -68,7 +68,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [21-encoding-structs.md](21-encoding-structs.md) | Encoding: Structs & Fields | 19 |
 | [22-encoding-pointers.md](22-encoding-pointers.md) | Encoding: Pointers | 19 |
 | [23-encoding-slices.md](23-encoding-slices.md) | Encoding: Slices & Arrays | 19 |
-| [24-encoding-maps.md](24-encoding-maps.md) | Encoding: Maps | 19 |
+| [24-encoding-maps.md](24-encoding-maps.md) | Encoding: Maps | 19, 25 |
 | [25-encoding-interfaces.md](25-encoding-interfaces.md) | Encoding: Interfaces | 19, 21 |
 | [26-encoding-permissions.md](26-encoding-permissions.md) | Encoding: Permissions & Predicates | 19 |
 | [27-encoding-methods.md](27-encoding-methods.md) | Encoding: Methods & Functions | 19, 20, 21, 22, 23, 24, 25, 26 |

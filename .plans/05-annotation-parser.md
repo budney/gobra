@@ -66,6 +66,22 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 - Position-accurate error messages (column relative to comment start)
 - Table-driven tests covering each annotation form, including error cases
 
+## Expanded Scope: Top-Level Ghost Declarations in `.gobra` Files (Resolved)
+
+The Gobrafier (plan 06) transforms `.gobra`-specific top-level syntax into `//@ ` comments
+at file scope (e.g., `adt`, `ghost func`, `pred` declarations become `//@ ...` comment blocks
+plus blank Go stubs). The annotation parser must therefore handle not only inline spec clauses
+but also **top-level ghost declarations** when they appear in file-scope `//@ ` comment blocks:
+
+- `//@ adt T { C1{...}; C2{...} }` → `PAdtType` declaration node
+- `//@ ghost func f(x T) T { body }` → `PFunctionDecl` with ghost marker
+- `//@ pred P(x *int) { body }` → predicate declaration node
+
+These file-scope annotations are recognized by their position (comment group immediately before
+or not associated with any Go declaration) and by their leading keyword. The parser should
+dispatch on the first token of each `//@ ` block at file scope to determine whether it is an
+inline spec clause or a top-level ghost declaration.
+
 ## Open Questions
 
 - Should the annotation parser produce a separate AST that is later merged into the frontend AST,

@@ -57,6 +57,8 @@ type checker.
 - `internal/ast/frontend/` package with all node type definitions
 - `Visitor` interface and default no-op implementation
 - Position wrapper that maps nodes to source file + line + column
+- `PFile` exposes the embedded `*ast.File` (e.g., a public `GoFile *ast.File` field) so that
+  the type checker (plan 08) can pass it directly to `go/types.Check` without unwrapping
 - Unit tests confirming that key node types can be constructed and traversed
 
 ## Design Decisions (Resolved)

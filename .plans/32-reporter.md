@@ -76,13 +76,20 @@ func extractInfo(node *silver.Node) *silver.NodeInfo {
     if node.Info != nil && node.Info.File != "" {
         return node.Info
     }
-    return searchInfo(node) // walk subtree; see below
+    return searchInfo(node) // walk children downward; see below
 }
 ```
 
-`searchInfo` does a DFS over the Silver AST subtree rooted at `node`, returning the first
-non-synthetic `NodeInfo` found. This handles translator-internal synthesized nodes that don't
-carry a direct Go source position (their `Tag == "synthetic"`).
+`searchInfo` does a DFS over the Silver AST subtree rooted at `node`, walking **downward
+into children**, returning the first non-synthetic `NodeInfo` found. This is a safety net for
+translator-internal synthesized wrapper nodes (e.g., a synthetic `Seqn`) that don't carry a
+direct Go source position (`Tag == "synthetic"`).
+
+The primary path — `extractInfo` returning immediately — should be the common case. Nodes that
+Silicon can directly cite as `offendingNode` (Assert, Exhale, MethodCall, field access, etc.)
+always carry a real `NodeInfo` by the invariant stated in plan 14. `searchInfo` exists for
+unexpected edge cases only; if it is reached frequently, it indicates a translator bug (a
+directly-citable node was marked synthetic).
 
 ### Error message dispatch
 
