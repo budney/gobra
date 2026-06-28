@@ -156,3 +156,8 @@ If you are an AI agent or contributor processing commands in this repository, yo
 - You must always process the `Remediation Queue` in `.plans/scratchpad.md` in top-down order (Critical Global Blockers first).
 - You are forbidden from jumping down to document local file validation specs (Items 7+) while global compilation errors or circular imports (Items 1-5) remain unresolved.
 
+### 4. Strict Tool-First Guardrail (Anti-Skimming Invariant)
+- **Zero Talking First:** When instructed to execute the Remediation Queue, your very first output token MUST be a physical filesystem tool call (e.g., `write_file`, `edit_file`, `grep`, or `bash`).
+- **Forbidden Conversational Openers:** You are strictly forbidden from starting your response with text strings like "Let me read...", "I will start by...", or "Looking at the scratchpad...".
+- **Strict Linear Execution:** You must read the queue, identify the lowest-numbered incomplete item, and instantly call a tool to inspect or fix *only* that item. If you talk about or modify a higher-numbered item before the current item is checked off on disk, it is a hard protocol failure.
+
