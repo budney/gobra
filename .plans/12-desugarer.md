@@ -23,6 +23,7 @@ overflow checks stubs), and produces the flat, uniform representation the transl
   - String concatenation, built-in functions (`len`, `cap`, `make`, `new`, `append`, `copy`,
     `delete`, `close`)
   - `go` statements (goroutine spawning)
+  - Variadic call argument desugaring (see Resolved Questions below)
   - Spec desugaring: `preserves P` → `requires P` + `ensures P`
   - Ghost statement desugaring
 
@@ -69,6 +70,25 @@ are statements with a `targets: []LocalVar` field. The desugarer introduces one 
 per return value and populates `targets` from them. For comma-ok expressions (`m[k]`, `<-ch`),
 the desugarer produces a `Tuple([]Expr{...})` expression and then decomposes it via individual
 `Assign` statements to the LHS variables.
+
+**Variadic call arguments (resolved):** Every call to a variadic function `f(params ...T)` goes
+through a four-branch dispatch (reference: `functionCallArgsD` in `Desugar.scala:2338–2390`).
+Detect the variadic case by checking whether the last parameter type is `VariadicT(elem)` via
+`go/types`. Then match on the argument shape:
+
+1. **Spread passthrough** (`f(s...)`): the last argument already has type `[]elem` and the
+   argument count equals the parameter count. Pass the slice as-is — do **not** emit a
+   `NewSliceLit`. Detection is by type shape, not by `ast.CallExpr.Ellipsis`.
+2. **Tuple-chaining** (`f(g())` where `g` returns multiple values and `f` takes one variadic
+   param): the single desugared argument is a `TupleT`. Unpack the tuple elements, construct
+   a `NewSliceLit` from them, and pass the slice.
+3. **Normal packing** (`f(a, b, c)`): argument count ≥ parameter count. Collect the trailing
+   arguments (from index `paramCount-1` onward), construct a `NewSliceLit` into a fresh temp
+   var, and replace the trailing args with that var.
+4. **Zero variadic args** (`f(a)` with no variadic argument): argument count == parameter
+   count - 1. Append `in.NilLit(SliceT(elem, nil))` as the variadic argument.
+
+Any other shape is an internal bug (type checker should have caught it) — panic.
 
 **Division by zero (resolved):** The desugarer does NOT insert a call-site assertion for
 `r != 0` before integer division or modulo. The generated `goIntDiv`/`goIntMod` Viper functions

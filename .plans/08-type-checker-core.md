@@ -90,6 +90,33 @@ largest single unit of work in the frontend.
 - Tests: type-check a selection of regression test files and verify reported errors match
   `//@ expectedError` annotations
 
+## Explicitly Unsupported Constructs
+
+The following constructs are absent from Scala Gobra's ANTLR grammar and therefore never
+reached the Scala type checker or desugarer. Because Go-Gobra uses `go/parser` + `go/types`,
+they surface here and must be explicitly rejected with user-facing diagnostics. Do not rely
+on the downstream catch-all panic (plan 19) — that is for internal bugs, not unsupported
+language features.
+
+Add a post-`go/types` scan of the AST that checks for each of these and accumulates a
+`Diagnostic` if found:
+
+**`goto`**: Reject any `*ast.BranchStmt` with `Tok == token.GOTO`. Scala crashes with `???`
+(`NotImplementedError`) on `PGoto` — this must be a clean error instead.
+Error message: `"goto is not supported by Gobra"`.
+
+**`fallthrough`**: Reject any `*ast.BranchStmt` with `Tok == token.FALLTHROUGH`.
+Not in Scala Gobra's grammar at all; `go/parser` parses it without error.
+Error message: `"fallthrough is not supported by Gobra"`.
+
+**`recover()`**: Reject any `*ast.CallExpr` whose function resolves (via `go/types`) to the
+built-in `recover`. Not in Scala Gobra's grammar; `go/types` resolves `recover` as a
+`*types.Builtin` with `Id() == "recover"`.
+Error message: `"recover is not supported by Gobra"`.
+
+These three checks should run as a single AST walk after `go/types.Check` completes, before
+the ghost type checking pass (plan 09).
+
 ## Resolved Questions
 
 **Ghost forward references (resolved):** The Scala type checker uses Kiama's circular

@@ -109,6 +109,19 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
   the correct set of files is loaded in dependency order
 
+## Explicitly Unsupported Constructs
+
+The following constructs are absent from Scala Gobra's ANTLR grammar and never reached the
+Scala type checker or desugarer. Because Go-Gobra uses `go/parser` + `go/types`, they are
+now visible and must be explicitly rejected with user-facing diagnostics rather than relying
+on a downstream panic.
+
+**`import "unsafe"`**: Reject any import of the `unsafe` package during resolution, before
+type checking begins. The custom `types.Importer` (plan 10) should return an error when asked
+to import `"unsafe"`. Additionally, `Resolve` should scan the import graph and accumulate a
+diagnostic for any file that imports `"unsafe"` directly or transitively. Error message:
+`"import of package \"unsafe\" is not supported by Gobra"`.
+
 ## Resolved Questions
 
 **Lazy vs. eager (resolved):** Eager — load and parse all transitively imported packages at

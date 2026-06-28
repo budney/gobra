@@ -77,6 +77,24 @@ file path, not any temp-file path.
 - Tests: parse a representative set of `.go` and `.gobra` files from
   `src/test/resources/regressions/` and verify the AST shape
 
+## Bad* Node Rejection
+
+`go/parser` runs in error-recovery mode by default (and `go/packages` always uses this mode).
+When a file contains syntax errors, the parser produces `*ast.BadStmt`, `*ast.BadExpr`, or
+`*ast.BadDecl` placeholder nodes rather than aborting. These implement `ast.Node` and can
+appear anywhere in the `*ast.File` tree.
+
+`ParseFile` must detect and reject them explicitly. After calling `go/parser.ParseFile`,
+walk the result with `ast.Inspect` and check for any `*ast.BadStmt`, `*ast.BadExpr`, or
+`*ast.BadDecl` node. For each one found, emit a `Diagnostic` at its `Pos()` with message
+`"syntax error"`. Do not attempt to translate a `*ast.File` that contains Bad* nodes — return
+`nil` for the `*frontend.PFile` and the accumulated diagnostics.
+
+This is separate from the parse errors already returned in `(*ast.File).Comments` /
+`token.FileSet` error lists; Bad* node detection is a belt-and-suspenders check to ensure
+no malformed node reaches the desugarer. Do not add explicit handling for Bad* nodes in the
+desugarer (plan 12) or the catch-all panic (plan 19) — they must never reach that far.
+
 ## Resolved Questions
 
 **Ghost type declarations in `.gobra` files (resolved — see plan 06):** The Gobrafier
