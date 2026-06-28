@@ -94,9 +94,38 @@ a single value (Go's `pure` functions are restricted to a single non-error retur
 
 ### Verification Specifications (C9)
 
-The Desugarer pipeline stage must formally specify its transformation
-contracts:
+The internal AST node types are immutable after construction. Gobra specs on traversal and
+construction functions enforce structural invariants on the node types themselves:
 
-1. `//@ ensures` predicates verifying that the returned internal AST structure matches the exact semantic shape expected as input by `14-silver-ast.md`.
-2. Data loss prevention: Loop invariants proving that type-casting or stripping sugar (like converting `switch` statements to nested `if` blocks) retains original source token position mapping.
+1. **Non-nil body invariant**: Members with a required body (`Method`, `Function`, `FPredicate`)
+   carry a non-nil postcondition on their constructors:
+   ```go
+   //@ ensures m != nil && acc(m.Body) && m.Body != nil
+   func NewMethod(name string, body Stmt, ...) (m *Method)
+   ```
+
+2. **Position preservation**: Every node must carry a valid (non-zero) source position, proved
+   by a postcondition on all constructor functions:
+   ```go
+   //@ ensures n != nil && n.Pos() != token.NoPos
+   func NewAssign(lhs, rhs Expr, pos token.Pos) (n *Assign)
+   ```
+
+3. **No Tuple in final AST**: The `Tuple` expression type is a desugaring intermediate and must
+   not appear in the AST handed to the translator. This invariant is enforced by a `wellFormed`
+   predicate called at the end of desugaring (plan 12), but it is defined here alongside the
+   node types:
+   ```go
+   //@ pred wellFormedExpr(e Expr)
+   // wellFormedExpr holds when e contains no Tuple sub-expression.
+   // Defined in internal/ast/internal/invariants.go; used by plan 12's postcondition.
+   ```
+
+4. **Addressability flag**: The `Addressable() bool` method on `Expr` returns a stored field;
+   the stored field must be set exactly once at construction. This is enforced by making the
+   `addressable` field unexported and only settable via the constructor:
+   ```go
+   //@ ensures r.Addressable() == addressable
+   func NewVar(name string, typ Type, addressable bool) (r *Var)
+   ```
 

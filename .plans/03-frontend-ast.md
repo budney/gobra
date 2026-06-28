@@ -237,11 +237,45 @@ type PForStmt struct {
 `PRangeStmt` follows the same pattern. The body's `PBlockStmt` contains only statements
 inside the braces, not the invariants.
 
-### Verification Specifications (C10)
+### Verification Specifications (C9)
 
-All AST traversal methods and wrapper lookups must include
-pre/postconditions (`//@ requires`/`//@ ensures`) proving:
+All wrapper constructors and traversal entry points carry Gobra pre/postconditions enforcing
+two invariants: non-nil embedded `go/ast` fields, and read-only structural immutability.
 
-1. Non-nil pointer validity for embedded `go/ast` fields via access permissions (`acc(node.Underlying)`).
-2. Deep structural immutability invariants during read-only transformation passes.
+1. **Non-nil embedded field invariant**: Each wrapper constructor requires its `go/ast` argument
+   to be non-nil and guarantees the wrapper's embedded field is accessible:
+   ```go
+   //@ requires goFunc != nil && spec != nil
+   //@ ensures  acc(f.GoFunc) && f.GoFunc != nil
+   //@ ensures  acc(f.Spec)   && f.Spec   != nil
+   func NewPFuncDecl(goFunc *ast.FuncDecl, spec *PFunctionSpec) (f *PFuncDecl)
+
+   //@ requires goStmt != nil
+   //@ ensures  acc(w.Stmt) && w.Stmt != nil
+   func NewPGoStmt(goStmt ast.Stmt) (w *PGoStmt)
+
+   //@ requires goFor != nil
+   //@ ensures  acc(s.GoFor) && s.GoFor != nil
+   func NewPForStmt(goFor *ast.ForStmt, invs []PAssertion, body *PBlockStmt) (s *PForStmt)
+   ```
+
+2. **Read-only traversal immutability**: The `Visitor.Visit` dispatch methods require read
+   access to the node but do not modify it:
+   ```go
+   //@ requires acc(n, 1/2)
+   //@ ensures  acc(n, 1/2)
+   func (v *defaultVisitor) VisitPFuncDecl(n *PFuncDecl)
+   ```
+   The `1/2` fractional permission expresses that the visitor holds a read-only share; the
+   caller retains the other half, preventing concurrent mutation.
+
+3. **PBlockStmt source-order invariant**: After `MergeGhostStatements` (plan 07), every
+   adjacent pair of statements in `PBlockStmt.Stmts` must be in non-decreasing `Pos()` order.
+   This invariant is expressed as a loop invariant on the merge function (plan 07), but is
+   defined here as a predicate over `PBlockStmt`:
+   ```go
+   //@ pred orderedStmts(b *PBlockStmt)
+   // orderedStmts holds when for all 0 <= i < len(b.Stmts)-1:
+   //   b.Stmts[i].Pos() <= b.Stmts[i+1].Pos()
+   ```
 

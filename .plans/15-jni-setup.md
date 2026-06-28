@@ -18,6 +18,10 @@ the rest of the backend uses.
 - Graceful shutdown: shut down the JVM when Go-Gobra exits
 - Thread attachment: JNI requires each OS thread that calls into the JVM to be attached;
   manage attach/detach around JNI calls
+- `WorkerPool` type skeleton and `workerJob` struct (channel infrastructure and thread-lifecycle
+  skeleton; full Silicon-aware body is in plan 15b)
+- `VerificationResult` struct definition (the result type returned by a worker after calling
+  Silicon; plan 15b fills in the verification loop that populates it)
 
 **Out of scope:**
 - Building the Silver Java AST (16-silver-jni-builder.md)
@@ -26,6 +30,8 @@ the rest of the backend uses.
 ## Dependencies
 
 - [01-project-setup.md](01-project-setup.md) — repository and build tooling
+- [14-silver-ast.md](14-silver-ast.md) — `*silver.Program` is the job payload type in `workerJob`
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type used in `VerificationResult.Errors`
 
 ## Reference: Prior Art
 
@@ -107,6 +113,16 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
       result chan *VerificationResult
   }
   ```
+- `VerificationResult` struct (defined here; plan 15b populates it from Silicon output):
+  ```go
+  // VerificationResult holds the outcome of one Silicon verification call.
+  // Errors is nil on success; non-nil indicates verification failure with diagnostics.
+  type VerificationResult struct {
+      Errors []Diagnostic // nil on success; plan 32a owns the Diagnostic type
+  }
+  ```
+  Plan 15 owns this type. Plan 15b reads it (populating `Errors` from Silicon's response).
+  Plan 17 and plan 32 consume it for error reporting.
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns
@@ -151,5 +167,34 @@ compilation is limited to target platforms where a JVM is available. Document in
 
 ### Verification Specifications (C9)
 
-1. The JNI bridge package must formally specify thread state. It must use Gobra thread-ownership permissions to prove that an un-locked or un-attached thread can never issue a raw call to the JVM helper (`SilverBridge.java`).
+The JNI bridge package must formally specify thread-state safety using Gobra permissions:
+
+1. **Thread-locked invariant**: The internal `callJVM` helper may only be called from a goroutine
+   that holds the OS-thread lock and has an attached JVM thread. This is expressed as a
+   thread-ownership ghost predicate:
+   ```go
+   //@ pred ThreadAttached(jvm *JVM)
+   //
+   //@ requires acc(ThreadAttached(jvm), 1)
+   //@ ensures  acc(ThreadAttached(jvm), 1)
+   func (jvm *JVM) callJVM(method string) error
+   ```
+   An un-attached goroutine has no `ThreadAttached` token, so calling `callJVM` without it
+   is a static verification error.
+
+2. **Attach/detach lifecycle**: `AttachCurrentThread` produces the token; `DetachCurrentThread`
+   consumes it. The `defer` pattern in `runWorkerSkeleton` must be annotated:
+   ```go
+   //@ ensures acc(ThreadAttached(jvm), 1)
+   func (jvm *JVM) AttachCurrentThread()
+
+   //@ requires acc(ThreadAttached(jvm), 1)
+   func (jvm *JVM) DetachCurrentThread()
+   ```
+
+3. **JVM singleton**: `Start` has a postcondition that the returned `*JVM` is non-nil on nil error:
+   ```go
+   //@ ensures err == nil ==> j != nil
+   func Start(cfg JVMConfig) (j *JVM, err error)
+   ```
 

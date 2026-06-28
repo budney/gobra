@@ -176,10 +176,45 @@ See plan 32 for the full constant definitions and the canonical list of tags.
 
 ### Verification Specifications (C9)
 
-The Silver IR generation module must prove structural validity:
+The Silver IR generation module proves structural validity via Gobra predicates on the node
+types and postconditions on factory functions.
 
-1. All factory functions for constructing `*silver.Program` or
-   `*silver.Expression` must enforce strict structural well-formedness
-   invariants (e.g., acyclic expression trees) via recursive
-   predicates.
+1. **Non-nil NodeInfo.File on non-synthetic nodes**: Every factory that constructs a non-synthetic
+   Silver node must guarantee a non-empty `File` field:
+   ```go
+   //@ requires info.File != "" || info.Tag == TagSynthetic
+   //@ ensures  n != nil && n.NodeInfo().File == info.File
+   func NewAssert(exp Exp, info NodeInfo) (n *Assert)
+
+   //@ requires info.File != "" || info.Tag == TagSynthetic
+   //@ ensures  n != nil && n.NodeInfo().File == info.File
+   func NewMethod(name string, params, returns []*LocalVarDecl,
+                  pres, posts []Exp, body *Seqn, info NodeInfo) (n *Method)
+   ```
+
+2. **Acyclicity of expression trees**: Silver expressions form a DAG (no cycles). This is
+   expressed via a recursive predicate that the translator (plan 19) must establish on every
+   `Exp` it constructs:
+   ```go
+   //@ pred acyclicExp(e Exp, visited set[Exp])
+   // acyclicExp(e, visited) holds when e ∉ visited and
+   // for every direct child c of e: acyclicExp(c, visited ∪ {e})
+   ```
+   Factory functions for compound expressions carry the predicate as a postcondition:
+   ```go
+   //@ requires acyclicExp(left, set[Exp]{}) && acyclicExp(right, set[Exp]{})
+   //@ ensures  acyclicExp(result, set[Exp]{})
+   func NewAdd(left, right Exp, info NodeInfo) (result *BinExp)
+   ```
+
+3. **Children() completeness**: The `Node` interface requires `Children() []Node`. Every
+   structural node's `Children()` implementation must return exactly the node's direct
+   child nodes (no extras, no omissions). This is self-enforcing via the interface at compile
+   time, but the precondition for `SearchInfo`'s DFS is that every node it reaches via
+   `Children()` satisfies `acyclicExp` / is accessible:
+   ```go
+   //@ requires acc(n, 1/2)
+   //@ ensures  acc(n, 1/2) && forall i int :: 0 <= i && i < len(result) ==> result[i] != nil
+   func (n *Method) Children() (result []Node)
+   ```
 
