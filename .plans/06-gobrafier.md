@@ -89,10 +89,33 @@ In practice, since line counts are preserved, the table is the identity mapping 
 omitted entirely for the initial implementation. Add a non-trivial mapping only if a
 transformation is found that changes line counts.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/frontend/gobrafier.go` and
+verified before this plan is considered complete.
+
+**`Gobrafy` line-count preservation and output safety:**
+```go
+//@ requires len(src) >= 0
+//@ ensures  len(diags) == 0 ==> bytes.Count(out, '\n') == bytes.Count(src, '\n')
+//@ ensures  len(diags) > 0  ==> out == nil
+//@ decreases len(src)
+func Gobrafy(src []byte, filename string) (out []byte, diags []Diagnostic)
+```
+
+**No aliasing between input and output (safe for concurrent downstream use):**
+```go
+//@ ensures forall i int :: 0 <= i && i < len(out) ==>
+//@   !( out[i:] overlaps src[i:] )
+```
+
 ## Deliverables
 
-- `internal/frontend/gobrafier.go` — `Gobrafy(src []byte, filename string) ([]byte, error)`
-  (no PositionMap needed for the initial implementation; see position mapping note above)
+- `internal/frontend/gobrafier.go` — `Gobrafy(src []byte, filename string) ([]byte, []Diagnostic)`
+  (no PositionMap needed for the initial implementation; see position mapping note above).
+  `Diagnostic` is imported from `internal/diagnostic/` (plan 32a). Do **not** return a plain
+  `error` — a bare `error` cannot carry source position or multiple failures, both of which
+  can arise when Gobrafier encounters malformed ghost constructs.
 - Tests: compare preprocessed output for a selection of `.go` and `.gobra` test files against
   expected output (golden files); verify line count is preserved in all cases
 - **Required golden-file test**: include at least one `.gobra` input containing all three

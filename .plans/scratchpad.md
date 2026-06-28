@@ -25,8 +25,8 @@
 | Go Parser (04) | `string` (file path) | `*PFile` | `[]Diagnostic` |
 | Annotation Parser (05) | `string` (comment text) | `[]PNode` | `[]Diagnostic` |
 | Package Resolver (07) | `[]string` (paths) | `[]*PFile` | `[]Diagnostic` |
-| Type Checker (08) | `*PFile` | side-table `map[PNode]TypeInfo` | `[]Diagnostic` |
-| Desugarer (12) | `*PFile` + type tables | `*internal.Program` | `[]Diagnostic` |
+| Type Checker (08) | `*frontend.PPackage` + `types.Importer` | `*TypeInfo` | `[]Diagnostic` |
+| Desugarer (12) | `*frontend.PPackage` + `*TypeInfo` | `*internal.Program` | `[]Diagnostic` |
 | Translator (19) | `*internal.Program` | `*silver.Program` | `[]Diagnostic` |
 | Silicon Backend (17) | `*silver.Program` | `*backend.VerificationResult` | `[]Diagnostic` |
 | Reporter (32) | `*backend.VerificationResult` | formatted output | — |
@@ -178,15 +178,39 @@
 13. ~~Fix `15-jni-setup.md` (Minor): Add `WorkerPool` skeleton and `workerJob` to In-scope list.~~ DONE (already present in file)
 
 #### PIPELINE LOGIC & SYSTEM GATES (DOWNSTREAM REVISIONS)
-14. **Fix `12-desugarer.md` (Logic)**: Correct the variadic spread tracking rules to explicitly validate `ast.CallExpr.Ellipsis` instead of relying entirely on type shapes.
-15. **Fix `08-type-checker-core.md` (Spec)**: Reconcile the unified type map notes with the split `*types.Info` and `GhostTypeInfo` struct deliverables.
-16. **Fix `08-type-checker-core.md` (Dead Code)**: Determine if `TypeInfo.Addressable` is entirely dead code and prune or map a verified caller path.
-17. **Fix `16b-silver-chopper.md` (Spec)**: Synchronize the penalty configuration filename and serialization format mismatch (`GobraChopper.conf` vs `gobra-chopper.json`).
-18. **Fix `06-gobrafier.md` (Spec)**: Align the function return signature to yield `[]Diagnostic` instead of a plain Go primitive `error`.
-19. **Fix `28-encoding-channels.md` (Logic)**: Add the missing `chan_T_Type()` token directly into the Plan 25 type domain spec registry.
-20. **Fix `35-regression-suite.md` (Gates)**: Harmonize the contradictory entry criteria for phase 36 (95% pass rate gate vs concurrent parallel tracking).
+14. ~~**Fix `12-desugarer.md` (Logic)**: Correct the variadic spread tracking rules to explicitly validate `ast.CallExpr.Ellipsis` instead of relying entirely on type shapes.~~ DONE — Branch 1 now requires `ast.CallExpr.Ellipsis.IsValid()` as primary discriminant; Branches 2–4 explicitly note Ellipsis is NOT set. Added warning that type-shape-only detection misclassifies `f(g())` as a spread.
+15. ~~**Fix `08-type-checker-core.md` (Spec)**: Reconcile the unified type map notes with the split `*types.Info` and `GhostTypeInfo` struct deliverables.~~ DONE — "Side-table for type info" note rewritten to explain two distinct side-tables (stdlib `*types.Info` + `map[PNode]GhostType`); removed misleading "unified `map[PNode]types.Type`" language.
+16. ~~**Fix `08-type-checker-core.md` (Dead Code)**: Determine if `TypeInfo.Addressable` is entirely dead code and prune or map a verified caller path.~~ DONE — Removed `TypeInfo.Addressable` method from Deliverables; added note that call sites use `ti.Go.Types[expr].Addressable()` directly.
+17. ~~**Fix `16b-silver-chopper.md` (Spec)**: Synchronize the penalty configuration filename and serialization format mismatch (`GobraChopper.conf` vs `gobra-chopper.json`).~~ DONE — Scope section changed from `GobraChopper.conf` to `gobra-chopper.json` with explicit note that it's JSON format using Scala field name keys.
+18. ~~**Fix `06-gobrafier.md` (Spec)**: Align the function return signature to yield `[]Diagnostic` instead of a plain Go primitive `error`.~~ DONE — `Gobrafy` signature changed to `([]byte, []Diagnostic)`; added note that plain `error` cannot carry source position or multiple failures.
+19. ~~**Fix `28-encoding-channels.md` (Logic)**: Add the missing `chan_T_Type()` token directly into the Plan 25 type domain spec registry.~~ DONE — Added `function chan_Type(elem: Type): Type` to the `Type` domain code block in plan 25; added explanatory note that `chan_Type` is required to distinguish channel-in-interface from int-in-interface, cross-referencing plan 28.
+20. ~~**Fix `35-regression-suite.md` (Gates)**: Harmonize the contradictory entry criteria for phase 36 (95% pass rate gate vs concurrent parallel tracking).~~ DONE — Replaced contradictory single bullet with a two-stage gate: plan 36 (annotations) may start once skip list is stable; plan 37 (verification) requires ≥95% pass rate.
 
 - **Next Autonomous Steps:** Execute the remediation queue starting with the high-severity items on files `15` and `11`.
+
+### CHECK-PLAN RESULTS (run on 06, 08, 12, 16b, 25, 35 after Items 14–20 edits)
+
+#### BLOCKERS FOUND — WRITING THROUGH IMMEDIATELY
+
+- **[C4-REG — 08]** FIXED: stale "same `map[PNode]types.Type` side table" in Resolved Questions replaced with "stored in the `map[PNode]GhostType` table inside GhostTypeInfo — NOT in the stdlib `*types.Info` map".
+- **[C9 — 12]** FIXED: Added Verification Specifications section with `Desugar` pre/postconditions, fresh-var counter loop invariant, and position-preservation postcondition.
+- **[C9 — 08]** FIXED: Added Verification Specifications section with `Check` output-safety contract, stub-resolution invariant, and `CheckSpecs` incremental-fill postcondition.
+- **[C9 — 06]** FIXED: Added Verification Specifications section with `Gobrafy` line-count-preservation postcondition, nil-on-error contract, termination, and no-aliasing invariant.
+- **[C9 — 25]** FIXED: Added Verification Specifications section with `EncodeInterface` ownership postcondition, `BoxValue` dyntype precondition, and `Type` domain singleton invariant.
+- **[C9 — 16b]** FIXED: Added Verification Specifications section with `Chop` coverage postcondition, self-containment postcondition, and `buildDepGraph` termination.
+- **[C9 — 35]** N/A — testing plan; C9 does not apply (no pipeline component deliverable).
+- **[REGISTRY — C6]** FIXED: Pipeline Stage I/O table corrected for stages 08 and 12 (`*PFile` → `*frontend.PPackage`; `map[PNode]TypeInfo` → `*TypeInfo`).
+
+### FINAL CHECK RESULT (06, 08, 12, 16b, 25, 35)
+**All criteria PASS after fixes applied in this run.**
+| File | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 |
+|---|---|---|---|---|---|---|---|---|---|
+| 06-gobrafier.md | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | ✓ | ✓ |
+| 08-type-checker-core.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | ✓ | N/A | ✓ | ✓ (fixed) |
+| 12-desugarer.md | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | ✓ | ✓ (fixed) |
+| 16b-silver-chopper.md | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | ✓ | ✓ (fixed) |
+| 25-encoding-interfaces.md | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | ✓ | ✓ (fixed) |
+| 35-regression-suite.md | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A |
 
 ### CHECK-PLAN RESULTS (run on 04, 15, 15b, 16, 17 after Phase 1 edits)
 **Outcome: 11 passed, 6 failed** — 3 regressions + 3 pre-existing C9 gaps + 1 pre-existing C9 gap

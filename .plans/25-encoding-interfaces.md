@@ -137,6 +137,7 @@ domain Type {
   unique function nilType(): Type      // type tag for nil interface values (iface(null, nilType()))
   function slice_Type(elem: Type): Type
   function pointer_Type(elem: Type): Type
+  function chan_Type(elem: Type): Type  // channel types: chan_Type(int_Type()) ≠ int_Type()
   function struct_Type_{S}(): Type     // one per concrete struct type (emitted lazily on first use)
   // ... one per type constructor used in the program
   function behavioral_subtype(sub: Type, sup: Type): Bool
@@ -162,6 +163,13 @@ domain Type {
   }
 }
 ```
+
+**`chan_Type` is required (plan 28 dependency):** The exclusive encoding of `chan T` is `vpr.Int`
+(an opaque integer ID). Without `chan_Type(elem: Type)` in the `Type` domain, a channel stored
+in `interface{}` would be indistinguishable from a plain `int` at the Silver level: both would
+box as `Poly[Int]` with an `int_Type()` tag. `chan_Type(elem)` is emitted lazily on the first
+use of any channel type in an interface-boxing position (plan 28 encoding). Its Silver
+`unique function` guarantee ensures `chan_Type(e) != int_Type()` automatically.
 
 **No integer tags.** The `Type` domain does NOT include a `tag(t: Type): Int` function or `{TypeName}_tag(): Int` per-type integer constants. Type assertions and type switches use `Type`-valued comparisons (`dynType(i) == T_Type()`) directly. Silver's `unique function` guarantees distinctness between all ground `Type` terms, so integer tags are redundant and would only add solver load.
 
@@ -222,6 +230,31 @@ no converse) against the Scala source before marking this encoding complete.
 **Audit checklist:** For each pure interface method encoded, verify the postcondition clause
 shape matches the Scala `InterfaceEncoding.scala`. Verify `Poly[T]` has exactly one axiom
 (round-trip, no converse). Mark ✓ when confirmed.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/interfaces.go`
+and verified before this plan is considered complete.
+
+**`EncodeInterface` output ownership (emitted Silver domain is globally unique):**
+```go
+//@ requires ctx != nil && iface != nil
+//@ ensures  result != nil
+//@ ensures  result.Name == "InterfaceDomain"   // singleton: same name every call
+func EncodeInterface(ctx *Context, iface *types.Interface) *silver.Domain
+```
+
+**`BoxValue` unbox-before-dyntype invariant:**
+```go
+//@ requires dynTypeEstablished(ctx, val, T)
+//@ ensures  unboxed != nil
+func BoxValue(ctx *Context, val silver.Expr, T types.Type) (boxed silver.Expr, unboxed silver.Expr)
+```
+
+**`Type` domain singleton (emitted at most once):**
+```go
+//@ invariant len(ctx.emittedTypeDomain) <= 1
+```
 
 ## Deliverables
 

@@ -13,12 +13,16 @@ and achieve full pass rate parity with the Scala implementation.
   Scala Gobra's results
 - Track which tests pass, which fail, and which are known failures (skip list)
 - Identify gaps: tests that expose missing features and file them as sub-issues
-- Achieve ≥95% pass rate with a documented skip list before proceeding to self-hosting (36).
-  A 100% gate is impractical: obscure failures in channels, generics, or edge cases could
-  block the self-hosting milestone indefinitely. The skip list (`tests/testdata/skip.txt`)
-  must include an explanation for each skipped test.
-- Self-hosting annotation work (36) may begin in parallel once the skip list is stable and
-  the remaining failures are understood.
+- Entry criteria for downstream plans (two-stage gate):
+  - **Plan 36 (self-hosting annotations)** may begin once the skip list is stable and all
+    remaining failures are understood (i.e., every failing test has a documented `SKIP:` entry
+    with a known reason). The ≥95% threshold need not be met yet — annotation work and
+    late-stage bug fixing can proceed in parallel.
+  - **Plan 37 (self-hosting verification)** requires ≥95% pass rate (counting only non-skipped
+    tests) with a documented skip list. A 100% gate is impractical — obscure failures in
+    channels, generics, or edge cases could block self-hosting indefinitely. The skip list
+    (`tests/testdata/skip.txt`) must include an explanation for each skipped test before
+    plan 37 begins.
 - Run continuously in CI to prevent regressions
 
 **Out of scope:**

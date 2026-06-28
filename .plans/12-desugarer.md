@@ -87,17 +87,20 @@ through a four-branch dispatch (reference: `functionCallArgsD` in `Desugar.scala
 Detect the variadic case by checking whether the last parameter type is `VariadicT(elem)` via
 `go/types`. Then match on the argument shape:
 
-1. **Spread passthrough** (`f(s...)`): the last argument already has type `[]elem` and the
-   argument count equals the parameter count. Pass the slice as-is — do **not** emit a
-   `NewSliceLit`. Detection is by type shape, not by `ast.CallExpr.Ellipsis`.
+1. **Spread passthrough** (`f(s...)`): `ast.CallExpr.Ellipsis.IsValid()` is true. The last
+   argument has type `[]elem` and the argument count equals the parameter count. Pass the
+   slice as-is — do **not** emit a `NewSliceLit`. Primary detection MUST use
+   `ast.CallExpr.Ellipsis.IsValid()`; relying on type shape alone misclassifies `f(g())`
+   where `g()` returns a `[]T` (Branch 2 case) as a spread.
 2. **Tuple-chaining** (`f(g())` where `g` returns multiple values and `f` takes one variadic
-   param): the single desugared argument is a `TupleT`. Unpack the tuple elements, construct
-   a `NewSliceLit` from them, and pass the slice.
-3. **Normal packing** (`f(a, b, c)`): argument count ≥ parameter count. Collect the trailing
-   arguments (from index `paramCount-1` onward), construct a `NewSliceLit` into a fresh temp
-   var, and replace the trailing args with that var.
-4. **Zero variadic args** (`f(a)` with no variadic argument): argument count == parameter
-   count - 1. Append `in.NilLit(SliceT(elem, nil))` as the variadic argument.
+   param): `ast.CallExpr.Ellipsis` is NOT set. The single desugared argument is a `TupleT`.
+   Unpack the tuple elements, construct a `NewSliceLit` from them, and pass the slice.
+3. **Normal packing** (`f(a, b, c)`): `ast.CallExpr.Ellipsis` is NOT set and argument count
+   ≥ parameter count. Collect the trailing arguments (from index `paramCount-1` onward),
+   construct a `NewSliceLit` into a fresh temp var, and replace the trailing args with that var.
+4. **Zero variadic args** (`f(a)` with no variadic argument): `ast.CallExpr.Ellipsis` is NOT
+   set and argument count == parameter count - 1. Append `in.NilLit(SliceT(elem, nil))` as
+   the variadic argument.
 
 Any other shape is an internal bug (type checker should have caught it) — panic.
 
@@ -113,6 +116,30 @@ arms (not counting any `default` arm), and D = 1 if a `default` arm is present, 
 A `select` with C=0 (no channel arms) and D=1 (only a default) reduces to the default body;
 the discriminant is unnecessary. A `select` with C=0 and D=0 is a compile error; the type
 checker rejects it.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/desugar/desugar.go` and
+verified before this plan is considered complete.
+
+**`Desugar` termination and output safety:**
+```go
+//@ requires pkg != nil && info != nil
+//@ ensures  result != nil || len(diags) > 0
+//@ decreases // termination delegated to visitor recursion depth over finite AST
+func Desugar(pkg *frontend.PPackage, info *TypeInfo) (result *internal.Program, diags []Diagnostic)
+```
+
+**Fresh variable counter monotonicity (loop invariant inside `desugarFunc`):**
+```go
+//@ invariant counter >= old(counter)
+//@ invariant forall v in introduced :: v.Name != ""
+```
+
+**Position preservation postcondition on each node-lowering helper:**
+```go
+//@ ensures  result.Pos() == src.Pos()
+```
 
 **Division by zero (resolved):** The desugarer does NOT insert a call-site assertion for
 `r != 0` before integer division or modulo. The generated `goIntDiv`/`goIntMod` Viper functions

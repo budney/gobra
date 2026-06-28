@@ -63,11 +63,15 @@ largest single unit of work in the frontend.
   `[]Diagnostic` accumulator passed through the checker; continue checking after an error where
   doing so produces meaningful additional diagnostics. Abort (do not proceed to desugaring) if
   any errors are present.
-- **Side-table for type info**: Attach type information via a `map[PNode]types.Type`
-  side table (pointer identity as key), not via fields on AST nodes. This keeps AST nodes
-  immutable and decouples type info from the AST definition. `PNode` (defined in plan 03)
-  covers both `go/ast` nodes and Gobra ghost nodes — do not use `ast.Node` as the key type
-  since ghost nodes do not implement it.
+- **Two side-tables for type info**: Do not attach type information as fields on AST nodes;
+  use side tables keyed by `PNode` (pointer identity). There are two distinct tables:
+  1. `*types.Info` produced by `go/types.Check` — covers all standard Go nodes (expressions,
+     identifiers, selections, etc.) using the stdlib's own key type (`ast.Node`).
+  2. `map[PNode]GhostType` within `GhostTypeInfo` — covers Gobra ghost and spec nodes that
+     have no `go/ast` counterpart.
+  Both are wrapped in the exported `TypeInfo` struct (see Deliverables). Do not attempt to
+  merge them into a single `map[PNode]types.Type`; `GhostType` values implement `types.Type`
+  but the stdlib `*types.Info` map is not extensible by callers.
 
 ## Deliverables
 
@@ -77,13 +81,11 @@ largest single unit of work in the frontend.
       Go    *types.Info   // populated by go/types.Check in plan 08
       Ghost GhostTypeInfo // populated by plan 09's CheckSpecs pass
   }
-
-  // Addressable reports whether node n is addressable (can appear as operand of &).
-  // Uses Go.Types[expr].Addressable() for go/ast expressions; returns false for
-  // ghost nodes and non-expression nodes (they are always exclusive / value-semantic).
-  // Used by the translator (plan 19) to decide ExclusiveType vs. SharedType.
-  func (ti *TypeInfo) Addressable(n PNode) bool
   ```
+  **No `Addressable` wrapper method.** Call sites (primarily the desugarer, plan 12) call
+  `ti.Go.Types[expr].Addressable()` directly. Adding a `TypeInfo.Addressable(PNode) bool`
+  wrapper would be dead code — ghost nodes and non-expression nodes do not appear in
+  `go/types.Info.Types`, so callers already handle the two cases separately.
 - `internal/info/checker.go` — `Check(pkg *frontend.PPackage, importer types.Importer) (*TypeInfo, []Diagnostic)`
   Returns a `*TypeInfo` with `Go` fully populated and `Ghost` zero-valued. Plan 09's
   `CheckSpecs(pkg, info *TypeInfo) []Diagnostic` fills in `info.Ghost` in a second pass.
@@ -120,6 +122,32 @@ the ghost type checking pass (plan 09).
 
 ## Resolved Questions
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/info/checker.go` and
+`internal/info/typeinfo.go` and verified before this plan is considered complete.
+
+**`Check` output safety (non-nil info iff no errors):**
+```go
+//@ requires pkg != nil && importer != nil
+//@ ensures  (len(diags) == 0) == (info != nil)
+//@ ensures  info != nil ==> info.Go != nil
+func Check(pkg *frontend.PPackage, importer types.Importer) (info *TypeInfo, diags []Diagnostic)
+```
+
+**Stub resolution invariant (end of Pass 2 assertion):**
+```go
+//@ ensures forall t in ghostTable.Values() :: !t.IsStub()
+```
+
+**`CheckSpecs` incremental fill (Ghost field populated, Go field unchanged):**
+```go
+//@ requires info != nil && info.Go != nil
+//@ ensures  info.Go == old(info.Go)   // Go side-table not mutated
+//@ ensures  len(diags) == 0 ==> info.Ghost.Resolved()
+func CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic
+```
+
 **Ghost forward references (resolved):** The Scala type checker uses Kiama's circular
 attribute evaluation to handle mutually recursive ghost types lazily. The Go two-pass approach
 handles this differently:
@@ -154,10 +182,11 @@ Concrete implementations:
 | permission amount   | `PermissionType{}` |
 | magic wand          | `WandType{Left, Right types.Type}` |
 
-These satisfy `types.Type` and can be stored in the same `map[PNode]types.Type` side table
-alongside `go/types` results. The `GhostTypeInfo` wraps `map[PNode]GhostType` for
-ghost-only constructs; combined with the `*types.Info` from `go/types.Check`, they form the
-unified `TypeInfo` output. All `GhostType` implementations live in
+These satisfy `types.Type` and are stored in the `map[PNode]GhostType` table inside
+`GhostTypeInfo` — NOT in the stdlib `*types.Info` map (which is not extensible by callers).
+The `GhostTypeInfo` wraps `map[PNode]GhostType` for ghost-only constructs; combined with
+the `*types.Info` from `go/types.Check`, they form the two-table `TypeInfo` output (see
+Key Implementation Notes). All `GhostType` implementations live in
 `internal/info/ghosttypes.go`.
 
 **Note on `PNode` key type**: `ast.Node` (the `go/ast` node interface) cannot be used as the

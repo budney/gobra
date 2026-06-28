@@ -21,7 +21,8 @@ the resulting sub-programs is handled by plan 17b.
 - Selection predicate: identify important members by Go source position (using `NodeInfo` on
   Silver nodes, set by the translator — plan 14)
 - Penalty configuration: default values (from Scala's `Penalty.Default`) and optional
-  config file (`GobraChopper.conf`) in the working directory for tuning
+  config file (`gobra-chopper.json`) in the working directory for tuning; JSON format,
+  keys matching Scala `Penalty.defaultPenaltyConfig` field names (see Greedy Merge section)
 - Error deduplication note: errors from multiple sub-programs that verify the same shared
   member (fields, domain functions, predicate signatures) must be deduplicated by the result
   merger in plan 17b; the chopper itself does not deduplicate
@@ -175,6 +176,34 @@ variant adds artificial edges from `Always` to any domain whose name ends in
 axioms are never stripped by the chopper. The Go port must replicate this: after computing
 standard edges, for each domain whose name ends in `"WellFoundedOrder"`, add the edge
 `Always → DomainType(d)` plus edges from `DomainType(d)` to each of its axioms and functions.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/silver/chopper.go` and
+verified before this plan is considered complete.
+
+**`Chop` coverage: union of sub-programs contains all important members:**
+```go
+//@ requires prog != nil
+//@ ensures  forall m silver.Member :: cfg.Selection(m) ==>
+//@             exists sp in result :: memberIn(m, sp)
+//@ ensures  forall sp in result :: sp != nil
+//@ decreases // pure computation over finite AST
+func Chop(prog *Program, cfg ChopConfig) (result []*Program)
+```
+
+**`Chop` self-containment: each sub-program is dependency-closed:**
+```go
+//@ ensures forall sp in result ::
+//@   forall m silver.Member :: memberIn(m, sp) ==>
+//@     forall dep silver.Member :: dependsOn(m, dep) ==> memberIn(dep, sp)
+```
+
+**`buildDepGraph` termination (finite Silver AST, no cycles):**
+```go
+//@ decreases len(prog.Methods) + len(prog.Functions) + len(prog.Predicates)
+func buildDepGraph(prog *Program) depGraph
+```
 
 ## Deliverables
 
