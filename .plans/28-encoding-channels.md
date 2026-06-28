@@ -42,7 +42,8 @@ correct, but because there is nothing to check.
 their ghost predicate annotations. An under-annotated concurrent program can pass verification
 while containing data races or protocol violations. Document this prominently in:
 - The README ("Concurrency Verification" section)
-- A `KNOWN_LIMITATIONS.md` file at the repo root
+- `KNOWN_LIMITATIONS.md` at the repo root — append to or create this file; it may already
+  exist if plan 20 or plan 27 ran first
 - The `--help` output for any flag that affects concurrent verification
 
 **Consequence for self-hosting (plan 36/37):** Go-Gobra uses goroutines internally (the JNI

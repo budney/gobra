@@ -29,6 +29,10 @@ intellectual heart of the self-hosting milestone.
 
 - [35-regression-suite.md](35-regression-suite.md) — Go-Gobra must be functionally complete
   before self-hosting annotation begins
+- [30-encoding-generics.md](30-encoding-generics.md) — plan 30's generics audit is a blocking
+  prerequisite; the audit identifies which generic constructs in Go-Gobra's own source are
+  supported and which must be refactored or marked trusted before self-hosting verification
+  is attempted (see plan 30)
 
 ## Bootstrapping Sequence
 

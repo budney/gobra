@@ -152,45 +152,29 @@ generated Silver is valid and produces correct results.
 ## Exclusive / Shared Decision Algorithm
 
 The translator calls `ctx.ExclusiveType(t)` or `ctx.SharedType(t)` at each program point.
-The decision is based on **addressability** information stored in `TypeInfo` by the type
-checker (plan 08). `TypeInfo.Addressable(n PNode) bool` returns true if the expression node
-`n` is addressable in the Go sense — i.e., it can appear as the operand of `&`.
+The decision is based on the `Addressable bool` field on each internal `Expr` node (plan 11),
+which the desugarer (plan 12) propagates from `go/types.Info.Types[frontendExpr].Addressable()`
+during lowering. The translator reads this field directly — it does NOT look up `TypeInfo`:
 
-**How `Addressable` is populated (plan 08):**
-`go/types` tracks addressability via `types.Info.Types[expr].Addressable()` for each
-expression node. The type checker stores this in a `map[PNode]bool` inside `TypeInfo`:
-
-```go
-func (ti *TypeInfo) Addressable(n PNode) bool {
-    if expr, ok := n.(ast.Expr); ok {
-        if tv, ok := ti.Go.Types[expr]; ok {
-            return tv.Addressable()
-        }
-    }
-    return false  // ghost nodes and non-expressions default to exclusive (value semantics)
-}
-```
-
-**Translator usage:**
 ```go
 func translateExpr(ctx Context, node internal.Expr) silver.Expr {
     t := typeOf(node)
-    if ctx.Info().Addressable(node) {
+    if node.Addressable() {
         return ctx.SharedType(t)  // heap-resident; use Ref or acc-based encoding
     }
     return ctx.ExclusiveType(t)   // value-semantic; use domain/Int/Bool encoding
 }
 ```
 
-**Ghost AST nodes** (plan 03 types not in `go/types`): always exclusive (return false).
-Ghost values in Gobra specs are mathematical values with no heap location.
+**Ghost AST nodes** and desugarer-introduced temporaries have `Addressable = false` (set by
+plan 12). Ghost values in Gobra specs are mathematical values with no heap location.
 
-**Limitation**: `go/types.Addressable()` reflects the Go type system's rules (variables,
-struct fields, array elements are addressable; map values, interface values are not). This
-matches Gobra's ownership model closely. The one case requiring care is struct fields
-accessed via a pointer receiver (`p.f` where `p` is `*S`): `p` is addressable (shared),
-but `f` itself may be accessed in exclusive mode if it is not further pointed-to. The
-desugarer (plan 12) and struct encoding (plan 21) handle this via the exclusive/shared
+**Addressability rules**: `go/types.Addressable()` reflects the Go type system's rules
+(variables, struct fields, array elements are addressable; map values, interface values are
+not). This matches Gobra's ownership model closely. The one case requiring care is struct
+fields accessed via a pointer receiver (`p.f` where `p` is `*S`): `p` is addressable
+(shared), but `f` itself may be accessed in exclusive mode if it is not further pointed-to.
+The desugarer (plan 12) and struct encoding (plan 21) handle this via the exclusive/shared
 field-access rules from the `StructEncoding.scala` reference.
 
 ## Critical Invariant: Bodyless Viper Functions Are Uninterpreted

@@ -51,6 +51,15 @@ constructs are unified.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
   `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
   `Tuple` (transient desugaring-only construct — see below; not stable in the final AST)
+
+  The `Expr` interface includes an `Addressable() bool` method. Every concrete expression
+  struct stores an `addressable bool` field and implements `Addressable() bool { return e.addressable }`.
+  The desugarer (plan 12) sets the stored field from `go/types.Info.Types[frontendExpr].Addressable()`
+  when lowering each frontend expression. Ghost expression nodes and desugarer-introduced
+  temporaries (no frontend counterpart) default to `addressable = false`. The translator
+  (plan 19) calls `node.Addressable()` to choose between `ExclusiveType` and `SharedType` —
+  it does NOT call `TypeInfo.Addressable` on internal nodes.
+
 - **Assertions**: `SepAnd`, `Access`, `Predicate`, `ExprAssertion`, `MagicWand`,
   `Forall`, `Exists`
 - **Types**: `IntT`, `BoolT`, `StringT`, `PointerT`, `StructT`, `InterfaceT`,

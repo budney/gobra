@@ -25,7 +25,7 @@ Implement the encoding of Go map types into Silver.
 
 - [19-translator-core.md](19-translator-core.md) — Context
 - [25-encoding-interfaces.md](25-encoding-interfaces.md) — **required**: the `Type` domain and
-  `isComparable` predicate are defined by the interface encoding and emitted at every map lookup
+  `comparableType` function are defined by the interface encoding and emitted at every map lookup
   and key-in-map check; plan 24 cannot emit correct Silver without plan 25 having run first
 
 ## Reference: Current Gobra
@@ -45,8 +45,9 @@ map type — maps are always heap-allocated. `nil` map is Silver `null`.
 - `acc(m: map[K]V, perm)` translates to `acc(m.underlyingMapField_{K}_{V}, perm)`.
 
 **Key comparability:** Every map lookup and key-in-map check emits a precondition
-`isComparable(k, kType)` using the `Type` domain (from the interface encoding). This
-assertion fires at every call site.
+`comparableType(kType)` using the `Type` domain (from the interface encoding, plan 25). This
+assertion fires at every call site. `kType` is the `Type` domain value for the key's Go type,
+obtained via `ctx.TypeEncoding().TypeValue(keyType)`.
 
 **`len(m)`**: Requires read permission; `|m.underlyingMapField| == cardinality` of the
 underlying Silver map.
@@ -54,7 +55,11 @@ underlying Silver map.
 **Ghost `dict[K]V`**: handled entirely by plan 29 (`mathcollections.go`). Plan 24 covers only
 runtime `map[K]V`. Do not add dict encoding here.
 
-**Comma-ok idiom** (`v, ok := m[k]`): produce a tuple `(MapLookup(content, k), MapContains(content, k))` and decompose via tuple projection. The desugarer should handle the tuple decomposition.
+**Comma-ok idiom** (`v, ok := m[k]`): by the time the translator sees this form, the desugarer
+has already decomposed it into two separate `Assign` statements — one targeting `v` with a
+`MapLookup(content, k)` expression and one targeting `ok` with a `MapContains(content, k)`
+expression (see plan 11 and plan 12). The translator encodes each expression independently;
+no tuple handling is needed here.
 
 **`range` over maps:** Model as non-deterministic selection; the verifier cannot reason about
 iteration order. Use a ghost variable or quantifier over the map domain.

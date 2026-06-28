@@ -59,6 +59,11 @@ overflow checks stubs), and produces the flat, uniform representation the transl
   per function scope
 - Position preservation: every internal AST node should carry the source position of the
   frontend node it was derived from
+- Addressability propagation: for each frontend expression node `e` lowered to an internal
+  `Expr` node, copy `go/types.Info.Types[e].Addressable()` into the internal node's
+  `Addressable bool` field. Desugarer-introduced temporaries (fresh `LocalVar`s etc.) and
+  ghost expression nodes have no frontend counterpart; leave their `Addressable` field as
+  `false` (exclusive / value-semantic)
 - Error reporting: desugaring should not fail (type checking catches errors earlier); if an
   unexpected node is encountered, panic with a clear message
 

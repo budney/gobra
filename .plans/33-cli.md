@@ -63,6 +63,8 @@ status code.
 - [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend
 - [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)
 - [17b-parallel-workers.md](17b-parallel-workers.md) — parallel worker pool (--workers N)
+- [18-carbon-backend.md](18-carbon-backend.md) — Carbon backend; required because plan 33
+  exposes `--backend carbon` as a flag
 - [19-translator-core.md](19-translator-core.md) — translation
 - [27-encoding-methods.md](27-encoding-methods.md) — encoding must be substantially complete
 - [32-reporter.md](32-reporter.md) — output

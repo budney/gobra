@@ -69,10 +69,30 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
 
 ## Deliverables
 
-- `internal/silver/ast.go` — all Silver Go type definitions
+- `internal/silver/ast.go` — all Silver Go type definitions, including the `Member` interface
+  (see below) and the `Node` interface
 - `internal/silver/printer.go` — `Print(prog *Program) string` producing valid `.vpr` text
-- Tests: construct a simple Silver program in Go structs; print it; verify the output is
-  valid Silver by passing it to ViperServer
+- Tests: construct a simple Silver program in Go structs; print it; compare the output against
+  a known-good `.vpr` file using string equality (no ViperServer dependency at this stage —
+  offline validation of the printer output is sufficient for Plan 14)
+
+### `Member` interface
+
+Silver top-level members (methods, functions, predicates, fields, domains) share no common
+Scala supertype that maps cleanly to Go, so Go-Gobra defines its own:
+
+```go
+// Member is implemented by every Silver top-level declaration:
+// *Method, *Function, *Predicate, *Field, *Domain.
+type Member interface {
+    Node
+    memberNode() // unexported sentinel — prevents accidental external implementation
+    MemberName() string
+}
+```
+
+All five concrete types implement `Member`. The `Selection func(Member) bool` field in
+`ChopConfig` (plan 16b) uses this interface to identify important members.
 
 ## Position and Error-Backtranslation Design
 
@@ -148,28 +168,8 @@ node's Viper `Info` chain (used by the JNI worker to extract positions via
 required. Do not omit either. See plan 16 for details on the Java-side embedding.
 
 **Centralized tag registry:** The `Tag` strings set during translation (`"call"`, `"fold"`,
-`"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table (plan 32).
-To prevent typos from silently falling through to the generic error message, define all valid
-tag strings as named constants in `internal/reporting/tags.go`:
-
-```go
-package reporting
-
-const (
-    TagCall        = "call"
-    TagReturn      = "return"
-    TagField       = "field"
-    TagAssert      = "assert"
-    TagLoopInv     = "loop-inv"
-    TagFold        = "fold"
-    TagExhale      = "exhale"
-    TagTermination = "termination"
-    TagOverflow    = "overflow"
-    TagSynthetic   = "synthetic"
-    // Each encoding plan (20–31) adds its own tags here.
-)
-```
-
-Encoding modules import `reporting.TagXxx` constants when constructing `NodeInfo`; the
-reporter imports the same constants for its dispatch table. No bare string literals for tags
-anywhere outside `tags.go`.
+`"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table. All valid
+tag constants are defined in `internal/reporting/tags.go` (owned by plan 32). Encoding modules
+import `reporting.TagXxx` constants when constructing `NodeInfo`; the reporter imports the same
+constants for its dispatch table. No bare string literals for tags anywhere outside `tags.go`.
+See plan 32 for the full constant definitions and the canonical list of tags.

@@ -100,8 +100,9 @@ rows are checked.
 
 **Uninterpreted bitwise/shift functions:** These have NO postconditions by design — the
 SMT solver treats them as opaque. This means proofs involving bitwise operations will not
-go through unless the user adds `//@ assume` or the spec avoids bitwise results. Document
-this limitation in `KNOWN_LIMITATIONS.md`.
+go through unless the user adds `//@ assume` or the spec avoids bitwise results. Append to
+or create `KNOWN_LIMITATIONS.md` at the repo root documenting this limitation. (The file is
+first created by plan 27; plans implemented before plan 27 should create it if absent.)
 
 ## Deliverables
 
