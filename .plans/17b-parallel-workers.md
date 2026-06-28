@@ -24,7 +24,10 @@ not a concurrent development.
 - Result merging: success iff all sub-programs succeed; errors accumulated across all workers
 - Error deduplication: shared members (fields, domains, predicate signatures) appear in
   multiple sub-programs and may produce duplicate errors; deduplicate by `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`
-- `--workers N` CLI flag (wired in plan 33); default = `min(runtime.NumCPU(), numSubPrograms)`
+- `--workers N` CLI flag (wired in plan 33); pool size defaults to `runtime.NumCPU()`. The
+  actual concurrent JNI job count is `min(poolSize, len(subPrograms))` — `DispatchChopped`'s
+  semaphore caps it naturally. `numSubPrograms` is not available at pool-creation time and
+  cannot be used to set the pool size.
 - Non-chopped path unchanged: when `--chop` is not set, pool dispatches to a single worker
   exactly as plan 17 does
 
@@ -37,7 +40,7 @@ not a concurrent development.
 - [15-jni-setup.md](15-jni-setup.md) — pool-ready `WorkerPool` API (pool-size=1 baseline)
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — `silver.NewBuilder`, `BuiltProgram`
   (carries `NodeMap` and `Close`); consumed directly in worker goroutine template
-- [16b-silver-chopper.md](16b-silver-chopper.md) — produces `[]*silver.Program` to dispatch
+- [14-silver-ast.md](14-silver-ast.md) — `silver.Program` type (the element type of `[]*silver.Program` received from the chopper via plan 33); plan 17b does NOT call `Chop()` — that is pipeline.go's responsibility (plan 33)
 - [17-silicon-backend.md](17-silicon-backend.md) — single-worker baseline; provides
   `SiliconConfig` and `VerificationResult` types reused here
 
@@ -109,6 +112,49 @@ func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResul
 
 `mergeResults` folds results left: success if all succeed; accumulated + deduplicated errors
 otherwise. Deduplication key: `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`.
+
+**Composite `Close()` contract (required):** Each sub-result carries its own `Close func()`
+that releases the JNI global references from that sub-result's `Build()` call. `mergeResults`
+must produce a merged `VerificationResult` whose `Close` transitively calls every sub-result's
+`Close()`. Failure to do so leaks JNI global references. Concretely:
+
+```go
+func mergeResults(results []*VerificationResult) *VerificationResult {
+    // ... merge errors and NodeMaps ...
+    return &VerificationResult{
+        Success: allSucceeded,
+        Errors:  deduplicated,
+        NodeMap: mergedNodeMap,
+        Close: func() {
+            for _, r := range results {
+                if r.Close != nil {
+                    r.Close()
+                }
+            }
+        },
+    }
+}
+```
+
+The caller of `DispatchChopped` must `defer result.Close()` before calling `Report()`, exactly
+as for single-program results (plan 16 / plan 17 contract).
+
+**NodeMap merging (safe — IDs are globally unique):** Because plan 16 uses a process-wide
+`globalNodeID` atomic counter (not a per-Builder counter), every Silver node across all
+parallel builds gets a unique `uint64` ID. The NodeMaps from all sub-results can be merged
+into a single `map[uint64]*silver.Node` without key collisions:
+
+```go
+mergedNodeMap := make(map[uint64]*silver.Node)
+for _, r := range results {
+    for id, node := range r.NodeMap {
+        mergedNodeMap[id] = node
+    }
+}
+```
+
+This is safe because `globalNodeID` ensures no two Build() calls — even in separate goroutines
+on different workers — produce the same ID.
 
 ## Z3 API Mode Caveat
 

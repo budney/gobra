@@ -76,7 +76,11 @@ status code.
 
 - `cmd/gobra/main.go` — entry point
 - `internal/config/config.go` — `Config` struct and flag parsing; includes `--workers N` flag
-  (default = `min(runtime.NumCPU(), numSubPrograms)`; wired to `WorkerPool` in plan 17b)
+  (default = `runtime.NumCPU()`; wired to `WorkerPool` in plan 17b). Note: the actual
+  concurrent JNI job count is capped at `min(poolSize, len(subPrograms))` at dispatch time
+  by the semaphore in `DispatchChopped` — excess workers simply idle. `numSubPrograms` is
+  only known after the translator and chopper run and cannot be used to set the pool size
+  at flag-parse time.
 - `internal/pipeline/pipeline.go` — `Run(cfg *Config) error` orchestrating all stages
 - Tests: integration tests running the full pipeline on small `.gobra` files
 

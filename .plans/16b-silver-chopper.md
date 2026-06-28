@@ -213,13 +213,14 @@ merging) so slow runs are diagnosable.
 
 ## Integration Note
 
-The chopper is called by the backend dispatcher (plan 17b) before dispatching to JNI workers.
-It is not called by the JNI layer itself. The pipeline is:
+The chopper is called by **`pipeline.go` (plan 33)**, not by the pool dispatcher (plan 17b).
+`DispatchChopped` (plan 17b) receives an already-chopped `[]*silver.Program` and does NOT call
+`Chop()` internally. The pipeline is:
 
 ```
 Translator (plan 19) → *silver.Program
-  → Chopper (plan 16b) → []*silver.Program
-    → Pool dispatcher (plan 17b) → one JNI worker per sub-program (in parallel)
+  → pipeline.go calls Chop (plan 16b) → []*silver.Program
+    → pipeline.go calls WorkerPool.DispatchChopped (plan 17b) → parallel JNI workers
       → Results merged and deduplicated
 ```
 

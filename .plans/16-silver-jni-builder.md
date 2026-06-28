@@ -127,15 +127,21 @@ by resolving the error's offending node back to its Go Silver struct (which carr
 This resolution uses a `uint64`-keyed node map, not JNI pointer comparison.
 
 ```go
+// globalNodeID is a process-wide atomic counter for Silver node IDs.
+// Using a global counter (rather than a per-Builder counter) ensures IDs are
+// unique across all Builder instances and all parallel builds (plan 17b).
+// A per-Builder counter starting at 0 would produce overlapping ID spaces
+// when multiple workers call Build() concurrently, breaking merged NodeMap lookups.
+var globalNodeID atomic.Uint64
+
 type Builder struct {
-    jvm      *jvm.JVM
-    nextID   uint64
-    nodeMap  map[uint64]*silver.Node  // stable integer ID → Go Silver node
+    jvm     *jvm.JVM
+    nodeMap map[uint64]*silver.Node  // stable integer ID → Go Silver node
 }
 ```
 
 **Build-time registration (per Silver node):**
-1. Increment `nextID`; assign the current value as this node's ID.
+1. Increment `globalNodeID` atomically (`id := globalNodeID.Add(1)`); assign the current value as this node's ID.
 2. Wrap the node's existing `VprInfo` with the ID:
    - `info = SilverBridge.makeConsInfo(SilverBridge.makeAnnotationInfo("gobra_node_id", id.toString()), existingVprInfo)`
 3. Pass the wrapped info to the Silver constructor via `SilverBridge.make*(...)`.

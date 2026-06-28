@@ -112,6 +112,20 @@ NullLit, LocalVar, etc.) return nil. A missing `Children()` implementation on a 
 type is a compile error (the interface is not satisfied), so the requirement is
 self-enforcing.
 
+**`NodeInfo()` method on `Node` interface:** The reporter's `extractInfo` (plan 32) calls
+`node.NodeInfo()` on a `silver.Node` interface value. Add `NodeInfo() NodeInfo` to the `Node`
+interface alongside `Children() []Node`. Every concrete Silver node type stores a `NodeInfo`
+field and returns it from this method. The full `Node` interface is therefore:
+
+```go
+type Node interface {
+    Children() []Node
+    NodeInfo() NodeInfo
+}
+```
+
+Both methods must be implemented on every concrete Silver node type.
+
 **Design invariant**: nodes that Silicon can directly cite as `offendingNode` (Assert, Exhale,
 MethodCall, FieldAccess, etc.) must always carry a non-synthetic `NodeInfo`. Only structural
 wrapper nodes (Seqn generated for control flow, synthetic If for desugaring) may be synthetic.

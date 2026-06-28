@@ -57,7 +57,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver JNI Builder | 14, 15 |
 | [16b-silver-chopper.md](16b-silver-chopper.md) | Silver Program Chopper | 14 |
 | [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 15, 16 |
-| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16, 16b, 17 |
+| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16, 17 |
 | [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16, 17 |
 
 ### Group 5: Translator

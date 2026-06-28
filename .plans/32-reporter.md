@@ -98,9 +98,12 @@ calls for primary position lookup.
 ### Position extraction
 
 ```go
-func extractInfo(node *silver.Node) *silver.NodeInfo {
-    if node.Info != nil && node.Info.File != "" {
-        return node.Info
+// extractInfo returns the NodeInfo from node if it is non-synthetic (File != ""),
+// otherwise falls back to searchInfo DFS. NodeInfo is a value-type struct (plan 14),
+// not a pointer — it cannot be nil. The check is on the File field only.
+func extractInfo(node silver.Node) silver.NodeInfo {
+    if info := node.NodeInfo(); info.File != "" {
+        return info
     }
     return searchInfo(node) // walk children downward; see below
 }
