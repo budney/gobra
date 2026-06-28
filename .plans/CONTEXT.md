@@ -135,3 +135,24 @@ viperserver/                      ← git submodule: ViperServer + Silicon + Car
 - Z3 4.8.7+ 64-bit (`Z3_EXE` set)
 - ViperServer/Silicon JAR (`VIPERSERVER_JAR` set, or built via `sbt assembly` in `viperserver/`)
 - Optional (Carbon backend): Boogie (`BOOGIE_EXE` set)
+
+---
+
+## 🤖 AI AGENT OPERATIONAL PROTOCOLS (NON-NEGOTIABLE)
+
+If you are an AI agent or contributor processing commands in this repository, you must adhere to these execution invariants. Failure to follow these steps will result in a validation failure.
+
+### 1. The Transactional Scratchpad Rule (Anti-Truncation)
+- `.plans/scratchpad.md` is your external running memory state.
+- You are strictly FORBIDDEN from keeping extensive status logs in your chat context window.
+- **Incremental Write-Through:** Every time you complete a sub-task, find a bug, or modify a plan file, your very next tool call MUST be to edit or append that delta directly to `.plans/scratchpad.md` on disk. Do not wait until the entire execution is finished to update the file.
+
+### 2. The Double-Pass Execution Hook (Anti-Conversational Default)
+- Your job is not done when you generate text. Your job is done when the disk state is updated.
+- Before you return control to the user or output your final conclusion to the chat window, you MUST execute a final check to confirm that your complete report, findings, and remediation queue states are flushed to `.plans/scratchpad.md`.
+- **The Chat Invariant:** The chat window should only be used to state a 1-sentence confirmation of which scratchpad items were executed.
+
+### 3. Strict Severity-Order Execution
+- You must always process the `Remediation Queue` in `.plans/scratchpad.md` in top-down order (Critical Global Blockers first).
+- You are forbidden from jumping down to document local file validation specs (Items 7+) while global compilation errors or circular imports (Items 1-5) remain unresolved.
+

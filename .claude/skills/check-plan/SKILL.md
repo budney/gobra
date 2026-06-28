@@ -18,10 +18,11 @@ broken.
    append the detailed structural failure text directly into the
    scratchpad's "Active Blockers / Contradictions" section so it
    is preserved across execution turns.
-1. Read `.plans/CRITERIA.md` in full first — this is the authoritative checklist.
-2. Read `.plans/00-overview.md` to load the WBS, dependency graph, and cross-cutting notes.
-3. If `$ARGUMENTS` names specific files, check only those files against the criteria that apply
-   to them. Otherwise check all `.plans/*.md` files.
+1. Read `.plans/CONTEXT.md` fully to load the project layout and the mandatory **AI Agent Operational Protocols**. You must execute the write-through and double-pass hooks during this command run.
+2. Read `.plans/CRITERIA.md` in full first — this is the authoritative checklist.
+3. Read `.plans/00-overview.md` to load the WBS, dependency graph, and cross-cutting notes.
+4. If `$ARGUMENTS` names specific files, check only those files against the criteria that apply
+5  to them. Otherwise check all `.plans/*.md` files.
 
 ## How to check
 
