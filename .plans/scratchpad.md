@@ -190,6 +190,22 @@
 
 - **Next Autonomous Steps:** Execute the remediation queue starting with the high-severity items on files `15` and `11`.
 
+#### NEW BLOCKERS FROM FULL-AUDIT ROUND 2 (Items 28–34)
+
+28. **[C4 — 14 vs 15b/17: `NodeInfo.NodeID` MISSING FIELD]**: Plan 14 defines `NodeInfo{File, Line, Col, Tag}` — no `NodeID` field. Plans 15b and 17 both access `result.Errors[i].Pos.NodeID` (plan 15b worker snippet) and "looking up NodeMap[Pos.NodeID]" (plan 17). Field does not exist; code will not compile.
+
+29. **[C4 — 12: `select` desugaring targets wrong layer]**: Plan 12 says "desugar to a Silver `if`/`elsif` chain" for `select` — but the desugarer produces *internal AST*, not Silver. The internal AST (plan 11) has no `SelectStmt` node. The plan must say "desugar to internal `If`/`While` nodes" and plan 11 must define the internal representation.
+
+30. **[C4 — 20: `goIntDiv` postcondition unwritten — cut-over gate risk]**: Plan 20 says "copy postcondition verbatim from `IntegerEncoding.scala`" but never writes it into the plan. The Scala source is deleted at cut-over (plan 37). The postcondition must be written into plan 20 before cut-over or the implementation has no spec to reference.
+
+31. **[C9 — 04: `hasBadNode` is an undeclared free variable]**: Plan 04's C9 postcondition uses `hasBadNode` as a ghost variable but never declares it as a ghost parameter or ghost local. The Gobra spec is syntactically invalid and unverifiable.
+
+32. **[C5 — 33: missing dependency on 32a]**: Plan 33 (`pipeline.go`) produces and accumulates `[]Diagnostic` values but does not list plan 32a as a dependency. The `Diagnostic` type must be imported from `internal/diagnostic/` directly.
+
+33. **[C4 — 16b Phase 3: empty priority queue missing from stop condition]**: Phase 3 greedy merge says "pop the pair with the lowest penalty" but provides no guard for an empty queue. A lazy priority queue where all entries are stale (sub-programs consumed) would panic on pop. Stop condition must include: "stop also when the queue is empty."
+
+34. **[C4 — 15 vs 15b: `runWorkerSkeleton` becomes dead code after plan 15b]**: Plan 15 delivers `runWorkerSkeleton` in `jvm.go`; plan 15b delivers a full `runWorker` that supersedes it. `runWorkerSkeleton` is never called after plan 15b. Plan 15b must explicitly state it removes `runWorkerSkeleton` from `jvm.go`, or the package will contain dead code that misleads readers.
+
 #### NEW BLOCKERS FROM FULL-AUDIT (Items 21–27)
 21. ~~**Fix `33-cli.md` (C4 — CHOP-BOUND-CONTRADICTION)**: Remove `n := cfg.Workers; cfg.ChopBound = &n` default; plan 16b is authoritative — `--chop` without `--chop-bound` → `cfg.ChopBound = nil` (unlimited).~~ DONE — Changed plan 33 to state ChopBound remains nil when --chop is set without --chop-bound.
 22. ~~**Fix `17b-parallel-workers.md` (C5 — DEDUP-CIRCULAR-IMPORT)**: `Deduplicate` in `internal/backend/silicon/dedup.go` forces `jvm → silicon` import. Move `Deduplicate` to `internal/backend/dedup.go` (parent package).~~ DONE — Changed deliverable path from `silicon/dedup.go` to `backend/dedup.go`; added explanatory note about circular import. Registry updated.
@@ -299,6 +315,14 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 
 - **[33:Dependencies]** Plan 33 omits plan 15b as a dependency. Pre-existing, unfixed.
 
+#### SIGNIFICANT
+
+- **[07 vs 37: Go toolchain not listed in CI setup]** Plan 07 documents "build Go-Gobra with Go → run Go-Gobra (requires Go in PATH) → verify Go-Gobra source" as the bootstrap sequence. Plan 37's CI setup checklist and hard-gate list do not mention the Go toolchain as a CI runner requirement. A runner with only a Go-Gobra binary will fail silently at package resolution with no clear error.
+
+- **[08 vs 19: reserved-identifier enforcement missing from plan 08]** Plan 19 specifies two reserved identifier patterns (`_u[0-9A-F]{1,6}_` and names beginning with `gobra__`) that the type checker must reject. Plan 08's "Explicitly Unsupported Constructs" section lists only `goto`, `fallthrough`, `recover()` — the reserved-name checks are absent. A collision produces a silent Silver name collision at translation time.
+
+- **[15 vs 15b: `runWorkerSkeleton` dead code]** Plan 15 delivers `runWorkerSkeleton` in `jvm.go`. Plan 15b delivers a full `runWorker` that entirely supersedes it but neither plan says to remove `runWorkerSkeleton`. After plan 15b both functions exist in `jvm.go` but only `runWorker` is called. (Logged as item 34 in remediation queue.)
+
 #### MINOR
 
 - **[27 vs 20] `KNOWN_LIMITATIONS.md`**: Plan 20 says "append to or create"; plan 27 says "created by this plan". Plan 20 runs first in dependency order, making plan 27's claim false.
@@ -325,11 +349,19 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 
 - **[04] `hasBadNode` in C9 is invalid Gobra**: `hasBadNode` used in postconditions is a free variable — not syntactically valid Gobra. Ghost variables must be declared as ghost parameters or ghost locals. The spec is informative but unverifiable.
 
+#### SIGNIFICANT
+
+- **[21: bodyless functions table missing]** Plan 19 explicitly lists plan 21 as requiring a "Bodyless Functions" subsection: "`sharedStructConversion` and `sharedStructDefault` must also be audited." Plan 21 has no such subsection. The audit checklist is incomplete; these functions are uninterpreted and an incorrect postcondition would silently unsound struct proofs.
+
+- **[10: stub-directory-first resolution has no smoke test]** Plan 10 delivers a custom `types.Importer` that routes `"sync"`, `"fmt"`, etc. to embedded stubs before falling through to the real stdlib. There is no test asserting that `import "sync"` resolves to the embedded `.gobra` stub rather than the real Go package. This is a high-risk code path with no regression gate.
+
 #### MINOR
 
 - **[08] Unsupported constructs omits `unsafe`**: Plan 08's unsupported-constructs section lists `goto`, `fallthrough`, `recover` but not `unsafe`. Plans 07 and 10 reject it earlier; plan 08 provides no third-line-of-defense check.
 
-- **[30] Generics audit fields are stale**: Plan 30's `Audit status`, `Generics found`, and `Chosen option` fields remain `_not yet run_` / `_unknown_` / `_N/A_`. No owner or trigger is specified.
+- **[30] Generics audit fields are stale**: Plan 30's `Audit status`, `Generics found`, and `Chosen option` fields remain `_not yet run_` / `_unknown_` / `_N/A_`. No owner or trigger is specified. Plan 30 is a prerequisite for plan 36 (self-hosting annotations); open questions must be resolved before plan 36 begins.
+
+- **[04 C9: `hasBadNode` undeclared free variable]** Plan 04's C9 postcondition uses `hasBadNode` as a ghost variable but never declares it as a ghost parameter or ghost local. The Gobra spec is syntactically invalid and unverifiable. (Logged as item 31 in remediation queue.)
 
 ---
 
@@ -339,13 +371,19 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 
 - **[24+25] `comparableType` undefined without interfaces** (see Contradictions): Reproduced as logic error. Map programs without interfaces reference an unemitted Silver function, producing invalid Silver rejected by Silicon's consistency checker.
 
+#### BLOCKING
+
+- **[15b: worker snippet accesses non-existent `Pos.NodeID`]** Plan 15b's `runWorker` code accesses `result.Errors[i].Pos.NodeID` to look up `built.NodeMap`. `Pos` is `silver.NodeInfo` (plan 14) which has no `NodeID` field. This is a compile blocker. (Also logged as item 28 in remediation queue.)
+
 #### SIGNIFICANT
 
-- **[17b:Phase 3 greedy merge] Missing empty-queue termination condition**: Plan 16b says stop "when no remaining pair has penalty ≤ 0 and count ≤ Bound." With a lazy priority queue, all remaining entries could be stale (sub-programs consumed). The loop must also terminate when the queue is empty; the plan's stop condition omits this case.
+- **[17b:Phase 3 greedy merge] Missing empty-queue termination condition**: Plan 16b says stop "when no remaining pair has penalty ≤ 0 and count ≤ Bound." With a lazy priority queue, all remaining entries could be stale (sub-programs consumed). The loop must also terminate when the queue is empty; the plan's stop condition omits this case. (Also logged as item 33 in remediation queue.)
 
 - **[12/29] Sparse sequence literal encoding path missing**: Plan 29 specifies `emptySeq_{T}` for sequence literals with gaps ≥ 5 indices. Plan 11 defines no internal AST node for sparse sequence literals. Plan 12 does not mention gap detection or the chunking threshold. There is no specified path from a `PSeqLit` frontend node with sparse indices through the internal AST to plan 29's `EmptyChunk`/`NonEmptyChunk` logic.
 
 - **[27:opaque Info chain order]** Plan 27 places `@opaque` as `ConsInfo(AnnotationInfo{"opaque",...}, NodeInfo{...})` on the Go Silver node. Plan 16's builder then prepends `gobra_node_id` and `gobra_node_*` annotations in front. The resulting Java Info chain has `@opaque` deep in the chain. If Silicon's `@opaque` handling searches only the chain head (not recursively), the annotation is silently ignored. The plan does not confirm Silicon's chain-search behavior.
+
+- **[25 vs 24: `ensureTypeDomain` cross-reference implicit]** Plan 24 says it calls `ensureTypeDomain(ctx)` before any `comparableType` assertion. Plan 25 defines `ensureTypeDomain` as idempotent and callable from map operations. The two plans agree, but plan 24 never explicitly says it calls INTO plan 25's helper — a developer implementing plan 24 independently before plan 25 may write a local stub. The dependency is implicit rather than stated.
 
 #### MINOR
 
@@ -358,6 +396,8 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 ### Design concerns
 
 - **[08] `GhostType extends types.Type`**: Ghost types satisfy `types.Type` and can be passed anywhere `types.Type` is expected. Any `go/types` utility that tries to type-switch on concrete `*types.Named` / `*types.Slice` etc. will get an unhandled case or panic. A separate `GhostType` interface (not extending `types.Type`) with explicit adapters at boundary points would be safer.
+
+- **[05: `ParseAnnotation` returns `[]PNode` for file-scope decls that must be `PDecl`]** Plan 07's `MergeGhostStatements` type-asserts file-scope `PNode` values to `PDecl` and panics on failure. `ParseAnnotation` returns `[]PNode` so no compile-time guarantee exists. Consider returning `(stmtNodes []PNode, declNodes []PDecl, diags []Diagnostic)` to give callers type-safe routing without a runtime panic.
 
 - **[07] `PackageInfo.Files` alongside `Package`**: Having both `Files []*frontend.PFile` and `Package *frontend.PPackage` in `PackageInfo` creates ambiguity. The plan calls `Package` authoritative but retains `Files` for diagnostics. Any code that uses `Files` for type-checking or desugaring is a bug; this must be stated explicitly.
 
@@ -381,7 +421,11 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 
 - **[32a:Category names]** `Error` and `Warning` constants in `internal/diagnostic/` may shadow local error variables in files that also use the `errors` package. Consider `DiagError`, `DiagWarning`, `DiagInfo`.
 
-- **[35:UNEXPECTED_FAIL sentinel]** Plan 35 mentions that CI greps for `UNEXPECTED_FAIL:` lines but provides no explicit command or CI step. Plan 34 specifies the sentinel format; plan 35 should include the exact grep command in the CI job spec.
+- **[35:UNEXPECTED_FAIL sentinel]** Plan 35 mentions that CI greps for `UNEXPECTED_FAIL:` lines but provides no explicit command or CI step. Plan 34 specifies the sentinel format; plan 35 should include the exact grep command in the CI job spec. Neither plan states that BOTH `UNEXPECTED_FAIL:` (regression) and `UNEXPECTED_PASS:` (stale skip entry) must fail CI.
+
+- **[19: `TupleDomain` notation not cross-referenced at use sites]** Plan 19 defines that `tuple_get(base, idx, n)` is shorthand for `gobra__tuple{n}_get{idx}(base)`. Plans 21 and 22 use this notation without defining or citing it. Add a cross-reference at each use site.
+
+- **[13: transform order rationale undocumented]** Plan 13 specifies the transform order (constant propagation → call graph → overflow → termination) without explaining why this order is required. The call-graph-before-termination constraint is non-obvious (termination checking needs complete CG edges). Add a one-line rationale per ordering constraint.
 
 ---
 
