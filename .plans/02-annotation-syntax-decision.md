@@ -71,7 +71,13 @@ implementation effort.
 ## Deliverables
 
 - This file updated with the chosen option and any syntax extension notes
-- A brief annotation grammar sketch (BNF or pseudocode) covering:
+- The `## Annotation Grammar` section of this file (see below) — **owned and written by plan 05**,
+  not by this plan. This plan records the syntax decision; plan 05 produces the grammar.
+
+**Note on grammar sketch:** The grammar sketch is a deliverable of **plan 05** (annotation
+parser). Plan 05 writes the completed grammar into the `## Annotation Grammar` section of THIS
+file (02) upon completing the parser implementation. This file owns the section as a stable
+home for the grammar; plan 05 owns the task of writing it. The grammar must cover:
   - `requires`, `ensures`, `preserves`, `invariant`
   - `acc()`, `unfolding`, `fold`/`unfold`
   - `pure`, `ghost`, `trusted`
@@ -80,23 +86,17 @@ implementation effort.
   - Assertion operators (`&&`, `||`, `==>`, `!`)
   - Gobra-specific: `seq`, `set`, `mset`, `dict`, `option`, ADT constructors
 
-**Note on grammar sketch:** This grammar sketch has NOT been written yet (it is a
-deliverable, not completed above). The annotation parser (plan 05) currently references
-`src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` as the definitive grammar. Those files
-reside in the Scala source tree scheduled for deletion at cut-over (DECISIONS.md D8). Before
-cut-over, the grammar sketch must be written into this file (or a companion file) so that
-the annotation mini-parser has a grammar specification that survives after the Scala source
-is removed. **This is a blocking deliverable for cut-over.**
+Plan 05 references `src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` as the authoritative
+source while writing the grammar. Those files reside in the Scala source tree scheduled for
+deletion at cut-over (DECISIONS.md D8). Before cut-over, the grammar sketch must be written
+into the `## Annotation Grammar` section of this file so the specification survives after the
+Scala source is removed. **This is a blocking deliverable for cut-over.**
 
 **Gating condition**: The grammar sketch must be completed and committed to the `self-hosting`
 branch **before** the cut-over commit described in plan 37 and DECISIONS.md D8. Plan 37's
-success criteria include a checklist item: "annotation grammar sketch in `02-annotation-syntax-decision.md`
-is complete." The cut-over commit must be blocked until this item is checked.
-
-The grammar sketch must be written directly into this file in a `## Annotation Grammar`
-section using BNF or EBNF notation, covering all forms listed in the Deliverables section
-above. Reference `src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` while writing it —
-those files are the authoritative source until deletion.
+success criteria include a checklist item: "annotation grammar sketch in `## Annotation Grammar`
+section of `02-annotation-syntax-decision.md` is complete." The cut-over commit must be
+blocked until this item is checked.
 
 **Independent validation procedure**: Once the grammar sketch exists in `## Annotation Grammar`:
 1. For each production in the sketch, locate the corresponding rule in `GobraParser.g4` or

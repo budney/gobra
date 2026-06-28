@@ -39,6 +39,7 @@ overflow checks stubs), and produces the flat, uniform representation the transl
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Desugar`
 - [03-frontend-ast.md](03-frontend-ast.md) — source AST
 - [08-type-checker-core.md](08-type-checker-core.md) — type info needed for desugaring decisions
 - [09-type-checker-specs.md](09-type-checker-specs.md) — spec type info
@@ -100,9 +101,9 @@ Detect the variadic case by checking whether the last parameter type is `Variadi
 
 Any other shape is an internal bug (type checker should have caught it) — panic.
 
-**`select` discriminant type (resolved):** The desugarer counts arms before choosing the
-discriminant type. Let C = the number of channel-operation arms (not counting any `default` arm),
-and D = 1 if a `default` arm is present, 0 otherwise.
+**`select` discriminant type (canonical definition — referenced in plan 28):** The desugarer
+counts arms before choosing the discriminant type. Let C = the number of channel-operation
+arms (not counting any `default` arm), and D = 1 if a `default` arm is present, 0 otherwise.
 
 - **C=1, D=1** (one channel op + default): use a `bool` discriminant — `true` → channel op,
   `false` → default.

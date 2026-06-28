@@ -35,10 +35,10 @@ diagnostic output.
 
 ## Dependencies
 
-- [08-type-checker-core.md](08-type-checker-core.md) — `TypeInfo` type used in `Report()` signature
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Report()`
 - [14-silver-ast.md](14-silver-ast.md) — `NodeInfo` on every Silver node
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — JNI object-to-Go-node identity map
-- [17-silicon-backend.md](17-silicon-backend.md) — source of VerificationError objects
+- [17-silicon-backend.md](17-silicon-backend.md) — source of `VerificationError` objects (carries `Node` field for searchInfo)
 
 ## Reference: Current Gobra
 
@@ -55,27 +55,21 @@ diagnostic output.
   `TagAssert`, `TagLoopInv`, `TagFold`, `TagExhale`, `TagTermination`, `TagOverflow`,
   `TagSynthetic`); encoding plans reference these constants; the reporter's dispatch table
   uses them
-- `internal/reporting/reporter.go` — `Report(result *VerificationResult, nodeMap map[uint64]*silver.Node, info *TypeInfo) []Diagnostic`
-- `Diagnostic` type: `{File, Line, Col, Message, Category}`
+- `internal/reporting/reporter.go` — `Report(result *VerificationResult) []Diagnostic`
+- `Diagnostic` type: defined in plan 32a (`internal/diagnostic/`); re-exported from `internal/reporting/` for callers
 - Text formatter and JSON formatter
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
 
-**Note on the `nodeMap` parameter:** `nodeMap` is the `BuiltProgram.NodeMap` from plan 16,
-populated during `Build()`. It maps stable `uint64` node IDs to the corresponding
-`*silver.Node` Go structs. The reporter uses it **only for the `searchInfo` DFS fallback**
-(when an error's `Pos.Tag == "synthetic"`): it retrieves the Go Silver node and calls
-`Children()` to walk the subtree looking for a non-synthetic descendant with a real `NodeInfo`.
+**`Report` signature**: takes only `*VerificationResult`. The `nodeMap` and `TypeInfo`
+parameters are gone:
+- Each `VerificationError` already carries `err.Node silver.Node` (populated by the worker,
+  plan 17/15b) — `searchInfo` starts from `err.Node` directly, with no nodeMap lookup.
+- `TypeInfo` was never used by the reporter; removed.
 
-**Primary position path**: `VerificationError.Pos` is already populated by the JNI worker
-(plan 17) before `Report` is called — the worker extracts `NodeInfo` directly from the
-offending node's Viper `Info` chain via `SilverBridge.getNodeFile/Line/Col/Tag`. The reporter
-does NOT call back through JNI to get position for the primary case. The `nodeMap` is a
-supplementary structure needed only for `searchInfo`.
-
-`Report` must be called before `BuiltProgram.Close()` — see plan 16 for the correct call
-ordering. Callers in plan 33 (`pipeline.go`) and plan 17b (`dispatch.go`) must pass
-`built.NodeMap` explicitly; it is not stored globally.
+`Report` must be called before `result.Close()` — see plan 16 for the correct call
+ordering. `result.Close()` releases JNI global references; the `err.Node` Go Silver structs
+are safe to read until then.
 
 ## Error Backtranslation Design
 
@@ -98,27 +92,26 @@ calls for primary position lookup.
 ### Position extraction
 
 ```go
-// extractInfo returns the NodeInfo from node if it is non-synthetic (File != ""),
-// otherwise falls back to searchInfo DFS. NodeInfo is a value-type struct (plan 14),
-// not a pointer — it cannot be nil. The check is on the File field only.
-func extractInfo(node silver.Node) silver.NodeInfo {
-    if info := node.NodeInfo(); info.File != "" {
-        return info
+// resolvePos returns the NodeInfo for a VerificationError. The worker already
+// populated err.Pos; if its Tag is "synthetic", fall back to searchInfo DFS on err.Node.
+func resolvePos(err VerificationError) silver.NodeInfo {
+    if err.Pos.Tag != "synthetic" {
+        return err.Pos
     }
-    return searchInfo(node) // walk children downward; see below
+    return searchInfo(err.Node) // walk children downward; see below
 }
 ```
 
-`searchInfo` does a DFS over the Silver AST subtree rooted at `node`, walking **downward
-into children**, returning the first non-synthetic `NodeInfo` found. This is a safety net for
-translator-internal synthesized wrapper nodes (e.g., a synthetic `Seqn`) that don't carry a
-direct Go source position (`Tag == "synthetic"`).
+`searchInfo` starts from `err.Node` (the Go Silver node pre-loaded by the worker via
+`NodeMap[Pos.NodeID]`) and does a DFS **downward into children**, returning the first
+non-synthetic `NodeInfo` found. No nodeMap lookup is needed inside `searchInfo` — it receives
+the root node directly.
 
-The primary path — `extractInfo` returning immediately — should be the common case. Nodes that
-Silicon can directly cite as `offendingNode` (Assert, Exhale, MethodCall, field access, etc.)
-always carry a real `NodeInfo` by the invariant stated in plan 14. `searchInfo` exists for
-unexpected edge cases only; if it is reached frequently, it indicates a translator bug (a
-directly-citable node was marked synthetic).
+The primary path — `resolvePos` returning `err.Pos` immediately — should be the common case.
+Nodes that Silicon can directly cite as `offendingNode` (Assert, Exhale, MethodCall, field
+access, etc.) always carry a real `NodeInfo` by the invariant stated in plan 14. `searchInfo`
+exists for unexpected edge cases only; if it is reached frequently, it indicates a translator
+bug (a directly-citable node was marked synthetic).
 
 ### Error message dispatch
 
@@ -155,4 +148,4 @@ translator must propagate the outermost position when constructing synthetic Sil
 
 The Scala Gobra uses `Source.unapply(offendingNode)` — which calls `node.getPrettyMetadata._2.getUniqueInfo[Verifier.Info]` — to extract Go source info directly from a Silver node's Viper `Info` field. Go-Gobra uses the analogous approach: the builder (plan 16) embeds `NodeInfo` as `AnnotationInfo` entries in each node's Viper `Info` chain during construction, and the worker (plan 17) calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` to retrieve those fields after Silicon reports errors.
 
-The `nodeMap` (`map[uint64]*silver.Node`) is a supplementary structure for `searchInfo` DFS: when an error's `Pos.Tag == "synthetic"`, the reporter uses `nodeMap` to get the Go Silver struct (carrying `Children()`) to walk the subtree for a non-synthetic descendant. For the common case (non-synthetic offending node), `Pos` is already populated and the nodeMap is not needed.
+For the `searchInfo` DFS, the reporter uses `err.Node` (the Go Silver struct pre-loaded by the worker, carrying `Children()`) rather than performing a nodeMap lookup inside the reporter. The `NodeMap` field on `VerificationResult` is retained for lifecycle purposes (it is referenced by `Close()` to free JNI global references) but the reporter does not access it directly.

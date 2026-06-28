@@ -2,25 +2,20 @@
 
 ## Objective
 
-Expand the JNI worker from a single goroutine (plan 15) to a pool of N workers. Each worker
-is locked to its own OS thread via `runtime.LockOSThread()`, attached to the JVM, and holds
-its own `SiliconFrontendAPI` instance. The `--chop` path dispatches chopped sub-programs to
-pool workers in parallel, recovering the true parallelism that Scala Gobra achieves via
-`Future.traverse` in `BackendVerifier.verify`.
+Implement the `DispatchChopped` dispatch layer: given `[]*silver.Program` produced by the
+chopper (plan 16b), fan them out to the N-worker pool (plan 15b), collect results, merge
+them, and deduplicate errors. This recovers the parallelism that Scala Gobra achieves via
+`Future.traverse` in `BackendVerifier.verify`. **Pool creation and the Silicon-aware
+`runWorker` template are owned by plan 15b, not this plan.**
 
-**Prerequisite**: plan 17 (single-worker Silicon verification) must be correct and passing
-regression tests before this plan begins. This plan is an expansion of a working baseline,
-not a concurrent development.
+**Prerequisite**: plan 17 (single-worker baseline) and plan 15b (N-worker pool) must be
+complete before this plan begins.
 
 ## Scope
 
 **In scope:**
-- Expand `WorkerPool` (plan 15) from `poolSize=1` to configurable `poolSize=N`
 - Dispatch layer: given `[]*silver.Program` from the chopper (plan 16b), submit each
   sub-program to an available pool worker; await all results
-- Each pool worker initializes its own Silicon instance (a SiliconFrontendAPI, defined in
-  plan 17) at pool startup and reuses it across jobs (matching plan 17's "warm path" design;
-  do not init/stop Silicon per job)
 - Result merging: success iff all sub-programs succeed; errors accumulated across all workers
 - Error deduplication: shared members (fields, domains, predicate signatures) appear in
   multiple sub-programs and may produce duplicate errors; deduplicate by `(NodeInfo.File, NodeInfo.Line, NodeInfo.Col, errorID)`
@@ -31,53 +26,31 @@ not a concurrent development.
 - Non-chopped path unchanged: when `--chop` is not set, pool dispatches to a single worker
   exactly as plan 17 does
 
+**Out of scope for this plan (owned by 15b):**
+- Expanding `WorkerPool` from `poolSize=1` to configurable `poolSize=N`
+- The Silicon-aware `runWorker` goroutine template with `SiliconFrontendAPI` per worker
+
 **Out of scope:**
 - Carbon backend parallelism (add separately if needed after Silicon pool is stable)
 - Pool resizing at runtime
 
 ## Dependencies
 
-- [15-jni-setup.md](15-jni-setup.md) — pool-ready `WorkerPool` API (pool-size=1 baseline)
-- [16-silver-jni-builder.md](16-silver-jni-builder.md) — `silver.NewBuilder`, `BuiltProgram`
-  (carries `NodeMap` and `Close`); consumed directly in worker goroutine template
+- [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) — N-worker pool with Silicon-aware `runWorker` template; provides `WorkerPool.Submit`
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — `BuiltProgram` carries `NodeMap` and `Close`; merged by `mergeResults`
 - [14-silver-ast.md](14-silver-ast.md) — `silver.Program` type (the element type of `[]*silver.Program` received from the chopper via plan 33); plan 17b does NOT call `Chop()` — that is pipeline.go's responsibility (plan 33)
 - [17-silicon-backend.md](17-silicon-backend.md) — single-worker baseline; provides
   `SiliconConfig` and `VerificationResult` types reused here
 
 ## Worker Goroutine Lifecycle
 
-Each of the N workers follows the same pattern:
-
-```go
-func runWorker(jvm *JVM, cfg SiliconConfig, jobs <-chan workerJob) {
-    runtime.LockOSThread()
-    jvm.AttachCurrentThread()
-    defer jvm.DetachCurrentThread()
-
-    silicon := newSiliconFrontendAPI(jvm)
-    silicon.initialize(cfg.Args)
-    defer silicon.stop()
-
-    builder := silver.NewBuilder(jvm)
-
-    for job := range jobs {
-        // Build: Go Silver structs → Java Silver objects (plan 16)
-        built, err := builder.Build(job.prog, jvm)
-        if err != nil {
-            job.result <- &VerificationResult{Err: err}
-            continue
-        }
-        // Verify: call Silicon with the Java Silver program object (plan 17)
-        result := silicon.verify(built.JavaObject)
-        result.NodeMap = built.NodeMap  // carry NodeMap to caller for Reporter
-        result.Close = built.Close      // caller must defer result.Close() before Report()
-        job.result <- result
-    }
-}
-```
+The Silicon-aware worker goroutine template (with `SiliconFrontendAPI` init, `Build`, and
+`Verify` loop) is defined in plan 15b. This plan consumes the pool via `WorkerPool.Submit`.
+See plan 15b for the full `runWorker` implementation including `Node` field population on each
+`VerificationError` for `searchInfo` DFS (plan 32).
 
 Closing the `jobs` channel signals all workers to drain, call `silicon.stop()`, detach, and
-exit. The pool `Stop()` method closes the channel and waits for all workers to exit.
+exit. The pool `Stop()` method (plan 15b) closes the channel and waits for all workers to exit.
 
 ## Dispatch and Merge
 
@@ -89,10 +62,10 @@ use a semaphore to cap in-flight programs at `poolSize` (the number of workers):
 func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult {
     type indexed struct{ idx int; res *VerificationResult }
     ch := make(chan indexed, len(progs))
-    // Semaphore caps concurrent Submit calls to poolSize. Since Submit blocks
-    // until a worker finishes its JNI build+verify cycle, this limits concurrent
-    // JNI jobs to poolSize (the number of workers), preventing unbounded memory
-    // use when progs is large and workers are busy.
+    // Semaphore caps the number of goroutines blocked in Submit to poolSize,
+    // matching the number of JNI workers. Without this cap, all len(progs)
+    // goroutines would pile up in Submit's send when workers are busy, holding
+    // all sub-programs in memory simultaneously.
     sem := make(chan struct{}, p.poolSize)
     for i, prog := range progs {
         sem <- struct{}{}
@@ -142,10 +115,10 @@ as for single-program results (plan 16 / plan 17 contract).
 **NodeMap merging (safe — IDs are globally unique):** Because plan 16 uses a process-wide
 `globalNodeID` atomic counter (not a per-Builder counter), every Silver node across all
 parallel builds gets a unique `uint64` ID. The NodeMaps from all sub-results can be merged
-into a single `map[uint64]*silver.Node` without key collisions:
+into a single `map[uint64]silver.Node` without key collisions:
 
 ```go
-mergedNodeMap := make(map[uint64]*silver.Node)
+mergedNodeMap := make(map[uint64]silver.Node)
 for _, r := range results {
     for id, node := range r.NodeMap {
         mergedNodeMap[id] = node
@@ -165,9 +138,8 @@ Document this constraint in `--help` for both flags.
 
 ## Deliverables
 
-- Updated `internal/backend/jvm/jvm.go` — `WorkerPool` expanded to configurable `poolSize`;
-  `Submit(prog *silver.Program) *VerificationResult` dispatches to next available worker
 - `internal/backend/jvm/dispatch.go` — `func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult`
+  (WorkerPool expansion to configurable poolSize and Submit are delivered by plan 15b)
 - `internal/backend/silicon/dedup.go` — `Deduplicate([]VerificationError) []VerificationError`
 - `--workers N` CLI flag (plan 33 integration)
 - Tests:

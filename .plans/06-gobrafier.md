@@ -25,6 +25,7 @@ that isn't valid Go (ghost declarations, `//@ ` annotations embedded in code pos
 ## Dependencies
 
 - [01-project-setup.md](01-project-setup.md) — repository must exist
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type (for error return from `Gobrafy`)
 
 The Gobrafier is a pure text preprocessor with no dependency on the parser. It is a
 **prerequisite for** plan 04 (Go Parser Integration), not a downstream dependent of it.

@@ -32,6 +32,7 @@ constructs. These have their own typing rules that differ from standard Go.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `CheckSpecs`
 - [08-type-checker-core.md](08-type-checker-core.md) — base type checker; spec checking extends it
 
 ## Reference: Current Gobra

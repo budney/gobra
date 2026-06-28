@@ -26,6 +26,7 @@ largest single unit of work in the frontend.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Check`
 - [03-frontend-ast.md](03-frontend-ast.md) — AST nodes to annotate
 - [04-go-parser.md](04-go-parser.md) — provides the AST to type-check
 - [05-annotation-parser.md](05-annotation-parser.md) — annotation nodes are type-checked in 09,

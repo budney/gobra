@@ -25,6 +25,7 @@ edge annotation.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Apply`
 - [11-internal-ast.md](11-internal-ast.md) — AST to transform
 - [12-desugarer.md](12-desugarer.md) — produces the AST that is the input to transforms
 

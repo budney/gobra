@@ -20,6 +20,7 @@ verified as a whole.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type used by multi-package checker
 - [07-package-resolver.md](07-package-resolver.md) — provides all loaded package ASTs
 - [08-type-checker-core.md](08-type-checker-core.md) — the base checker to extend
 

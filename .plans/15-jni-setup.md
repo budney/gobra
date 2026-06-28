@@ -54,9 +54,13 @@ If none succeed, fail fast with a message directing the user to set `JAVA_HOME` 
 to enable jenv's export plugin: `jenv enable-plugin export`. Document this in the error message
 when `libjvm` is not found.
 
-**Worker pool**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines rather than a single
-dedicated worker. This plan implements the pool with `poolSize=1` as the baseline; plan 17b
-expands it to N workers for parallel verification of chopped sub-programs.
+**Worker pool skeleton**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines. This plan
+delivers the `poolSize=1` baseline pool skeleton: JVM lifecycle, thread attach/detach, and
+the `workerJob` channel infrastructure. The full Silicon-aware worker template (which
+initialises a `SiliconFrontendAPI` per worker) and N-worker expansion are in plan 15b
+(which depends on plan 17 for `SiliconFrontendAPI`). This plan does NOT reference
+`SiliconFrontendAPI` or `SiliconConfig` — doing so would create a dependency cycle
+(plan 17 depends on plan 15).
 
 Each worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock it.
 `LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
@@ -77,49 +81,32 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 - `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
-- `WorkerPool` type: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Submit(prog *silver.Program) *VerificationResult` (blocking — callers provide their own goroutines for parallelism; see plan 17b); `Stop()`. Implement with `poolSize=1` in this plan; plan 17b expands to N.
-  `VerificationResult` carries a `Close func()` field set by the worker to `built.Close`.
-  Callers must `defer result.Close()` before calling the reporter. Failure to call `Close()`
-  leaks JNI global references.
-- Worker goroutine template — the inner loop of each worker executes the full
-  Build → Verify → Close chain on the JNI-attached OS thread:
+- `WorkerPool` type skeleton: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Stop()`.
+  This plan delivers the channel infrastructure and thread-lifecycle skeleton only.
+  The `Submit(prog *silver.Program) *VerificationResult` method and the full Silicon-aware
+  worker goroutine template are defined in plan 15b (which has the `SiliconFrontendAPI`
+  dependency). Plan 15 exports the `workerJob` channel and the `WorkerPool` struct so that
+  plan 15b can complete the implementation.
+- Worker goroutine skeleton — establishes the thread-locking invariant:
 
   ```go
-  func runWorker(jvm *JVM, siliconCfg SiliconConfig, jobs <-chan workerJob) {
+  // runWorkerSkeleton is the JVM-level thread setup. The Silicon-specific
+  // body (SiliconFrontendAPI init, Build, Verify loop) is added in plan 15b.
+  func runWorkerSkeleton(jvm *JVM, jobs <-chan workerJob) {
       runtime.LockOSThread()
       jvm.AttachCurrentThread()
       defer jvm.DetachCurrentThread()
-
-      // Warm Silicon instance: initialized once per worker, reused across jobs.
-      // Pass via SiliconConfig.Instance (plan 17) to avoid re-initialization.
-      silicon := newSiliconFrontendAPI(jvm)
-      silicon.initialize(siliconCfg.Args)
-      defer silicon.stop()
-
-      builder := silver.NewBuilder(jvm)
-
-      for job := range jobs {
-          // Build: Go Silver structs → Java Silver objects (plan 16)
-          built, err := builder.Build(job.prog, jvm)
-          if err != nil {
-              job.result <- &VerificationResult{Err: err}
-              continue
-          }
-          // Verify: call Silicon with the Java Silver program object (plan 17)
-          result := silicon.verify(built.JavaObject)
-          result.NodeMap = built.NodeMap  // carry NodeMap to caller for Reporter
-          result.Close = built.Close      // caller must defer result.Close() before Report()
-          job.result <- result
-      }
+      // Plan 15b fills in the rest.
   }
   ```
 
-  The `workerJob` struct carries `prog *silver.Program` and a `result chan *VerificationResult`.
-  The worker sets `result.Close = built.Close` before sending the result, so the caller of
-  `Submit` receives a `*VerificationResult` that carries its own cleanup function. The caller
-  is responsible for `defer result.Close()` in its own stack frame — this must fire after
-  `Report()` returns (see plan 16 for the `Close()` contract). `Submit` itself must NOT call
-  `built.Close()` — it has no visibility into when the caller finishes with `NodeMap`.
+  The `workerJob` struct (defined here):
+  ```go
+  type workerJob struct {
+      prog   *silver.Program
+      result chan *VerificationResult
+  }
+  ```
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns

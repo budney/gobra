@@ -74,7 +74,10 @@ equality uses Viper's built-in sequence axioms.
 
 **Shared `[n]T@`** (heap-allocated): encoded using the `Array[T]` parametric Silver domain
 (with `array_loc(a, i)`, `alen(a)` domain functions), also boxed with `box/unbox` enforcing
-`alen(result) == n`. `arrayNil()` is the sentinel null array.
+`alen(result) == n`. `nilArray_{T}()` is the typed sentinel null array; the type parameter
+preserves type information and is required for the `nilSlice_{T}()` postcondition. Do not use
+an untyped `arrayNil()` — the typed form keeps array element type information visible to the
+solver.
 
 **Additional generated items (per `(n, T)` pair, monomorphized):**
 - `arrayConversion(x: [n]T@): [n]T°` — reads shared array as exclusive; requires wildcard perms
@@ -96,7 +99,7 @@ and `src/main/scala/viper/gobra/translator/encodings/arrays/`.
 | Function | Preconditions | Required postconditions | Scala reference |
 |----------|--------------|-------------------------|-----------------|
 | `sconstruct_{T}(a: Array[T], offset, len, cap: Int): Slice[T]` | `0 <= offset`, `0 <= len`, `len <= cap` | `sarray(result) == a`, `soffset(result) == offset`, `slen(result) == len`, `scap(result) == cap` | `SliceEncoding.scala` |
-| `nilSlice_{T}(): Slice[T]` | none | `slen(result) == 0`, `scap(result) == 0`, `sarray(result) == nilArray_{T}()` (or equivalent nil-array sentinel — verify exact form against Scala) | `SliceEncoding.scala` |
+| `nilSlice_{T}(): Slice[T]` | none | `slen(result) == 0`, `scap(result) == 0`, `sarray(result) == nilArray_{T}()` | `SliceEncoding.scala` |
 | `ssliceFromSlice_{T}(s: Slice[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= slen(s)` | `slen(result) == hi - lo`, `scap(result) == scap(s) - lo` — verify exact form against Scala | `SliceEncoding.scala` |
 | `sfullSliceFromSlice_{T}(s: Slice[T], lo, hi, max: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= max`, `max <= scap(s)` | `slen(result) == hi - lo`, `scap(result) == max - lo` — verify exact form | `SliceEncoding.scala` |
 | `ssliceFromArray_{T}(a: Array[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= alen(a)` | `slen(result) == hi - lo`, `sarray(result) == a`, `soffset(result) == lo` — verify | `SliceEncoding.scala` |

@@ -15,6 +15,11 @@ plug.
   - Other encoding modules (mutual access pattern)
   - Fresh Silver name generation
   - Silver program accumulator (where generated members/domains/fields land)
+  - `TypeEncoding() TypeEncoding` — returns the type encoding module (plan 25); used by any
+    encoding that needs to box/unbox values or look up the Silver Type domain expression for a Go type
+  - `TypeValue(t internal.Type) silver.Expr` — returns the Silver `Type` domain expression
+    for Go type `t` (e.g., `T_Type()` for a concrete type `T`); delegates to the type encoding.
+    Used wherever a `dynType(r)` assertion or behavioral subtype axiom is generated.
 - `Encoding` interface that each encoding module implements
 - `MainTranslator`: instantiates all encodings, wires them together via `Context`, drives
   the translation of each internal AST member
@@ -133,16 +138,23 @@ would collapse `a/b` and `a_b` to the same mangled string, breaking injectivity.
 
 **Residual collision note:** A Go identifier that literally contains the hex-escape pattern as a
 substring (e.g., a variable named `_u002F_`) would collide with a hex-escaped `/` in a
-package path after mangling. This is an obscure edge case; add a **runtime panic** in the
-mangler (triggered when processing user source, not when compiling Go-Gobra) that fires if any
-unqualified Go identifier matches the regex `_u[0-9A-F]{1,6}_` (1–6 hex digits, covering the
-full Unicode range U+0000 through U+10FFFF). Do NOT use `_u[0-9A-F]{4}_` — that only covers
-the Basic Multilingual Plane and silently misses code points above U+FFFF (e.g., emoji at
-U+1F600 would be encoded as `_u1F600_`, five digits). Similarly, panic if a user-defined Go
-identifier begins with `gobra__` (reserved for translator-generated Silver names). Both checks
-are runtime guards inside the mangler function, not build-time assertions.
+package path after mangling. Similarly, a user-defined identifier beginning with `gobra__`
+would collide with translator-generated Silver names.
 
-The `gobra__` prefix for synthetic names avoids this issue for generator output.
+**Resolution — reserved at the type checker, not the mangler:** Rather than a runtime panic
+inside the mangler (which fires late and produces a poor diagnostic), the type checker (plan 08)
+must reject Go identifiers that match either reserved pattern:
+- Any identifier whose name matches the regex `_u[0-9A-F]{1,6}_` is reserved. Use a range of
+  1–6 hex digits to cover the full Unicode range U+0000 through U+10FFFF (emoji and other
+  code points above U+FFFF encode as 5–6 hex digits, e.g., `_u1F600_`). Do NOT restrict to
+  4 digits — that silently misses supplementary code points.
+- Any identifier beginning with `gobra__` is reserved for translator-generated Silver names.
+
+The type checker emits a clean diagnostic: `"identifier '_u002F_' is reserved by Go-Gobra's
+name mangling scheme"`. The mangler may include a defensive panic with the same message as an
+internal bug guard, but the primary enforcement is at the type checker.
+
+The `gobra__` prefix for synthetic names avoids this issue for translator output.
 
 **Note on collision with Scala Gobra**: The Scala Gobra uses a similar but not identical
 mangling scheme. Differential testing (plan 34) compares verification *results*, not Silver

@@ -35,7 +35,8 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 
 ## Dependencies
 
-- [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md) — grammar is defined here
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `ParseAnnotation`
+- [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md) — grammar decision and the `## Annotation Grammar` target section (written by this plan)
 - [03-frontend-ast.md](03-frontend-ast.md) — target AST node types for spec expressions
 
 ## Reference: Current Gobra
@@ -64,6 +65,12 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 - `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) ([]PNode, []Diagnostic)`
   - Returns the parsed spec/ghost AST nodes as `[]PNode` (the unified node interface defined in plan 03; concrete types are `PFunctionSpec`, `PAssertion`, `PGhostStatement`, `PAdtType`, etc., all of which implement `PNode`). Returns all parse diagnostics (zero or more); a non-empty `[]Diagnostic` does not prevent returning any successfully-parsed nodes. Callers decide whether to abort on errors.
 - Full grammar coverage of the Gobra annotation language
+- **`## Annotation Grammar` section written into `02-annotation-syntax-decision.md`** — this
+  is a primary deliverable of plan 05. Once the parser is implemented and tested, extract the
+  complete BNF/EBNF grammar from the implementation and write it into plan 02's `## Annotation
+  Grammar` section. This section is plan 05's responsibility to produce; plan 02 records the
+  decision and hosts the section. Write it while the ANTLR4 files (`GobraParser.g4`,
+  `GobraLexer.g4`) are still accessible as reference — do not defer to cut-over.
 - Position-accurate error messages (column relative to comment start)
 - Table-driven tests covering each annotation form, including error cases
 
@@ -113,16 +120,18 @@ text after prefix-stripping).
 **Position note:** The Gobrafier preserves line counts when stripping inline annotations, so
 error positions within these annotations can be recovered from the original source line.
 
-## Grammar Sketch Timing Note
+## Grammar Sketch Ownership
 
-Plan 02 designates a grammar sketch (BNF/EBNF covering all annotation forms) as a hard gate
-for the plan 37 cut-over checklist. However, the grammar sketch is most useful — and most
-validatable — while the ANTLR4 files (`GobraParser.g4`, `GobraLexer.g4`) still exist as
-reference. **Write the grammar sketch as part of completing this plan (plan 05), not just before
-cut-over.** Concretely: once the annotation parser's full grammar is implemented and tested,
-extract the grammar sketch into plan 02's `## Annotation Grammar` section. This ensures the
-sketch is derived from a working parser (not from memory at cut-over) and that any discrepancy
-with the ANTLR4 source is caught while the Scala files are still accessible.
+Writing the `## Annotation Grammar` section in `02-annotation-syntax-decision.md` is a
+**primary deliverable of plan 05** (not just a timing note). The grammar sketch must be:
+- Derived from the implemented parser, not written ahead of it
+- Written while `GobraParser.g4` and `GobraLexer.g4` are still accessible for cross-checking
+- Complete before marking plan 05 done — it is a gate for plan 37 cut-over
+
+Once the annotation parser is implemented and passing all table-driven tests, extract the
+grammar into BNF/EBNF and write it into plan 02's `## Annotation Grammar` section. Cross-check
+each production against the ANTLR4 source and mark each ✓. Any discrepancy is a bug in the
+parser or the grammar — fix it before declaring plan 05 complete.
 
 ## Resolved Questions
 

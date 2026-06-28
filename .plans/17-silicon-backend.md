@@ -104,11 +104,12 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
       Success bool
       Errors  []VerificationError         // non-nil only when Success == false
       Err     error                       // non-nil if the JNI build or verify call itself failed (infrastructure error, not a verification failure)
-      NodeMap map[uint64]*silver.Node     // stable node ID → Go Silver node; for searchInfo fallback
+      NodeMap map[uint64]silver.Node      // stable node ID → Go Silver node (canonical definition; plans 16, 17b, 32 use this type); for searchInfo fallback
       Close   func()                      // caller must defer result.Close() before Report()
   }
   type VerificationError struct {
       Pos     NodeInfo
+      Node    silver.Node   // Go Silver node for searchInfo DFS; populated by worker via NodeMap[Pos.NodeID] lookup
       FullID  string
       Message string
       Reason  string
@@ -116,10 +117,12 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
   ```
   **Position filling**: for each `VerificationError` in `Errors`, the JNI worker fills in
   `Pos` by calling `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` (plan 16) to
-  extract the `NodeInfo` embedded in the Java Silver node's `Info` chain. For synthetic nodes
-  (where `Tag == "synthetic"`), the reporter (plan 32) uses `NodeMap` and `searchInfo` DFS to
-  find a non-synthetic ancestor. `NodeMap` carries the full Go Silver struct (needed for
-  `Children()` calls) and is NOT used for primary position lookup.
+  extract the `NodeInfo` embedded in the Java Silver node's `Info` chain. The worker also
+  populates `Node` by looking up `NodeMap[Pos.NodeID]` — this gives the reporter the Go
+  Silver struct for `searchInfo` DFS without a separate nodeMap parameter. For synthetic nodes
+  (where `Tag == "synthetic"`), the reporter (plan 32) walks `Node.Children()` to find a
+  non-synthetic ancestor. `NodeMap` carries the full Go Silver struct (needed for `Children()`
+  calls) and is NOT used for primary position lookup.
 
   `NodeMap` and `Close` are set by the JNI worker (plan 15/17b); callers must `defer
   result.Close()` in the same stack frame as the `Report()` call — this releases JNI global

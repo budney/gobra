@@ -24,8 +24,11 @@ status code.
   `Translate(prog)` returns a single `*silver.Program`, `pipeline.go` calls
   `Chop(silverProg, chop.ChopConfig{Bound: cfg.ChopBound})` to produce `[]*silver.Program`
   (sub-programs split by method for parallel verification). `cfg.ChopBound` is a `*int`
-  populated from the `--chop-bound N` flag (nil means unlimited; defaults to `&cfg.Workers`
-  when `--chop` is set without an explicit bound). This slice is then passed to `WorkerPool.DispatchChopped`
+  populated from the `--chop-bound N` flag (nil means unlimited). When `--chop` is set without
+  an explicit `--chop-bound`, the default bound copies the workers value:
+  `n := cfg.Workers; cfg.ChopBound = &n` — do NOT write `cfg.ChopBound = &cfg.Workers`, as
+  that aliases into the Config struct and any later mutation of `cfg.Workers` would silently
+  corrupt the chop bound. This slice is then passed to `WorkerPool.DispatchChopped`
   (plan 17b). If `--workers 1` (the default), Chopper produces a single-element slice and
   `DispatchChopped` degenerates to a single serial call. If `--workers N > 1`, the sub-programs
   are dispatched to N workers in parallel. Pipeline.go must import plan 16b and call `Chop`
@@ -58,7 +61,8 @@ status code.
 - [10-type-checker-multipackage.md](10-type-checker-multipackage.md) — custom `types.Importer` and `ExternalTypeInfo`; wired into plan 08's `Check` call
 - [12-desugarer.md](12-desugarer.md) — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, []Diagnostic)`; invoked after type checking
 - [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline (`Apply`)
-- [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and WorkerPool
+- [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and `WorkerPool` skeleton
+- [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) — N-worker `NewPool`; `pipeline.go` constructs the pool using plan 15b's expanded `NewPool(jvm, poolSize, cfg)`
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver JNI builder (Build + nodeMap)
 - [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend
 - [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)

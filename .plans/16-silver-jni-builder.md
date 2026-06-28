@@ -107,7 +107,7 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
   1. Assign a monotonically-increasing `uint64` ID to each Go Silver node at Build() time.
   2. Embed the ID in the node's Viper `Info` chain as `AnnotationInfo("gobra_node_id", [id])`,
      chained via `ConsInfo` ahead of any existing `VprInfo`.
-  3. The nodeMap key is the `uint64` ID: `nodeMap map[uint64]*silver.Node`.
+  3. The nodeMap key is the `uint64` ID: `nodeMap map[uint64]silver.Node`.
   4. `SilverBridge.getNodeId(node)` (see Deliverables) retrieves the ID from the node's
      `Info` chain, enabling stable lookups regardless of JNI reference type.
   
@@ -134,9 +134,13 @@ This resolution uses a `uint64`-keyed node map, not JNI pointer comparison.
 // when multiple workers call Build() concurrently, breaking merged NodeMap lookups.
 var globalNodeID atomic.Uint64
 
+// NodeMap maps a stable uint64 node ID to the corresponding Go Silver node interface value.
+// silver.Node is an interface (not a pointer-to-interface); concrete stored values are
+// *silver.Method, *silver.Assert, etc. This is the canonical type definition used across
+// plans 16, 17, 17b, and 32. Always map[uint64]silver.Node — never map[uint64]*silver.Node.
 type Builder struct {
     jvm     *jvm.JVM
-    nodeMap map[uint64]*silver.Node  // stable integer ID → Go Silver node
+    nodeMap map[uint64]silver.Node  // stable integer ID → Go Silver node
 }
 ```
 
@@ -178,7 +182,7 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   ```go
   type BuiltProgram struct {
       JavaObject jobject
-      NodeMap    map[uint64]*silver.Node  // stable integer ID → Go Silver node
+      NodeMap    map[uint64]silver.Node   // stable integer ID → Go Silver node (canonical definition; plans 17, 17b, 32 use this type)
       globalRefs []jobject               // JNI global refs for GC safety; freed by Close()
   }
 
@@ -219,7 +223,7 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   ```go
   type BuiltProgram struct {
       JavaObject jobject
-      NodeMap    map[uint64]*silver.Node  // stable integer ID → Go Silver node
+      NodeMap    map[uint64]silver.Node   // stable integer ID → Go Silver node (canonical definition; plans 17, 17b, 32 use this type)
       globalRefs []jobject               // JNI global refs promoted for GC safety; freed by Close()
   }
   ```

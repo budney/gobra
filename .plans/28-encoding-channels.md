@@ -102,7 +102,7 @@ and the default. Both branches must verify independently.
 cases (no default) must be encoded with an integer discriminant `d: Int` non-deterministically
 chosen in `[0, N-1]`, with N arms in a Silver `if`/`elsif` chain — one per channel case.
 
-**`select` discriminant type rule (canonical definition — also specified in plan 12):** Let C
+**`select` discriminant type rule (canonical definition in plan 12):** Let C
 = the number of channel-operation arms and D = 1 if a `default` arm is present, 0 otherwise.
 
 - **C=1, D=1** (exactly one channel op + one default): use a `bool` discriminant.

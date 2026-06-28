@@ -28,6 +28,7 @@ process in a second pass.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `ParseFile`
 - [03-frontend-ast.md](03-frontend-ast.md) — target AST types
 - [06-gobrafier.md](06-gobrafier.md) — must preprocess input files before this parser sees
   them; `.go` files pass through the Gobrafier first; `.gobra` files are handled directly
@@ -69,7 +70,9 @@ file path, not any temp-file path.
 - `internal/frontend/parser.go` — `ParseFile(filename string, src []byte) (*frontend.PFile, map[*frontend.PBlockStmt][]RawAnnotation, []Diagnostic)`
   - `filename` is the original source path (for position tracking and error messages).
   - `src` is the Gobrafier-preprocessed content (passed directly to `go/parser.ParseFile` as the `src` parameter — no temp file).
-  - Returns a partial `*frontend.PFile` with Go-only `PBlockStmt` nodes (ghost statements not yet interleaved), a per-block map of raw `//@ ` annotation strings, and all parse-error diagnostics. A non-empty `[]Diagnostic` does not necessarily mean `*frontend.PFile` is nil; callers decide whether to abort.
+  - **Recoverable parse errors** (errors reported by `go/parser` that it recovered from): return a *partial* `*frontend.PFile` alongside the accumulated diagnostics. `go/parser` is designed for error recovery; callers (plan 07, plan 33) inspect the diagnostics and decide whether to abort.
+  - **Bad\* nodes** (see section below): return `nil` for `*frontend.PFile`. The presence of a `*ast.BadStmt`, `*ast.BadExpr`, or `*ast.BadDecl` node means the parser could not produce a valid subtree at that location; a partial AST containing Bad\* nodes is unusable by subsequent stages, so `nil` is the correct sentinel. Diagnostics are still returned.
+  - In both cases a non-empty `[]Diagnostic` is possible. The difference is whether `*frontend.PFile` is nil (Bad\* case) or partial-but-non-nil (recoverable-error case).
   - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `PGoStmt`-wrapped Go statements at this point. Plan 07 calls plan 05 on the returned `map` and runs `MergeGhostStatements` to complete each `PBlockStmt` (step 4 of the coordination model in plan 07).
   - **File-scope annotations** (those not inside any block — produced by the Gobrafier for ghost ADTs, predicates, funcs) are collected into `map[*frontend.PBlockStmt][]RawAnnotation` under the key `nil`. Plan 07 detects the `nil` key and routes these to `PFile.GhostDecls` instead of any `PBlockStmt`. **Callers must always check for the nil key explicitly** — iterating the map with `range` visits the nil key, but a range loop body that type-asserts the key as non-nil will panic. Plan 07's `MergeGhostStatements` handles this with an explicit `if key == nil { ... }` branch before the merge loop.
 - `RawAnnotation` type: `{Text string; Pos token.Pos}` — the raw `//@ ...` text stripped of the `//@ ` prefix, with its source position

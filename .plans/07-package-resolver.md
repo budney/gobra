@@ -23,6 +23,7 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Resolve`
 - [03-frontend-ast.md](03-frontend-ast.md) — `PPackage`, `PFile`, `PProgram` types assembled by this plan
 - [04-go-parser.md](04-go-parser.md) — parse each package's files
 - [05-annotation-parser.md](05-annotation-parser.md) — `ParseAnnotation` called in step 3 of the per-file coordination sequence

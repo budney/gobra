@@ -25,6 +25,7 @@ self-hosting: Go-Gobra verifies its own source code.
 |------|-------|------------|
 | [01-project-setup.md](01-project-setup.md) | Project Setup | — |
 | [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md) | Annotation Syntax Design Decision | 01 |
+| [32a-diagnostics.md](32a-diagnostics.md) | Diagnostic Type | — |
 
 ### Group 1: Frontend
 | File | Title | Blocked by |
@@ -57,7 +58,8 @@ self-hosting: Go-Gobra verifies its own source code.
 | [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver JNI Builder | 14, 15 |
 | [16b-silver-chopper.md](16b-silver-chopper.md) | Silver Program Chopper | 14 |
 | [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 15, 16 |
-| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16, 17 |
+| [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) | Worker Pool Expansion (N workers) | 15, 16, 17 |
+| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15b, 16, 17 |
 | [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16, 17 |
 
 ### Group 5: Translator
@@ -85,7 +87,7 @@ self-hosting: Go-Gobra verifies its own source code.
 ### Group 7: CLI & Integration
 | File | Title | Blocked by |
 |------|-------|------------|
-| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 08, 09, 10, 12, 13, 15, 16, 16b, 17, 17b, 19, 27, 32 |
+| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 08, 09, 10, 12, 13, 15b, 16, 16b, 17, 17b, 19, 27, 32 |
 
 ### Group 8: Testing
 | File | Title | Blocked by |
@@ -108,6 +110,7 @@ These files have no Objective/Scope/Deliverables — they provide background con
 | [CONTEXT.md](CONTEXT.md) | Project orientation for new contributors and AI agents |
 | [DECISIONS.md](DECISIONS.md) | Log of resolved architectural decisions (D1–D11+) |
 | [COVERAGE.md](COVERAGE.md) | Go AST coverage table mapping internal AST node types to encoding plans |
+| [scratchpad.md](scratchpad.md) | Automation scratchpad for AI agents running /check-plan and /review-plan |
 
 ## Key Reference: Current Gobra Pipeline
 
@@ -123,17 +126,18 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
 
 ## Cross-Cutting Notes
 
-**Concurrency model**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines (plan 15), each
-locked to its own OS thread via `runtime.LockOSThread()` and each holding its own
-`SiliconFrontendAPI` instance. The pool starts with `poolSize=1` (plan 15 baseline) and
-expands to N workers in plan 17b. With N workers and `--chop`, multiple chopped sub-programs
-verify in parallel — matching the parallelism Scala Gobra achieves via `Future.traverse`.
-Without `--chop`, or before plan 17b is complete, verification is effectively single-threaded
-at the Silicon level. Plan 33 wires `--workers N` and plan 34 accounts for the JNI worker
-pool in test infrastructure.
+**Concurrency model**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines, each locked to
+its own OS thread via `runtime.LockOSThread()` and each holding its own `SiliconFrontendAPI`
+instance. Plan 15 delivers the JVM lifecycle and a `WorkerPool` skeleton (`poolSize=1`).
+Plan 15b expands it to N Silicon-aware workers (each with its own `SiliconFrontendAPI`).
+Plan 17b adds `DispatchChopped` fan-out and result merging. With N workers and `--chop`,
+multiple chopped sub-programs verify in parallel — matching the parallelism Scala Gobra
+achieves via `Future.traverse`. Without `--chop`, or before plan 15b is complete,
+verification is effectively single-threaded at the Silicon level. Plan 33 wires `--workers N`
+and plan 34 accounts for the JNI worker pool in test infrastructure.
 
 **Error/diagnostic contract**: Every pipeline stage uses the same `Diagnostic` type
-`{File, Line, Col, Message, Category}` (defined in plan 32). Each stage accumulates errors
+`{File, Line, Col, Message, Category}` (defined in plan 32a, `internal/diagnostic/`). Each stage accumulates errors
 into a `[]Diagnostic` slice and continues where possible; the pipeline aborts only if any
 errors exist before moving to the next stage. Panics (not errors) are reserved for internal
 consistency violations that cannot be recovered from.
