@@ -54,7 +54,11 @@ value it points to — it is a pure mathematical value, not a heap location.
   - `*S` (struct): `dflt(Tuple[...])` = default tuple (via `TupleDomain`)
   - `*[]int`: `dflt(Slice[Int])` = `nilSlice_{Int}()`
   - `*I` where `I` is a Go interface: `T°` is `InterfaceDomain`; `dflt(InterfaceDomain)` is
-    the nil interface encoding `iface(null, nilType())` (see plan 25).
+    `none_InterfaceDomain()` — the designated nil constructor defined in plan 25's
+    `InterfaceDomain` Silver domain, satisfying `iPolyVal == null && iDynType == nilType()`.
+    Do NOT emit `iface(null, nilType())` directly; use
+    `ctx.Dflt(silver.DomainType("InterfaceDomain"))` which resolves to `none_InterfaceDomain()`
+    via plan 25's `RegisterDomainDefault` call (see plan 19 `dflt` convention).
   - `*P` where `P` is itself a pointer type: apply the rule recursively — `dflt((P)°)`.
 
   **Note on `null`:** Silver's `null` literal is the default `Ref` value and equals `dflt(Ref)`
@@ -104,6 +108,42 @@ struct). The rule "shared `*T` = Ref" applies:
 **Practical heuristic:** If you are unsure whether a type is in exclusive or shared mode at a
 given program point, ask: "Is this value reachable by another pointer?" If yes → shared. If
 it is a local variable on the Go stack, not pointed to by anything in scope → exclusive.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/pointers.go`
+and verified before this plan is considered complete.
+
+1. **`EncodePointer` non-nil result** — encoding always produces a valid Silver expression:
+   ```go
+   //@ requires ctx != nil && ptr != nil
+   //@ ensures  result != nil
+   func EncodePointer(ctx *Context, ptr *internal.PointerT, val internal.Expr) (result silver.Expr)
+   ```
+
+2. **Nil pointer encoding correctness** — exclusive nil pointer equals `dflt(T°)`:
+   ```go
+   //@ ensures isNilPointer(ptr) ==> result == ctx.Dflt(ctx.ExclusiveType(ptr.Elem))
+   //@ ensures !isNilPointer(ptr) ==> result != ctx.Dflt(ctx.ExclusiveType(ptr.Elem))
+   ```
+
+3. **`new(T)` permission postcondition** — `new` inhales full write permission on the
+   allocated reference; the returned expression is a fresh `Ref` with no aliasing:
+   ```go
+   //@ requires ctx != nil && T != nil
+   //@ ensures  result != nil
+   //@ ensures  freshRef(result)   // ghost: no other Silver expr aliases this Ref
+   //@ ensures  inhaledAcc(result) // ghost: acc(result, write) was inhaled
+   func EncodeNew(ctx *Context, T internal.Type) (result silver.Expr)
+   ```
+
+4. **No-panic contract** — pointer encoding never panics for well-typed internal nodes; an
+   unexpected node type fires the translator catch-all (plan 19), not a panic inside this module:
+   ```go
+   // Informally: EncodePointer is panic-free for any *internal.PointerT node produced
+   // by the desugarer (plan 12). Panics for unexpected node types are handled by plan 19.
+   //@ decreases // terminates: dispatches on a finite node-type enum
+   ```
 
 ## Deliverables
 

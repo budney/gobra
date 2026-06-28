@@ -56,7 +56,16 @@ diagnostic output.
   `TagSynthetic`); encoding plans reference these constants; the reporter's dispatch table
   uses them
 - `internal/reporting/reporter.go` — `Report(result *VerificationResult) []Diagnostic`
-- `Diagnostic` type: defined in plan 32a (`internal/diagnostic/`); re-exported from `internal/reporting/` for callers
+- `Diagnostic` type: defined in plan 32a (`internal/diagnostic/`); re-exported from
+  `internal/reporting/` for callers using a Go type alias:
+  ```go
+  // In internal/reporting/reporter.go (or a separate types.go in the same package)
+  import "gobra/internal/diagnostic"
+  type Diagnostic = diagnostic.Diagnostic  // type alias — NOT a redefinition
+  ```
+  **This MUST be a type alias (`=`), not a type definition.** A type definition would create
+  an incompatible type; `diagnostic.Diagnostic` values returned by all pipeline stages would
+  not be assignable to `reporting.Diagnostic` variables. The alias makes them identical types.
 - Text formatter and JSON formatter
 - Tests: given a known Silicon error response, verify the correct Go source position is
   reconstructed
@@ -149,3 +158,41 @@ translator must propagate the outermost position when constructing synthetic Sil
 The Scala Gobra uses `Source.unapply(offendingNode)` — which calls `node.getPrettyMetadata._2.getUniqueInfo[Verifier.Info]` — to extract Go source info directly from a Silver node's Viper `Info` field. Go-Gobra uses the analogous approach: the builder (plan 16) embeds `NodeInfo` as `AnnotationInfo` entries in each node's Viper `Info` chain during construction, and the worker (plan 17) calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` to retrieve those fields after Silicon reports errors.
 
 For the `searchInfo` DFS, the reporter uses `err.Node` (the Go Silver struct pre-loaded by the worker, carrying `Children()`) rather than performing a nodeMap lookup inside the reporter. The `NodeMap` field on `VerificationResult` is retained for lifecycle purposes (it is referenced by `Close()` to free JNI global references) but the reporter does not access it directly.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/reporting/reporter.go` and
+verified before this plan is considered complete.
+
+1. **`Report` non-nil result** — always returns a slice (may be empty on success; nil slice
+   is not returned):
+   ```go
+   //@ requires result != nil
+   //@ ensures  diags != nil   // slice header is always initialized, even if len == 0
+   func Report(result *backend.VerificationResult) (diags []diagnostic.Diagnostic)
+   ```
+
+2. **Error-count correspondence** — the number of returned diagnostics matches the number of
+   verification errors in the result (one diagnostic per error):
+   ```go
+   //@ requires result != nil && result.Err == nil
+   //@ ensures  result.Success ==> len(diags) == 0
+   //@ ensures  !result.Success ==> len(diags) == len(result.Errors)
+   ```
+
+3. **`searchInfo` DFS termination** — the downward child-walk terminates because Silver node
+   trees are acyclic (enforced by the Silver AST immutability invariant in plan 14):
+   ```go
+   //@ requires node != nil && acc(silverNodeTree(node), _)
+   //@ ensures  result.Tag != "synthetic" || result == silver.NoInfo
+   //@ decreases silverTreeSize(node)   // well-founded: acyclic tree decreases on each step
+   func searchInfo(node silver.Node) (result silver.NodeInfo)
+   ```
+
+4. **Called-before-Close contract** — `Report` must be called while JNI global refs are still
+   live (before `result.Close()`); this is enforced by a ghost permission:
+   ```go
+   //@ requires acc(jniRefsLive(result), _)   // ghost: JNI global refs not yet freed
+   //@ ensures  acc(jniRefsLive(result), _)   // ghost: permission returned; Close still valid
+   func Report(result *backend.VerificationResult) (diags []diagnostic.Diagnostic)
+   ```

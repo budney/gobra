@@ -19,12 +19,20 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 - Compare actual errors to expected errors; report pass/fail per file
 - Integration with `go test`: implement as `TestMain` or table-driven tests so `go test ./...`
   runs the regression suite
-- **JNI/JVM coordination for parallel tests**: The JVM is a process-wide singleton (plan 15);
-  all JNI calls are routed through a single JNI worker goroutine via a channel. Test goroutines
-  running in parallel safely share this single JNI worker — they block on the channel until
-  their JNI request is served. `go test -parallel N` is safe because the serialization happens
-  inside the JNI worker, not at the test level. The JVM is initialized once in `TestMain` and
-  shut down after all tests complete.
+- **JNI/JVM coordination for parallel tests**: The JVM is a process-wide singleton (plan 15).
+  Test goroutines share the N-worker pool (plan 15b); each worker owns its own `SiliconFrontendAPI`
+  instance and OS-thread lock. `go test -parallel N` is safe because goroutines that exceed
+  pool capacity block inside `pool.Submit()` until a worker is free — serialization happens
+  inside the pool, not at the test level. The JVM is initialized once in `TestMain` and shut
+  down after all tests complete.
+  - **Before plan 17b is implemented** (single-worker baseline): set `--workers 1` and
+    `-parallel 1`. Extra parallel goroutines would all block in `Submit()` without improving
+    throughput.
+  - **After plan 17b**: set `-parallel ≤ --workers` to bound peak memory. Each worker holds
+    one Silicon + one Z3 process; `-parallel` beyond the pool size adds goroutines that block
+    in `Submit()` while holding `*silver.Program` ASTs in memory, wasting RAM with no
+    throughput gain. Recommended: `-parallel $(nproc)` and `--workers $(nproc)`.
+  Document the recommended value in the CI workflow and README.
 - Differential mode: optionally run Scala Gobra on the same file and compare results
 
 **Out of scope:**
@@ -80,9 +88,8 @@ corpus of Silicon verification jobs. CI must set `-timeout 30m` explicitly. Docu
 in the repo README and the CI workflow file.
 
 **Parallelism ceiling (resolved):** `go test -parallel N` controls how many test goroutines
-run concurrently. Before plan 17b (pool expansion), all JNI calls are serialized through a
-single worker, so `-parallel N` increases goroutine scheduling overhead without improving
-throughput — use `-parallel 1` for the plan 15/17 baseline. After plan 17b, set `-parallel`
-to match the pool size: `go test -parallel $(nproc)` is appropriate. Beyond `runtime.NumCPU()`
-workers, memory use increases (each worker holds a Silicon + Z3 process) with no throughput
-gain. Document the recommended value in the CI workflow and README.
+run concurrently. Before plan 17b, set `--workers 1` and `-parallel 1` (single-worker baseline).
+After plan 17b, the pool has N workers; set `-parallel ≤ --workers` to bound peak memory — each
+worker holds one Silicon + one Z3 process. Goroutines beyond the pool size block in `Submit()`,
+holding `*silver.Program` ASTs in memory with no throughput benefit. Recommended after plan 17b:
+both `-parallel` and `--workers` at `$(nproc)`. Document in CI workflow and README.

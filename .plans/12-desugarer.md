@@ -85,6 +85,17 @@ per return value and populates `targets` from them. For comma-ok expressions (`m
 the desugarer produces a `Tuple([]Expr{...})` expression and then decomposes it via individual
 `Assign` statements to the LHS variables.
 
+**Ghost sequence literals (`PSeqLit` → `SeqLit`, resolved):** The annotation parser (plan 05)
+produces `PSeqLit` nodes for `seq[T]{0: a, 5: b, c}` literals in ghost code. The desugarer
+lowers `PSeqLit` directly to `internal.SeqLit` preserving all `(index, value)` pairs from the
+source, resolving implicit "next index" entries to their concrete integer indices (e.g., `c` above
+gets index 6). **No gap analysis is performed by the desugarer.** The gap-threshold chunking
+algorithm (gap ≥ 5 → `EmptyChunk`) is deferred entirely to the translator (plan 29), which
+operates on `SeqLit.Elements` at translation time. `SeqLit` is a stable internal AST node
+(not a transient like `Tuple`); the translator will panic on any `SeqLit` with unresolved
+implicit indices (i.e., any element whose `Index == -1`), so the desugarer must fill in all
+concrete indices before emitting the `SeqLit` node.
+
 **Variadic call arguments (resolved):** Every call to a variadic function `f(params ...T)` goes
 through a four-branch dispatch (reference: `functionCallArgsD` in `Desugar.scala:2338–2390`).
 Detect the variadic case by checking whether the last parameter type is `VariadicT(elem)` via

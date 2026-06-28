@@ -45,8 +45,9 @@ type Backend interface {
 
     // Verify runs the backend verifier on a pre-built Java Silver AST object.
     // Must be called from a goroutine that holds the OS thread lock and JVM attachment
-    // (see plan 15 ThreadAttached predicate). Returns nil result only on JNI error.
-    Verify(prog jobject) (*VerificationResult, error)
+    // (see plan 15 ThreadAttached predicate). JNI errors are captured in VerificationResult.Err;
+    // the method never returns nil — callers must check result.Err for infrastructure failures.
+    Verify(prog jobject) *VerificationResult
 
     // Stop shuts down the backend and releases its resources. May only be called after
     // Initialize. After Stop returns, the instance must not be used again.
@@ -73,14 +74,54 @@ defer be.Stop()
 ## Deliverables
 
 - `internal/backend/carbon/carbon.go` — `CarbonFrontendAPI` struct implementing `backend.Backend`;
-  `Verify(prog jobject) (*backend.VerificationResult, error)` and `CarbonConfig`
+  `Verify(prog jobject) *backend.VerificationResult` (JNI errors encoded in result.Err, no
+  separate error return; matches `SiliconFrontendAPI.Verify` signature so both implement
+  `backend.Backend` and `backend.SiliconInstance`) and `CarbonConfig`
 - `Backend` interface in `internal/backend/types.go` (see above; added to plan 15's file)
 - Tests:
   - Verify a trivially correct Silver program using Carbon → expect `Success`
   - Verify a trivially incorrect Silver program (e.g., `assert false`) using Carbon → expect
     `Failure` with at least one `VerificationError`
-  - Confirm that `Verify` returns an error (not a `VerificationResult`) when `BOOGIE_EXE` is
-    not set or points to a non-existent file
+  - Confirm that when `BOOGIE_EXE` is not set or points to a non-existent file, either
+    `NewCarbonFrontendAPI`/`Initialize` returns an error, or `Verify` returns a
+    `VerificationResult` with `result.Err != nil` (never a nil result). Note: `Verify` returns
+    `*VerificationResult`, not `(*VerificationResult, error)` — JNI failures are encoded in `result.Err`.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/backend/carbon/carbon.go`
+and verified before this plan is considered complete.
+
+1. **`Initialize` idempotency guard** — must be called exactly once per instance:
+   ```go
+   //@ ghost field initialized bool
+   //@ requires acc(c) && !c.initialized
+   //@ ensures  acc(c) && c.initialized
+   func (c *CarbonFrontendAPI) Initialize(args []string)
+   ```
+
+2. **`Verify` threading precondition** — JNI calls require OS-thread lock and JVM attachment:
+   ```go
+   //@ requires acc(backend.ThreadAttached(jvm), 1)
+   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   //@ ensures  result != nil   // never returns nil; JNI errors encoded in result.Err
+   func (c *CarbonFrontendAPI) Verify(prog jobject) (result *backend.VerificationResult)
+   ```
+
+3. **`Stop` requires-initialized contract** — may only be called after `Initialize`:
+   ```go
+   //@ requires acc(c) && c.initialized
+   //@ ensures  acc(c) && !c.initialized
+   func (c *CarbonFrontendAPI) Stop()
+   ```
+
+4. **`Verify` result contract** — on a successful JNI call, distinguishes proof success from
+   verification failure; `Errors` is non-nil iff `Success == false`:
+   ```go
+   //@ ensures result.Err == nil ==>
+   //@     (result.Success ==> result.Errors == nil) &&
+   //@     (!result.Success ==> result.Errors != nil)
+   ```
 
 ## Resolved Questions
 

@@ -447,6 +447,102 @@ Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `in
 
 ---
 
+---
+
+## 6. REVIEW-PLAN FULL-AUDIT RESULTS (Round 2)
+
+*Full audit of all 41 plan files. Run date: 2026-06-28 (second pass — post all prior remediations).*
+
+### New Contradictions
+
+#### BLOCKING
+
+- **[17 vs 18: `Backend.Verify` return-type mismatch]** Plan 15 defines `SiliconInstance.Verify(prog jobject) *VerificationResult` (no error return). Plan 17's `SiliconFrontendAPI` implements `SiliconInstance` with that exact signature. Plan 18 defines `Backend.Verify(prog jobject) (*VerificationResult, error)` (adds error return) and asserts "Both `SiliconFrontendAPI` and `CarbonFrontendAPI` implement Backend." A Go struct can only have one `Verify` method — `SiliconFrontendAPI` cannot satisfy both interfaces simultaneously. `Backend` must drop the error return to match `SiliconInstance`, since `VerificationResult.Err` already captures JNI failures.
+
+#### SIGNIFICANT
+
+- **[32: Diagnostic re-export type missing alias specifier]** Plan 32 says "`Diagnostic` type … re-exported from `internal/reporting/` for callers" but does not specify this must be a Go type alias (`type Diagnostic = diagnostic.Diagnostic`). A value redefinition creates a type-incompatible `reporting.Diagnostic` that cannot receive values from any stage returning `diagnostic.Diagnostic`. This was flagged in prior round (Section 5) but not remediated.
+
+- **[34: "single JNI worker" claim stale after plan 17b]** Plan 34 says "all JNI calls are routed through a single JNI worker goroutine via a channel." After plans 15b and 17b the pool is N workers. The parallelism advice (`-parallel 1` for "baseline") is inconsistent with N-worker reality; the `-parallel $(nproc)` advice applies after plan 17b, not after plan 17.
+
+#### MINOR
+
+- **[20 vs 27: KNOWN_LIMITATIONS.md creation ownership]** Plan 20 now says "(The file is first created by plan 27; plans implemented before plan 27 should create it if absent.)" Plan 27 says "created by this plan". These are consistent in intent but the phrase "create it if absent" in plan 20 contradicts "first created by plan 27" in the same sentence.
+
+---
+
+### New Gaps
+
+#### BLOCKING
+
+- **[22/23/25: `dflt(T°)` undefined]** Plans 22, 23, and 25 all reference a `dflt(T°)` function (e.g., "exclusive nil pointer = `dflt(T°)`", "`nilSlice_{T}()` = `dflt(Slice[T])`", etc.). No plan defines `dflt`, its signature, or where it is implemented. In Silver, `dflt` for a user-defined domain type is not automatic — it requires an explicit domain function axiom or a postcondition. This convention must be defined in plan 19 (translator core) or a new plan.
+
+#### SIGNIFICANT
+
+- **[12/29: sparse `seq[T]` literal path undefined]** Plan 29 specifies that sparse sequence literals with gaps ≥ 5 indices are split into `EmptyChunk`/`NonEmptyChunk`. Plan 11 defines no internal AST node for sparse sequence literals (it has `Tuple` as a desugaring intermediate but no `PSeqLit`-equivalent). Plan 12 has no gap-detection pass. The full path from a frontend `PSeqLit` node through the internal AST to plan 29's chunking algorithm is unspecified. (Flagged in prior round as SIGNIFICANT — still unremediated.)
+
+- **[27: `@opaque` placement in ConsInfo chain — Silicon search behavior unconfirmed]** Plan 27 emits `ConsInfo(AnnotationInfo{"opaque",...}, NodeInfo{...})`. Plan 16's builder then prepends `gobra_node_id`, `gobra_node_file`, `gobra_node_line`, `gobra_node_col`, `gobra_node_tag` annotations in front via `ConsInfo` wrapping. The resulting Java Info chain has `@opaque` deep (not at the head). Whether Silicon's `@opaque` handler searches the entire chain or only the chain head is unconfirmed. If it searches only the head, `@opaque` is silently ignored. (Flagged in prior round as SIGNIFICANT — still unremediated.)
+
+#### MINOR
+
+- **[19: `FunctionTable` interface undefined]** Plan 19 lists `FunctionTable: track which Go functions have been translated (for cross-function references)` as a deliverable component but provides no interface definition, method list, or description of how encoding modules interact with it.
+
+---
+
+### New Logic Errors
+
+#### SIGNIFICANT
+
+- **[22: `dflt(InterfaceDomain)` has no Silver definition]** Plan 22 says exclusive nil for `*I` (where `I` is an interface) = `iface(null, nilType())` obtained by applying `dflt(InterfaceDomain)`. Silver does not provide a built-in `dflt` function for user-defined domain types like `InterfaceDomain`; the value `iface(null, nilType())` must come from an explicit domain function or axiom defined in plan 25. Plan 25 does not define such an axiom. Without it, the pointer encoding emits `dflt(InterfaceDomain)` which is an undefined Silver expression — invalid Silver rejected at parse time.
+
+---
+
+### New Design Concerns
+
+- **[34: test parallelism vs. worker parallelism interaction unclear]** Plan 34 advises `-parallel 1` for the plan-15/17 baseline and `-parallel $(nproc)` after plan 17b. The relationship between `go test -parallel N` (goroutine count) and `--workers N` (JNI worker count) is subtle: `-parallel` beyond the pool size adds goroutines that all block in `Submit()`, holding `*silver.Program` ASTs in memory. This interaction should be documented explicitly: "set `-parallel` ≤ `--workers` to bound peak memory."
+
+---
+
+### New Simplifications / Improvements
+
+- **[30: generics audit fields stale]** Plan 30's `Audit status`, `Generics found`, and `Chosen option` fields remain `_not yet run_` / `_unknown_` / `_N/A_`. This is a **blocking prerequisite for plan 36** per plan 30's text. The fields must be filled in before plan 36 begins. (Pre-existing, still open.)
+
+- **[08: unsupported-constructs list should include reserved identifiers]** Plan 08's "Explicitly Unsupported Constructs" lists goto, fallthrough, recover but not the reserved-identifier patterns (`_u[0-9A-F]{1,6}_` and `gobra__` prefix) defined in plan 19. These patterns cause silent Silver name collisions if not caught at the type checker. Plan 08 should add them. (Flagged in prior round's Simplifications — still unremediated.)
+
+- **[32a: `Error`/`Warning` constant name shadowing]** `Error` and `Warning` constants in `internal/diagnostic/` shadow the `errors` package sentinel and Go idiom. Consider `DiagError`, `DiagWarning`, `DiagInfo`. (Pre-existing, still open.)
+
+---
+
+### New Remediation Queue (Round 2)
+
+#### BLOCKING
+
+35. ~~**Fix `18-carbon-backend.md` (C6 — BACKEND-VERIFY-MISMATCH)**: `Backend.Verify` returns `(*VerificationResult, error)` but `SiliconFrontendAPI.Verify` (which must implement both `Backend` and `SiliconInstance`) returns only `*VerificationResult`. Remove the error return from `Backend.Verify` — JNI errors are already encoded in `VerificationResult.Err`. Update plan 18's interface definition and plan 33's factory code to match.~~ DONE — Removed error return from `Backend.Verify` interface definition; updated `CarbonFrontendAPI.Verify` signature to match; added note that JNI errors are captured in `result.Err`.
+
+36. ~~**Fix `19-translator-core.md` (C3 — DFLT-UNDEFINED)**: Define the `dflt(T silver.Type) silver.Expr` convention — a translator helper that returns the Silver zero-value expression for any given Silver type. Document where it is implemented (likely a method on `Context`) and its contract for each Silver type category (`Int` → 0, `Bool` → false, domain types → the domain's designated nil/default, `Ref` → `null`). Plans 22, 23, and 25 reference `dflt` without a definition.~~ DONE — Added "`dflt` Zero-Value Convention" section to plan 19: defines `Dflt(t silver.Type) silver.Expr` as a `Context` method with full type dispatch table; registration pattern for encoding-owned domains; C9 contract annotation; panic guard for unregistered domains.
+
+37. ~~**Fix `22-encoding-pointers.md` and `25-encoding-interfaces.md` (C3 — DFLT-INTERFACE)**: Once plan 19's `dflt` convention is defined, make plan 22 and plan 25 consistent with it. Plan 25 must either add a `none_InterfaceDomain()` domain function (with axiom `iPolyVal(none_InterfaceDomain()) == null && iDynType(none_InterfaceDomain()) == nilType()`) or declare that `dflt(InterfaceDomain) = iface(null, nilType())` is the Silver expression directly (not a domain call). The former is cleaner.~~ DONE — Added `unique function none_InterfaceDomain(): InterfaceDomain` + `gobra__none_iface` axiom to plan 25's `InterfaceDomain` domain; added `RegisterDomainDefault` call in plan 25's Init phase; updated plan 22 to use `ctx.Dflt(...)` via the registry instead of emitting `iface(null, nilType())` directly.
+
+#### SIGNIFICANT
+
+38. ~~**Fix `32-reporter.md` (C4 — DIAGNOSTIC-ALIAS)**: Change "re-exported from `internal/reporting/`" to explicitly state the Go type alias form: `` type Diagnostic = diagnostic.Diagnostic ``. This must be a type alias to maintain assignment compatibility across all pipeline stages.~~ DONE — Updated plan 32 Deliverables to show explicit `type Diagnostic = diagnostic.Diagnostic` (type alias with `=`) with a bold warning that a type redefinition would break cross-pipeline assignment compatibility.
+
+39. ~~**Fix `34-test-infrastructure.md` (C4 — STALE-SINGLE-WORKER)**: Remove or qualify the "single JNI worker goroutine" description. Replace with: "Test goroutines share the N-worker pool (plan 15b). Before plan 17b is implemented, set `--workers 1` and `-parallel 1`. After plan 17b, set `-parallel ≤ --workers` to bound peak memory."~~ DONE — Rewrote the JNI coordination bullet in In-scope to describe N-worker pool with Submit() blocking; added before/after plan-17b sub-bullets for `-parallel` and `--workers` settings; updated Parallelism ceiling resolved question to match.
+
+40. ~~**Fix `12-desugarer.md` and `29-encoding-adts.md` (C4 — SPARSE-SEQ-PATH)**: Either (a) define an `InternalSeqLit` internal AST node in plan 11 to carry sparse literal chunking information, routed from the frontend `PSeqLit` through the desugarer, or (b) move the chunking logic to the translator itself (plan 29), which receives the original frontend expression via `TypeInfo` and does the gap analysis at translation time. Document which approach is chosen and update plans 11, 12, 29 consistently.~~ DONE — Chose option (a) variant: added `SeqLit`/`SeqLitElement` internal AST node to plan 11 (stable, not transient; carries concrete indices); updated plan 12 to say desugarer lowers `PSeqLit` → `SeqLit` filling in all concrete indices with NO gap analysis; updated plan 29 to document that chunking algorithm operates on `SeqLit.Elements` at translation time with explicit 4-step algorithm.
+
+### CHECK-PLAN FINDINGS (items 35-40 verification pass)
+
+#### IMMEDIATE FIX REQUIRED
+- **[C4-REG — 18: stale test bullet]** Plan 18 test bullet says "Confirm that `Verify` returns an error (not a `VerificationResult`) when `BOOGIE_EXE` is not set" — but `Verify` now returns `*VerificationResult` (no error). Test must say "Confirm that Initialize panics or `result.Err != nil`". FIXED — test bullet rewritten to say check `result.Err != nil` or `Initialize` error; clarifies `Verify` returns `*VerificationResult` not `error`.
+
+#### PRE-EXISTING C9 FAILURES (not regressions from items 35-40) — ALL FIXED
+- [x] **[C9-PREEXIST — 18]**: FIXED — Added C9 section with Initialize idempotency guard, Verify threading precondition (ThreadAttached), Stop requires-initialized contract, Verify result contract (Err==nil ==> Success↔Errors).
+- [x] **[C9-PREEXIST — 19]**: FIXED — Added formal `## Verification Specifications (C9)` section before `dflt` section; specs for `Translate` non-nil result, `ExclusiveType`/`SharedType` never-nil, `TupleDomain` idempotency invariant, `Dflt` cross-reference.
+- [x] **[C9-PREEXIST — 22]**: FIXED — Added C9 section with `EncodePointer` non-nil result, nil-encoding correctness, `new(T)` permission postcondition, no-panic/termination contract.
+- [x] **[C9-PREEXIST — 29]**: FIXED — Added C9 section with ADT match exhaustiveness postcondition, `SeqLit` chunk-coverage postcondition, `emptySeq_{T}` postcondition guard, `EncodeMatch` termination annotation.
+- [x] **[C9-PREEXIST — 32]**: FIXED — Added C9 section with `Report` non-nil result, error-count correspondence, `searchInfo` DFS termination (decreases silverTreeSize), called-before-Close ghost permission contract.
+
 ### New Active Blockers (to be resolved)
 
 The following items are BLOCKING and must be added to Section 3 of the scratchpad:

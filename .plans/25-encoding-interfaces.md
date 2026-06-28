@@ -62,9 +62,23 @@ domain InterfaceDomain {
   function iface(polyVal: Ref, dynType: Type): InterfaceDomain
   function iPolyVal(i: InterfaceDomain): Ref
   function iDynType(i: InterfaceDomain): Type
+  // none_InterfaceDomain is the designated zero/nil value for InterfaceDomain.
+  // It satisfies iPolyVal == null and iDynType == nilType(). Used by ctx.Dflt(InterfaceDomain)
+  // (plan 19) and by pointer encoding (plan 22) as the nil encoding for *I.
+  unique function none_InterfaceDomain(): InterfaceDomain
   axiom { forall v: Ref, t: Type :: {iface(v, t)} iPolyVal(iface(v, t)) == v && iDynType(iface(v, t)) == t }
+  axiom gobra__none_iface {
+    iPolyVal(none_InterfaceDomain()) == null && iDynType(none_InterfaceDomain()) == nilType()
+  }
 }
 ```
+
+**Registration with `dflt` (plan 19):** During the interface encoding `Init` phase, plan 25 calls:
+```go
+ctx.RegisterDomainDefault("InterfaceDomain", silver.DomainFuncApp("none_InterfaceDomain", nil))
+```
+This makes `ctx.Dflt(silver.DomainType("InterfaceDomain"))` return `none_InterfaceDomain()` for use
+by any encoding that needs the zero interface value (pointer encoding plan 22, slice encoding plan 23).
 
 `InterfaceDomain` is emitted lazily (on first use) and cached as a global singleton. Do NOT use
 `TupleDomain(2)` for interface values — the Silver types would be indistinguishable from

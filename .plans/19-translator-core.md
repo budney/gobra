@@ -287,6 +287,82 @@ type TypeEncoding interface {
 other encoding modules call `ctx.TypeEncoding().TypeValue(t)` rather than importing plan 25
 directly, keeping the dependency graph a DAG through `Context`.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/` files and
+verified before this plan is considered complete.
+
+1. **`Translate` non-nil result** — a non-nil input program always produces a non-nil Silver
+   program (errors are accumulated in diagnostics, not nil-returned):
+   ```go
+   //@ requires prog != nil && info != nil
+   //@ ensures  result != nil || len(diags) > 0
+   func Translate(prog *internal.Program, info *TypeInfo) (result *silver.Program, diags []diagnostic.Diagnostic)
+   ```
+
+2. **`ExclusiveType` / `SharedType` never nil** — every concrete internal type maps to a
+   concrete Silver type; the catch-all panics before returning nil:
+   ```go
+   //@ ensures result != nil
+   func (c *contextImpl) ExclusiveType(t internal.Type) (result silver.Type)
+
+   //@ ensures result != nil
+   func (c *contextImpl) SharedType(t internal.Type) (result silver.Type)
+   ```
+
+3. **`TupleDomain` idempotency** — emitting the same arity twice returns the identical
+   (pointer-equal) domain object; the Silver program accumulator sees each domain at most once:
+   ```go
+   //@ invariant forall n int :: n in c.tupleDomainCache ==> c.tupleDomainCache[n] != nil
+   //@ ensures   result != nil && result == c.tupleDomainCache[n]
+   func (c *contextImpl) TupleDomain(n int) (result *silver.Domain)
+   ```
+
+4. **`Dflt` non-nil and type-directed** — see the `dflt` section below for the full contract.
+
+## `dflt` Zero-Value Convention
+
+Plans 22, 23, and 25 reference `dflt(T°)` to obtain the Silver zero/nil expression for an
+exclusive encoding of Go type T. **`dflt` is a Go helper method on `Context`**, not a Silver
+function — it is resolved at translation time and never appears in the generated Silver AST.
+
+```go
+// Dflt returns the Silver expression that represents the Go zero value for the given Silver
+// type in exclusive (°) encoding. Never returns nil.
+//
+//   silver.IntType   → silver.IntLit(0)
+//   silver.BoolType  → silver.BoolLit(false)
+//   *silver.Domain   → ctx.dfltDomain(d)   // see table below
+//   silver.RefType   → silver.NullLit
+//   silver.SeqType   → silver.EmptySeq(elemType)
+//
+// For domain types, dfltDomain looks up the domain's designated nil/default constructor:
+//
+//   gobra__Tuple{N}  → gobra__tuple{N}(dflt(T0), ..., dflt(T{N-1}))  (plan 19 TupleDomain)
+//   Slice[T]         → nilSlice_{T}()                                  (plan 23)
+//   InterfaceDomain  → none_InterfaceDomain()                          (plan 25)
+//
+// The dfltDomain table is populated at translator startup by each encoding that registers its
+// domain together with its designated nil/zero constructor expression.
+func (c *contextImpl) Dflt(t silver.Type) silver.Expr
+```
+
+**Registration pattern:** Each encoding that introduces a domain `D` with a nil/zero element
+calls `ctx.RegisterDomainDefault(domainName, nilExpr)` during its `Init` phase. `Dflt` then
+dispatches on the domain name. This keeps `context.go` independent of individual encoding plans.
+
+**Contract (for C9 purposes):**
+```go
+//@ ensures result != nil
+//@ ensures t == silver.IntType  ==> result == silver.IntLit(0)
+//@ ensures t == silver.BoolType ==> result == silver.BoolLit(false)
+//@ ensures t == silver.RefType  ==> result == silver.NullLit
+func (c *contextImpl) Dflt(t silver.Type) (result silver.Expr)
+```
+
+For domain types, `Dflt` consults the registered default table; a panic fires on any domain
+with no registered default (internal bug — encoding author forgot to call `RegisterDomainDefault`).
+
 ## Resolved Questions
 
 **Encoding state (resolved):** Encodings are stateful objects (matching the Scala implementation).

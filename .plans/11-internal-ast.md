@@ -50,7 +50,8 @@ constructs are unified.
     implementation uses `LabelProxy`; Go-Gobra uses `Label` for the same role.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
   `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
-  `Tuple` (transient desugaring-only construct — see below; not stable in the final AST)
+  `Tuple` (transient desugaring-only construct — see below; not stable in the final AST),
+  `SeqLit` (ghost sequence literal; carries indexed element pairs — see below)
 
   The `Expr` interface includes an `Addressable() bool` method. Every concrete expression
   struct stores an `addressable bool` field and implements `Addressable() bool { return e.addressable }`.
@@ -91,6 +92,30 @@ internal AST handed to the translator, and the translator has no encoding for it
 `Tuple` node reaches the translator, it is a desugarer bug (panic, do not silently drop it).
 `TupleT` is similarly transient. Pure functions (`PureFunctionCall`, `PureMethodCall`) return
 a single value (Go's `pure` functions are restricted to a single non-error return).
+
+**`SeqLit` node (ghost sequence literal):** Carries a ghost sequence literal from the frontend
+annotation parser through the internal AST to the translator. The desugarer (plan 12) lowers
+`PSeqLit` directly to `SeqLit` with no structural change — gap analysis is deferred to the
+translator (plan 29). The node shape:
+
+```go
+type SeqLit struct {
+    ElemType   Type             // ghost element type
+    Elements   []SeqLitElement  // indexed element pairs from the source literal
+    Pos_       src.Pos
+    addressable bool             // always false (ghost, no heap)
+}
+
+type SeqLitElement struct {
+    Index int   // explicit index from source (0-based), or -1 for "next" (no explicit index)
+    Value Expr  // element value expression (already desugared)
+}
+```
+
+`SeqLit` IS a stable internal AST node — it appears in the final AST handed to the translator.
+The translator (plan 29) performs all gap analysis and chunking on `SeqLit.Elements` at
+translation time. This keeps the desugarer's responsibilities simple: lower syntax, preserve
+indices, do not analyze gaps.
 
 ### Verification Specifications (C9)
 
