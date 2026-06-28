@@ -101,11 +101,24 @@ domain Option_{T} {
   function none_{T}(): Option_{T}
   function some_{T}(x: T): Option_{T}
   function isNone_{T}(o: Option_{T}): Bool
+  function isSome_{T}(o: Option_{T}): Bool   // explicit, not derived as !isNone
   function get_{T}(o: Option_{T}): T
-  axiom { isNone_{T}(none_{T}()) }
-  axiom { forall x: T :: {some_{T}(x)} !isNone_{T}(some_{T}(x)) && get_{T}(some_{T}(x)) == x }
+  axiom gobra__option_none_{T} { isNone_{T}(none_{T}()) }
+  axiom gobra__option_some_{T} {
+    forall x: T :: {some_{T}(x)}
+      !isNone_{T}(some_{T}(x)) && isSome_{T}(some_{T}(x)) && get_{T}(some_{T}(x)) == x
+  }
+  axiom gobra__option_isSome_{T} {
+    forall o: Option_{T} :: {isSome_{T}(o)} isSome_{T}(o) == !isNone_{T}(o)
+  }
 }
 ```
+
+`isSome` is included as an explicit domain function (with its own axiom linking it to
+`!isNone`) rather than relying on callers to write negation. This matches Gobra's surface
+syntax (`isSome(o)` appears directly in specs) and avoids negation overhead at every call
+site in generated Silver. The axiom `isSome_{T}(o) == !isNone_{T}(o)` is the canonical
+connection; Z3 uses the trigger `{isSome_{T}(o)}` to instantiate it.
 
 ## Bodyless Functions
 

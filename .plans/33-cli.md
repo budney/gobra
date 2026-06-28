@@ -17,8 +17,19 @@ status code.
   - Verification: `--overflow`, `--checkConsistency`, `--module`, `--assumeInjectivityOnInhale`
   - Output: `--logLevel`, `--printViper`, `--parseOnly`, `--typeCheckOnly`, `--noVerify`
   - Performance: `--parallelizeBranches` (see note below), `--cacheFile`
-- Pipeline orchestration: Gobrafier → Parser → Type Checker → Desugarer → Transforms →
-  Translator → JNI Backend → Reporter
+- Pipeline orchestration:
+  Gobrafier → Parser → Type Checker → Desugarer → Transforms → Translator → **Chopper** → JNI Backend → Reporter
+
+  The **Chopper** step (plan 16b) sits between the Translator and the JNI Backend. After
+  `Translate(prog)` returns a single `*silver.Program`, `pipeline.go` calls
+  `Chop(silverProg, chop.ChopConfig{Bound: cfg.ChopBound})` to produce `[]*silver.Program`
+  (sub-programs split by method for parallel verification). `cfg.ChopBound` is a `*int`
+  populated from the `--chop-bound N` flag (nil means unlimited; defaults to `&cfg.Workers`
+  when `--chop` is set without an explicit bound). This slice is then passed to `WorkerPool.DispatchChopped`
+  (plan 17b). If `--workers 1` (the default), Chopper produces a single-element slice and
+  `DispatchChopped` degenerates to a single serial call. If `--workers N > 1`, the sub-programs
+  are dispatched to N workers in parallel. Pipeline.go must import plan 16b and call `Chop`
+  explicitly — plan 17b's `DispatchChopped` does not call it internally.
 - **`{pkg}_run_inits` invocation**: the translator (plan 27) synthesizes a Silver method
   `{pkg}_run_inits` for each package. This method is a regular member of the `*silver.Program`
   returned by the translator — Silicon verifies it independently, like any other Silver method.
@@ -45,6 +56,7 @@ status code.
 - [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline
 - [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and WorkerPool
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver JNI builder (Build + nodeMap)
+- [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend
 - [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)
 - [17b-parallel-workers.md](17b-parallel-workers.md) — parallel worker pool (--workers N)
 - [19-translator-core.md](19-translator-core.md) — translation

@@ -85,7 +85,7 @@ self-hosting: Go-Gobra verifies its own source code.
 ### Group 7: CLI & Integration
 | File | Title | Blocked by |
 |------|-------|------------|
-| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 13, 15, 16, 17, 17b, 19, 27, 32 |
+| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 13, 15, 16, 16b, 17, 17b, 19, 27, 32 |
 
 ### Group 8: Testing
 | File | Title | Blocked by |
@@ -142,6 +142,13 @@ on bodyless Viper functions silently weaken verification. This affects plans 20,
 (Plan 24 uses Silver built-in `Map` type operations with no bodyless functions. Plan 21
 generates `sharedStructConversion` and `sharedStructDefault` — also subject to this invariant;
 see plan 19 for the full list.)
+
+**Domain axioms vs. bodyless Silver functions (plan 25)**: Plan 25's `Poly[T]` domain
+uses Silver *domain functions* governed by axioms, not Silver *functions* with postconditions.
+The failure mode is different: a wrong domain axiom can unsound the proof directly, whereas a
+missing postcondition merely weakens it. The same audit discipline applies — verify the axiom
+set against `InterfaceEncoding.scala` — but do not confuse domain axioms with the bodyless
+Silver function invariant. See plan 25's "Bodyless Functions" section for the distinction.
 
 ## Unblocked Work (can start immediately)
 

@@ -52,9 +52,17 @@ constructs. These have their own typing rules that differ from standard Go.
 
 **Separate pass vs. integrated (resolved):** Spec type checking runs as a **separate pass**
 after the core Go type checker (plan 08). Plan 08's `Check` function returns a `*TypeInfo`
-covering standard Go constructs; plan 09 takes that `TypeInfo` plus the Gobra-specific AST
-nodes and runs a second pass to annotate ghost/spec types. The two passes share the same
-`TypeInfo` output struct (plan 09 fills in the `GhostTypeInfo` portion). This matches the
-current Gobra architecture and avoids complicating the core type checker with spec-specific
-rules. Plan 08 need not expose extension hooks beyond returning a partial `TypeInfo` — plan 09
-reads it and appends to it.
+(the concrete exported struct, not an interface) with `TypeInfo.Go` populated and
+`TypeInfo.Ghost` zero-valued. Plan 09's entry point is:
+
+```go
+// CheckSpecs annotates ghost and spec nodes in pkg, filling in info.Ghost.
+// Must be called after plan 08's Check (info.Go must be populated).
+// Returns additional diagnostics; callers accumulate these with plan 08's diagnostics.
+func CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic
+```
+
+Plan 09 receives the same `*TypeInfo` pointer returned by plan 08 and mutates `info.Ghost`
+directly — no type assertion or interface casting needed, because `TypeInfo` is a concrete
+struct. This matches the current Gobra architecture and avoids complicating the core type
+checker with spec-specific rules.

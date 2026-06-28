@@ -121,8 +121,17 @@ wrapper nodes (Seqn generated for control flow, synthetic If for desugaring) may
 line numbers), the pretty-printer assigns Silver line numbers as it serializes the AST. No
 Silver position field is needed on Go Silver nodes themselves.
 
-**`NodeInfo` must never be nil** on any Silver node. Synthetic nodes use the sentinel
-`NodeInfo{Tag: "synthetic"}`; every other node must have a valid File, Line, and Col.
+**`NodeInfo.File` must be non-empty** on every non-synthetic Silver node. (NodeInfo is a
+Go value-type struct, not a pointer — it cannot be nil. The constraint is on the `File` field:
+every node must have a non-empty `NodeInfo.File` except synthetic nodes, which carry
+`NodeInfo{Tag: TagSynthetic}` with `File == ""`.)
+
+**Dual NodeInfo storage is intentional.** Every Silver node stores its `NodeInfo` in two
+places: (1) the Go-side `NodeInfo` field on the Go Silver struct (used by `searchInfo` DFS
+via `Children()` calls), and (2) as `AnnotationInfo` entries embedded in the Java Silver
+node's Viper `Info` chain (used by the JNI worker to extract positions via
+`SilverBridge.getNodeFile/Line/Col/Tag` without a cross-language roundtrip). Both copies are
+required. Do not omit either. See plan 16 for details on the Java-side embedding.
 
 **Centralized tag registry:** The `Tag` strings set during translation (`"call"`, `"fold"`,
 `"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table (plan 32).

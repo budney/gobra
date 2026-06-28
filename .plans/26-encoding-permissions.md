@@ -45,7 +45,7 @@ definitions and calls, fractional permissions, wildcards, magic wands, and the g
 Full permission (`write`) → `FullPerm()`. Wildcard → `WildcardPerm()`.
 
 **Fractional permissions** `p/q`: → Silver `FractionalPerm(p, q)`. Permission expressions
-`p + q`, `p - q`, `p * q` → Silver `PermAdd`, `PermSub`, `PermMul`.
+`p + q`, `p - q`, `p * q`, `p / q` → Silver `PermAdd`, `PermSub`, `PermMul`, `PermDiv`.
 
 **Magic wands** `A --* B`: → Silver `MagicWand(A, B)`.
 - `package (A --* B) { proof }`: → Silver `Package(wand, proof)` statement.

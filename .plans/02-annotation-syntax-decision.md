@@ -98,6 +98,16 @@ section using BNF or EBNF notation, covering all forms listed in the Deliverable
 above. Reference `src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` while writing it —
 those files are the authoritative source until deletion.
 
+**Independent validation procedure**: Once the grammar sketch exists in `## Annotation Grammar`:
+1. For each production in the sketch, locate the corresponding rule in `GobraParser.g4` or
+   `GobraLexer.g4` and confirm the coverage matches. Mark each production ✓.
+2. Confirm that every annotation form listed in the Deliverables section above has at least
+   one production rule in the sketch. Missing forms are blocking.
+3. Confirm that all plan 05 table-driven test cases parse correctly when the parser is driven
+   by this grammar as specification (i.e., the sketch is consistent with the implemented parser).
+
+This plan is not complete until all three checks pass.
+
 ## Resolved Questions
 
 **Inline (mid-statement) annotations**: In scope — full parity with the Scala implementation.

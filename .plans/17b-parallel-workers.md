@@ -86,7 +86,11 @@ use a semaphore to cap in-flight programs at `poolSize` (the number of workers):
 func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult {
     type indexed struct{ idx int; res *VerificationResult }
     ch := make(chan indexed, len(progs))
-    sem := make(chan struct{}, p.poolSize) // semaphore: at most poolSize goroutines in-flight
+    // Semaphore caps concurrent Submit calls to poolSize. Since Submit blocks
+    // until a worker finishes its JNI build+verify cycle, this limits concurrent
+    // JNI jobs to poolSize (the number of workers), preventing unbounded memory
+    // use when progs is large and workers are busy.
+    sem := make(chan struct{}, p.poolSize)
     for i, prog := range progs {
         sem <- struct{}{}
         go func(i int, prog *silver.Program) {
@@ -117,7 +121,7 @@ Document this constraint in `--help` for both flags.
 
 - Updated `internal/backend/jvm/jvm.go` — `WorkerPool` expanded to configurable `poolSize`;
   `Submit(prog *silver.Program) *VerificationResult` dispatches to next available worker
-- `internal/backend/silicon/dispatch.go` — `DispatchChopped([]*silver.Program, *WorkerPool)`
+- `internal/backend/jvm/dispatch.go` — `func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult`
 - `internal/backend/silicon/dedup.go` — `Deduplicate([]VerificationError) []VerificationError`
 - `--workers N` CLI flag (plan 33 integration)
 - Tests:

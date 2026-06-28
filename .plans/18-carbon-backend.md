@@ -32,6 +32,12 @@ working.
 
 - `internal/backend/carbon/carbon.go` — `Verify(prog jobject, cfg CarbonConfig) (*VerificationResult, error)`
 - Both Silicon and Carbon implement a common `Backend` interface
+- Tests:
+  - Verify a trivially correct Silver program using Carbon → expect `Success`
+  - Verify a trivially incorrect Silver program (e.g., `assert false`) using Carbon → expect
+    `Failure` with at least one `VerificationError`
+  - Confirm that `Verify` returns an error (not a `VerificationResult`) when `BOOGIE_EXE` is
+    not set or points to a non-existent file
 
 ## Resolved Questions
 

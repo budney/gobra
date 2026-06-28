@@ -83,7 +83,7 @@ this encoding is considered complete. Scala reference: `src/main/scala/viper/gob
 
 | Function | Preconditions | Required postconditions | Scala reference |
 |----------|--------------|-------------------------|-----------------|
-| `goIntDiv(l, r: Int): Int` | `r != 0` | Truncation semantics: `result == l - r * (if l >= 0 && r > 0 \|\| l <= 0 && r < 0 then l / r else -((-l) / r))` — verify exact form against Scala | Integer encoding |
+| `goIntDiv(l, r: Int): Int` | `r != 0` | Truncation semantics: **formula in this table is WRONG** — the sketch `result == l - r * (if l >= 0 && r > 0 \|\| l <= 0 && r < 0 then l / r else -((-l) / r))` gives −1 for (l=−7, r=3) but Go truncates to −2. **Do not use this formula.** Copy the postcondition verbatim from `IntegerEncoding.scala` (or wherever the Scala source defines `goIntDiv`). This row must be verified against Scala before implementation. | Integer encoding |
 | `goIntMod(l, r: Int): Int` | `r != 0` | `result == l - r * goIntDiv(l, r)` | Integer encoding |
 | `bitwiseAnd(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
 | `bitwiseOr(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |

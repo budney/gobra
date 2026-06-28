@@ -61,12 +61,16 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   `stubs/` directories before GOPATH, so `import "sync"` resolves to `stubs/sync/*.gobra`
   rather than the real Go `sync` package.
 
-  The Go-Gobra equivalent: implement a custom `types.Importer` (required by plan 10 for
-  `go/types.Check`) that checks the embedded stubs directory *first* for every import path.
-  If `stubs/<importPath>/` contains any `.gobra` files, load and return those (as a virtual
-  `*types.Package` built from the stub's exported declarations). Otherwise, fall through to
-  `go/packages` for real Go packages. This custom importer is shared between the package
-  resolver and the type checker (plan 10).
+  The Go-Gobra equivalent requires a custom `types.Importer` that checks the embedded stubs
+  directory *first* for every import path. If `stubs/<importPath>/` contains any `.gobra`
+  files, it loads and returns those (as a virtual `*types.Package` built from the stub's
+  exported declarations); otherwise it falls through to `go/packages` for real Go packages.
+
+  **Ownership: plan 10 implements and owns this custom importer** as a named deliverable. Plan
+  07 depends on it at runtime (the package resolver calls `go/types.Check` with this importer),
+  but does not implement it. Plan 10 must be completed before plan 07's multi-package path
+  can be exercised end-to-end. The importer is shared between plan 07 (for resolution) and
+  plan 10 (for type-checking); plan 10 exports it from `internal/info/importer.go`.
 
   The `BuiltInImport` package (Gobra's own built-in declarations, separate from stdlib stubs)
   is resolved via a special sentinel import path `"gobra/builtin"` that always maps to the
@@ -93,9 +97,15 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - `PackageInfo` type: `{ImportPath string, Files []*frontend.PFile, Deps []string}`
 - `ResolverConfig` type (see above)
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
-- Coordination note: for each file, `Resolve` calls `Gobrafy(filename, rawBytes)` (plan 06)
-  receiving preprocessed `[]byte`, then immediately passes those bytes to
-  `ParseFile(filename, preprocessedBytes)` (plan 04) — **no temp file is written**.
+- Coordination note: for each file, `Resolve` runs a **4-step sequence**:
+  1. `Gobrafy(rawBytes, filename)` (plan 06) → preprocessed `[]byte` (no temp file written)
+  2. `ParseFile(filename, preprocessedBytes)` (plan 04) → `(*PFile, map[*PBlockStmt][]RawAnnotation, diags)` — `PBlockStmt` nodes contain Go statements only at this point
+  3. For each `RawAnnotation` in the returned map: `ParseAnnotation(raw.Text, raw.Pos)` (plan 05) → ghost statement nodes
+  4. `MergeGhostStatements(pfile, ghostNodes)` → interleaves ghost statement nodes into each `PBlockStmt.Stmts` by `Pos()`, completing the block's statement list in source order
+
+  `MergeGhostStatements` is a pure function in `internal/frontend/packageresolver.go`; it sorts a merged slice of `PGoStmt` and ghost nodes by their `Pos()` value.
+
+  File-scope `//@ ` comments (those not within any block, e.g. ghost ADT/predicate/func declarations produced by the Gobrafier) are identified by position (no enclosing `*PBlockStmt` in the map) and attached to `PFile.GhostDecls` rather than any `PBlockStmt`.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
   the correct set of files is loaded in dependency order
 

@@ -97,6 +97,22 @@ does not model the receive-from-closed behavior automatically (document in KNOWN
 a Silver `if` with a non-deterministic boolean `b` selecting between the channel operation
 and the default. Both branches must verify independently.
 
+**`select` without `default` (N blocking cases)**: a `select` with N purely blocking channel
+cases (no default) must be encoded with an integer discriminant `d: Int` non-deterministically
+chosen in `[0, N-1]`, with N arms in a Silver `if`/`elsif` chain — one per channel case. A
+boolean discriminant suffices only for N=2; for N≥3 a boolean would merge cases and silently
+drop coverage of some arms. The desugarer (plan 12) must count `select` arms before choosing
+the discriminant type: if N=2 (with default), use a boolean; if N≥2 (without default), use
+an integer in `[0, N-1]`.
+
+**Interaction with `Poly[chan T]` boxing (plan 25):** When a channel value is stored in an
+`interface{}`, the exclusive `chan T` encoding (`vpr.Int`) is boxed via `Poly[Int]` (since
+the exclusive type of `chan T` is `Int`). Do NOT instantiate `Poly[chan T]` expecting `Ref`
+as the type argument — the exclusive `chan T` type is `Int`, so the box/unbox pair is
+`Poly[Int].box(chanID): Ref` and `Poly[Int].unbox(r): Int`. The `dynType` must carry
+`chan_T_Type()` to distinguish channel-in-interface from int-in-interface. Add a regression
+test that stores a channel in `interface{}` and asserts its type tag after extraction.
+
 **Implication for annotations**: channel-using code is heavily annotation-dependent. The test
 in this plan must include user-written `SendChannel`/`RecvChannel` predicates.
 

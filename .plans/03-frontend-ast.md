@@ -58,7 +58,10 @@ type checker.
 - `Visitor` interface and default no-op implementation
 - Position wrapper that maps nodes to source file + line + column
 - `PFile` exposes the embedded `*ast.File` (e.g., a public `GoFile *ast.File` field) so that
-  the type checker (plan 08) can pass it directly to `go/types.Check` without unwrapping
+  the type checker (plan 08) can pass it directly to `go/types.Check` without unwrapping, plus
+  a `GhostDecls []PDecl` slice for file-scope ghost declarations (ADTs, ghost funcs, predicates)
+  that the Gobrafier emits as file-scope `//@ ` comments and plan 07 routes here instead of into
+  any `PBlockStmt`
 - Unit tests confirming that key node types can be constructed and traversed
 
 ## Design Decisions (Resolved)
@@ -188,9 +191,12 @@ type PBlockStmt struct {
 }
 ```
 
-The parser (plan 04) constructs `PBlockStmt.Stmts` from the `*ast.BlockStmt.List` and any
-`//@ ` ghost statements whose `token.Pos` falls within the block, sorting by `Pos()` to
-recover source order.
+Plan 04's `ParseFile` returns `PBlockStmt` nodes with Go statements only (`PGoStmt` wrappers
+around `ast.Stmt` entries from `*ast.BlockStmt.List`), plus a per-block side-table of raw
+`//@ ` annotation strings. Plan 07 then calls plan 05 on those raw strings and merges the
+resulting ghost statement nodes into each `PBlockStmt` by token position in step 4 of the
+coordination model. `PBlockStmt.Stmts` is not fully populated until after plan 07 runs
+`MergeGhostStatements`. See plan 07 for the complete 4-step coordination model.
 
 The `Visitor` interface includes a `VisitPGoStmt(*PGoStmt)` method so the desugarer can
 dispatch on it and invoke `ast.Inspect` for the wrapped Go statement.

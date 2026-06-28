@@ -70,8 +70,22 @@ largest single unit of work in the frontend.
 
 ## Deliverables
 
-- `internal/info/typeinfo.go` — `TypeInfo` interface (combines `*types.Info` + `GhostTypeInfo`)
+- `internal/info/typeinfo.go` — `TypeInfo` **concrete exported struct** (not an interface):
+  ```go
+  type TypeInfo struct {
+      Go    *types.Info   // populated by go/types.Check in plan 08
+      Ghost GhostTypeInfo // populated by plan 09's CheckSpecs pass
+  }
+
+  // Addressable reports whether node n is addressable (can appear as operand of &).
+  // Uses Go.Types[expr].Addressable() for go/ast expressions; returns false for
+  // ghost nodes and non-expression nodes (they are always exclusive / value-semantic).
+  // Used by the translator (plan 19) to decide ExclusiveType vs. SharedType.
+  func (ti *TypeInfo) Addressable(n PNode) bool
+  ```
 - `internal/info/checker.go` — `Check(pkg *frontend.PPackage, importer types.Importer) (*TypeInfo, []Diagnostic)`
+  Returns a `*TypeInfo` with `Go` fully populated and `Ghost` zero-valued. Plan 09's
+  `CheckSpecs(pkg, info *TypeInfo) []Diagnostic` fills in `info.Ghost` in a second pass.
 - Symbol table with scope chain for ghost/spec constructs (Go symbols are handled by `go/types`)
 - Tests: type-check a selection of regression test files and verify reported errors match
   `//@ expectedError` annotations

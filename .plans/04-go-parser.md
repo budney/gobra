@@ -66,11 +66,13 @@ file path, not any temp-file path.
 
 ## Deliverables
 
-- `internal/frontend/parser.go` — `ParseFile(filename string, src []byte) (*frontend.PFile, []Diagnostic)`
+- `internal/frontend/parser.go` — `ParseFile(filename string, src []byte) (*frontend.PFile, map[*frontend.PBlockStmt][]RawAnnotation, []Diagnostic)`
   - `filename` is the original source path (for position tracking and error messages).
   - `src` is the Gobrafier-preprocessed content (passed directly to `go/parser.ParseFile` as the `src` parameter — no temp file).
-  - Returns a partial `*frontend.PFile` and all parse-error diagnostics. A non-empty `[]Diagnostic` does not necessarily mean `*frontend.PFile` is nil; callers decide whether to abort.
-- Association of raw `//@ ...` comment strings to their enclosing AST scope
+  - Returns a partial `*frontend.PFile` with Go-only `PBlockStmt` nodes (ghost statements not yet interleaved), a per-block map of raw `//@ ` annotation strings, and all parse-error diagnostics. A non-empty `[]Diagnostic` does not necessarily mean `*frontend.PFile` is nil; callers decide whether to abort.
+  - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `PGoStmt`-wrapped Go statements at this point. Plan 07 calls plan 05 on the returned `map` and runs `MergeGhostStatements` to complete each `PBlockStmt` (step 4 of the coordination model in plan 07).
+  - **File-scope annotations** (those not inside any block — produced by the Gobrafier for ghost ADTs, predicates, funcs) are collected into `map[*frontend.PBlockStmt][]RawAnnotation` under the key `nil`. Plan 07 detects the `nil` key and routes these to `PFile.GhostDecls` instead of any `PBlockStmt`.
+- `RawAnnotation` type: `{Text string; Pos token.Pos}` — the raw `//@ ...` text stripped of the `//@ ` prefix, with its source position
 - Structured `Diagnostic` type re-exported from `internal/reporting` (see plan 00 cross-cutting contract)
 - Tests: parse a representative set of `.go` and `.gobra` files from
   `src/test/resources/regressions/` and verify the AST shape

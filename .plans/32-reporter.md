@@ -9,6 +9,10 @@ diagnostic output.
 ## Scope
 
 **In scope:**
+- `internal/reporting/tags.go` — named constants for all valid `NodeInfo.Tag` strings
+  (e.g., `TagCall`, `TagReturn`, `TagField`, `TagAssert`, `TagLoopInv`, `TagFold`,
+  `TagExhale`, `TagTermination`, `TagOverflow`, `TagSynthetic`); referenced by the translator
+  (plans 19–31) and consumed by the reporter's error-dispatch table
 - Map a Silver position (method name + Silver statement/expression position) back to the
   Go source file, line, and column that generated it, using position info stored in the
   Silver AST (14)
@@ -31,6 +35,7 @@ diagnostic output.
 
 ## Dependencies
 
+- [08-type-checker-core.md](08-type-checker-core.md) — `TypeInfo` type used in `Report()` signature
 - [14-silver-ast.md](14-silver-ast.md) — `NodeInfo` on every Silver node
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — JNI object-to-Go-node identity map
 - [17-silicon-backend.md](17-silicon-backend.md) — source of VerificationError objects
@@ -46,6 +51,10 @@ diagnostic output.
 
 ## Deliverables
 
+- `internal/reporting/tags.go` — named tag constants (`TagCall`, `TagReturn`, `TagField`,
+  `TagAssert`, `TagLoopInv`, `TagFold`, `TagExhale`, `TagTermination`, `TagOverflow`,
+  `TagSynthetic`); encoding plans reference these constants; the reporter's dispatch table
+  uses them
 - `internal/reporting/reporter.go` — `Report(result *VerificationResult, nodeMap map[uint64]*silver.Node, info *TypeInfo) []Diagnostic`
 - `Diagnostic` type: `{File, Line, Col, Message, Category}`
 - Text formatter and JSON formatter

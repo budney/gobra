@@ -128,11 +128,28 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 ## Resolved Questions
 
 **JVM singleton (resolved):** JNI supports at most one JVM per OS process. `JNI_CreateJavaVM`
-returns an error if called a second time in the same process. Go-Gobra therefore uses a
-process-wide JVM singleton: `jvm.Start()` creates it on first call and subsequent calls return
-the existing instance. Expose it via a package-level `var` (not a struct field) so all callers
-share the same instance without threading it through the call graph. `jvm.Stop()` is called
-once at process exit via `defer` in `main`.
+returns an error if called a second time in the same process and may crash on concurrent calls.
+Go-Gobra uses a process-wide JVM singleton initialized via `sync.Once`: `jvm.Start()` is safe
+to call from multiple goroutines — only the first call creates the JVM; subsequent calls return
+the existing instance. Implement as:
+
+```go
+var (
+    jvmOnce     sync.Once
+    jvmInstance *JVM
+    jvmErr      error
+)
+
+func Start(cfg JVMConfig) (*JVM, error) {
+    jvmOnce.Do(func() {
+        jvmInstance, jvmErr = createJVM(cfg)
+    })
+    return jvmInstance, jvmErr
+}
+```
+
+`jvm.Stop()` is called once at process exit via `defer` in `main`. Do not call `Stop()`
+concurrently with any JNI worker.
 
 **CGo and cross-compilation (resolved):** CGo is required (jnigi depends on it). Cross-
 compilation is limited to target platforms where a JVM is available. Document in the README:

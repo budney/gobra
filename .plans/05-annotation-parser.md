@@ -83,6 +83,39 @@ or not associated with any Go declaration) and by their leading keyword. The par
 dispatch on the first token of each `//@ ` block at file scope to determine whether it is an
 inline spec clause or a top-level ghost declaration.
 
+## Inline Annotation Positional Patterns (Complete List)
+
+Plan 02 notes four specific inline patterns where a `//@ ...` comment appears on the same
+source line as the Go expression it annotates. These are NOT standalone spec clauses — the
+Gobrafier (plan 06) recognizes them by regex and strips the Go-side syntax, leaving the
+`//@ ...` portion for this parser. The annotation parser must handle all four:
+
+| Pattern | Example source | After Gobrafier | AST node produced |
+|---------|----------------|-----------------|-------------------|
+| Ghost argument injection at call site | `f(args) //@ with ghostArgs` | `//@ with ghostArgs` | `PGhostArgs{...}` attached to enclosing call |
+| Ghost result at return | `return x, y //@ with ghostResult` | `//@ with ghostResult` | `PGhostResult{...}` attached to enclosing return |
+| Ghost assignment annotation | `x := rhs //@ as ghost_assignment` | `//@ as ghost_assignment` | `PGhostAssign{...}` replacing the Go assignment |
+| Inline unfolding | `f(x) //@ unfolding P(x)` | `//@ unfolding P(x)` | `PUnfolding{...}` wrapped around the call expression |
+
+These patterns appear only as single-line `//@ ` annotations whose `Pos` is on the same line
+as the preceding Go statement. The annotation parser distinguishes them from standalone spec
+clauses by their leading keyword (`with`, `as`, `unfolding` at the start of the annotation
+text after prefix-stripping).
+
+**Position note:** The Gobrafier preserves line counts when stripping inline annotations, so
+error positions within these annotations can be recovered from the original source line.
+
+## Grammar Sketch Timing Note
+
+Plan 02 designates a grammar sketch (BNF/EBNF covering all annotation forms) as a hard gate
+for the plan 37 cut-over checklist. However, the grammar sketch is most useful — and most
+validatable — while the ANTLR4 files (`GobraParser.g4`, `GobraLexer.g4`) still exist as
+reference. **Write the grammar sketch as part of completing this plan (plan 05), not just before
+cut-over.** Concretely: once the annotation parser's full grammar is implemented and tested,
+extract the grammar sketch into plan 02's `## Annotation Grammar` section. This ensures the
+sketch is derived from a working parser (not from memory at cut-over) and that any discrepancy
+with the ANTLR4 source is caught while the Scala files are still accessible.
+
 ## Resolved Questions
 
 **Separate AST vs. direct frontend AST production (resolved):** The annotation parser produces

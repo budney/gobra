@@ -28,6 +28,27 @@ return structured verification results (success or a list of errors with positio
 - [15-jni-setup.md](15-jni-setup.md) — `WorkerPool` that invokes `Verify`; establishes the
   thread-locking contract that `Verify` relies on
 
+## `Verify` Function Scope
+
+The top-level Go function `Verify(prog jobject, cfg SiliconConfig) (*VerificationResult, error)`
+defined in this plan is used in **two scenarios only**:
+
+1. **Test infrastructure (plan 34)**: `TestMain` creates one `SiliconFrontendAPI`, starts it
+   once, and passes it as `cfg.Instance` in every test call. `Verify` handles the warm/cold
+   dispatch on `cfg.Instance`.
+2. **Cold-path one-off invocations** (outside the worker pool): future use cases where a
+   single verification is needed without a persistent pool.
+
+**The worker pool in plans 15 and 17b does NOT call this function.** Worker goroutines own
+their own `SiliconFrontendAPI` instances (created and initialized at pool startup) and call
+`silicon.verify(built.JavaObject)` directly on those instances — bypassing the warm/cold
+dispatch logic in `Verify`. This is intentional: workers initialize Silicon once at startup
+and reuse the instance across all jobs; the dispatch logic in `Verify` is only needed for
+callers that don't own a persistent instance.
+
+Do not refactor the worker loop to call `Verify` — it would add unnecessary overhead and
+obscure the lifetime of the `SiliconFrontendAPI` instance.
+
 ## Threading Precondition
 
 `Verify` makes JNI calls and **must be invoked from a goroutine that has already called

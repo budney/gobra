@@ -45,7 +45,7 @@ constructs are unified.
     decomposed: the call is a statement with N targets, not an expression.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
   `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
-  `Tuple` (for comma-ok and channel-receive pairs — see below)
+  `Tuple` (transient desugaring-only construct — see below; not stable in the final AST)
 - **Assertions**: `SepAnd`, `Access`, `Predicate`, `ExprAssertion`, `MagicWand`,
   `Forall`, `Exists`
 - **Types**: `IntT`, `BoolT`, `StringT`, `PointerT`, `StructT`, `InterfaceT`,
@@ -70,7 +70,10 @@ eliminates aliasing bugs in the transform pipeline and matches the Scala impleme
 at the call site. `FunctionCall`, `MethodCall`, and `ClosureCall` are **statements** (not
 expressions) with a `targets: []LocalVar` field. The desugarer introduces one fresh `LocalVar`
 per return value and assigns them from the call statement. For the comma-ok idiom specifically
-(`v, ok := m[k]`; `v, ok := <-ch`), the internal AST uses a `Tuple(args []Expr)` expression
-with `TupleT(ts []Type)` — because these are expressions in a larger statement, not
-function calls. Pure functions (`PureFunctionCall`, `PureMethodCall`) return a single value
-(Go's `pure` functions are restricted to a single non-error return).
+(`v, ok := m[k]`; `v, ok := <-ch`), the desugarer produces a `Tuple(args []Expr)` expression
+transiently and immediately decomposes it into individual `Assign` statements targeting the LHS
+variables. `Tuple` is a **desugaring-only intermediate** — it does not appear in the final
+internal AST handed to the translator, and the translator has no encoding for it. If a
+`Tuple` node reaches the translator, it is a desugarer bug (panic, do not silently drop it).
+`TupleT` is similarly transient. Pure functions (`PureFunctionCall`, `PureMethodCall`) return
+a single value (Go's `pure` functions are restricted to a single non-error return).

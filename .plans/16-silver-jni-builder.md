@@ -173,9 +173,13 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   type BuiltProgram struct {
       JavaObject jobject
       NodeMap    map[uint64]*silver.Node  // stable integer ID → Go Silver node
+      globalRefs []jobject               // JNI global refs for GC safety; freed by Close()
   }
 
-  // Close releases all JNI global references held for the Java Silver objects.
+  // Close releases all JNI global references in globalRefs (the Java Silver objects
+  // promoted via jnigi.NewGlobalRef during Build). The nodeMap uint64 keys are NOT
+  // JNI references and do not need freeing.
+  //
   // Must be called after BOTH:
   //   1. Silicon has finished verifying (Verify() has returned), AND
   //   2. The reporter has completed all NodeMap lookups (Report() has returned).
@@ -198,13 +202,43 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   func (b *BuiltProgram) Close()
   ```
 
-  Every entry in `NodeMap` uses a `NewGlobalRef`-promoted pointer as the key (see Key
-  Implementation Notes). `Close()` calls `DeleteGlobalRef` on every entry. The `Builder`
-  type itself is stateless after `Build()` returns and does not need a `Close()` method.
+  The `globalRefs` field (add it to `BuiltProgram` alongside `JavaObject` and `NodeMap`)
+  tracks the JNI global references promoted via `jnigi.NewGlobalRef` for each constructed
+  Silver node. These Java Silver objects are NOT the nodeMap keys — the map key is the
+  `uint64` ID. `Close()` calls `jnigi.DeleteGlobalRef` on every entry in `globalRefs`, then
+  nils `NodeMap` and `globalRefs`. The `Builder` type itself is stateless after `Build()`
+  returns and does not need a `Close()` method.
+
+  Updated `BuiltProgram` struct:
+  ```go
+  type BuiltProgram struct {
+      JavaObject jobject
+      NodeMap    map[uint64]*silver.Node  // stable integer ID → Go Silver node
+      globalRefs []jobject               // JNI global refs promoted for GC safety; freed by Close()
+  }
+  ```
 - Tests: build a minimal Silver program (one method, one statement); confirm no exceptions;
   confirm the resulting object passes `silver.ast.Program.checkTransitively()`; confirm that
   `NodeMap` contains an entry for the method's body statement whose `NodeInfo` matches the
   Go source position used during construction
+
+## Dual NodeInfo Storage (Intentional)
+
+Every Silver node stores `NodeInfo` in two places:
+
+1. **Go-side `NodeInfo` field** on the Go Silver struct (e.g., `silver.Assert.Info NodeInfo`).
+   Used by `searchInfo` DFS in plan 32, which calls `Children()` on Go Silver structs to walk
+   downward from a synthetic node to find the nearest non-synthetic `NodeInfo`.
+
+2. **Java-side `AnnotationInfo` entries** embedded in the Viper `Info` chain of the
+   constructed Java Silver object. Used by the JNI worker (plan 17) to call
+   `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` and populate `VerificationError.Pos`
+   **without any cross-language roundtrip through the Go nodeMap** — the position is read
+   directly from the Java object's annotations after Silicon returns it.
+
+Both copies are required and must stay in sync. The Go-side copy enables the DFS fallback;
+the Java-side copy enables the primary (fast) position extraction path. Do not treat one as
+authoritative and omit the other.
 
 ## Version Coupling Note
 

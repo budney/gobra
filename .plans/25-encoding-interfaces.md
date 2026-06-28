@@ -116,16 +116,49 @@ broken for `Bool`.
 domain Type {
   unique function bool_Type(): Type
   unique function int_Type(): Type
+  unique function string_Type(): Type
+  unique function nilType(): Type      // type tag for nil interface values (iface(null, nilType()))
   function slice_Type(elem: Type): Type
-  function struct_Type_{S}(): Type  // per struct type
-  // ... one per type constructor
+  function pointer_Type(elem: Type): Type
+  function struct_Type_{S}(): Type     // one per concrete struct type (emitted lazily)
+  // ... one per type constructor used in the program
   function tag(t: Type): Int
-  unique function {TypeName}_tag(): Int  // per concrete type
+  unique function {TypeName}_tag(): Int  // one per concrete type (emitted lazily)
   function behavioral_subtype(sub: Type, sup: Type): Bool
   function comparableType(t: Type): Bool
-  // axioms: tag uniqueness, subtype reflexivity/transitivity, comparability
+
+  // Reflexivity of behavioral_subtype
+  axiom gobra__bs_refl {
+    forall t: Type :: {behavioral_subtype(t, t)} behavioral_subtype(t, t)
+  }
+  // Transitivity of behavioral_subtype
+  axiom gobra__bs_trans {
+    forall s: Type, t: Type, u: Type ::
+      {behavioral_subtype(s, t), behavioral_subtype(t, u)}
+      behavioral_subtype(s, t) && behavioral_subtype(t, u) ==> behavioral_subtype(s, u)
+  }
+  // tag uniqueness: distinct concrete types have distinct tags
+  // (enforced by Silver's `unique function` for each {TypeName}_tag())
+  // comparableType: primitive types and structs of comparable fields are comparable
+  axiom gobra__comparable_primitives {
+    comparableType(bool_Type()) && comparableType(int_Type()) && comparableType(string_Type())
+  }
+  // nilType is not comparable (nil interface values cannot be compared to non-nil in specs)
+  axiom gobra__nil_not_comparable {
+    !comparableType(nilType())
+  }
 }
 ```
+
+**Scalability note for self-hosting (plan 36/37):** The `Type` domain accumulates one
+`unique function struct_Type_{S}(): Type` per concrete struct type in the verified program.
+For Go-Gobra itself (which has many internal struct types), this domain may grow large and
+slow Z3 via unique-function interaction constraints. The Scala Gobra uses lazy population
+(only emitting type-tag functions for types that actually appear in interface-boxed positions).
+Go-Gobra should do the same: emit `struct_Type_{S}` only on demand when `S` is first seen
+as an interface-implementing type, not for every struct in the program. If Z3 timeouts appear
+during self-hosting, consult plan 37's `--z3Exe` timeout tuning as a mitigation and check
+whether eager type-domain population is the cause.
 
 **Type switch / type assertions (resolved):** The `Type` domain's `tag` function and unique
 tag constants serve as the type discriminant. `i.(T)` asserts `dynType(i) == T_tag()` and
