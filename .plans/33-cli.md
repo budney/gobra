@@ -57,6 +57,7 @@ status code.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type accumulated and forwarded by `pipeline.go`; `pipeline.go` imports `internal/diagnostic/` directly (do NOT use `internal/reporting` in `pipeline.go`)
 - [07-package-resolver.md](07-package-resolver.md) — package loading (produces `[]*PackageInfo` with assembled `*frontend.PPackage` per package)
 - [08-type-checker-core.md](08-type-checker-core.md) — `Check(pkg *frontend.PPackage, importer types.Importer) (*TypeInfo, []Diagnostic)`; invoked by pipeline for each package
 - [09-type-checker-specs.md](09-type-checker-specs.md) — `CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic`; invoked after plan 08 per package
@@ -119,3 +120,49 @@ This is **distinct** from `--workers N` (plan 17b):
 
 Both can be set simultaneously. Document in `--help` for both flags that combining them
 multiplies thread usage and the total should not exceed available CPU cores.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/pipeline/pipeline.go` and
+`internal/config/config.go` and verified before this plan is considered complete.
+
+1. **`Run` error postcondition**: a non-nil error is returned iff at least one pipeline stage
+   produced diagnostics or the infrastructure itself failed; a nil error guarantees all stages
+   completed without diagnostics:
+   ```go
+   //@ requires cfg != nil
+   //@ ensures  err != nil || len(diags) == 0
+   //@ decreases // terminates when the verification backend terminates
+   func Run(cfg *Config) (diags []diagnostic.Diagnostic, err error)
+   ```
+   Note: `Run` returns accumulated `[]Diagnostic` alongside `error` so the reporter can emit
+   partial results even on infrastructure failure. The exit-code mapping in `main.go` is:
+   `len(diags) > 0 || err != nil` → non-zero exit code.
+
+2. **`parseFlags` nil-safety**: flag parsing either succeeds with a non-nil `Config` or fails
+   with a non-nil error; never returns `(nil, nil)`:
+   ```go
+   //@ requires args != nil
+   //@ ensures  (cfg != nil) != (err != nil) // exactly one is non-nil
+   func parseFlags(args []string) (cfg *Config, err error)
+   ```
+
+3. **Short-circuit flag precedence** (`--parseOnly` > `--typeCheckOnly` > `--noVerify`):
+   The pipeline bails out at the first active short-circuit flag in that order.
+   ```go
+   //@ requires cfg != nil
+   //@ ensures  cfg.ParseOnly  ==> !cfg.TypeCheckOnly && !cfg.NoVerify  // most restrictive wins
+   //@ ensures  cfg.TypeCheckOnly ==> !cfg.NoVerify
+   func validateFlagPrecedence(cfg *Config)
+   ```
+
+4. **No-panic contract**: `Run` must not panic. Internal invariant violations in downstream
+   stages surface as non-nil `error` values. The only permitted panics are in downstream
+   functions that explicitly declare `panic` as their error-reporting contract (e.g., the
+   desugarer on unexpected node types — plan 12). `Run` itself catches no panics; callers
+   should not recover from panics produced by `Run`.
+   ```go
+   // Informally: Run is panic-free modulo downstream explicit-panic contracts.
+   // Formal Gobra termination annotation:
+   //@ decreases // delegated to each stage's own termination proof
+   ```

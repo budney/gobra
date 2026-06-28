@@ -29,8 +29,11 @@ overflow checks stubs), and produces the flat, uniform representation the transl
   - `break` / `continue` (labeled and unlabeled) → internal `Break` / `Continue` with optional
     label field; labeled statements → internal `Label` wrapping the body
   - `select` statement: count arms (channel cases + optional default), choose discriminant
-    type (see Resolved Questions below), desugar to a Silver `if`/`elsif` chain; delegate
-    channel send/receive encoding to plan 28
+    type (see Resolved Questions below), desugar to an internal `If` node chain (using the
+    `If`/`While` nodes defined in plan 11); delegate channel send/receive expression encoding
+    to plan 28 at translation time. The desugarer produces **internal AST**, not Silver — the
+    translator converts internal `If` nodes to Silver `if`/`elsif` via the standard
+    `If`-statement encoding. Do NOT produce Silver nodes here.
 
 **Out of scope:**
 - Overflow check insertion (13-internal-transforms.md)

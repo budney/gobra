@@ -107,15 +107,20 @@ Plan 04's `ParseFile` is a pure transformation function (no shared mutable state
 so its Gobra specifications focus on nil-safety, termination, and diagnostic completeness.
 
 1. **`ParseFile` nil-safety postcondition**: the returned `*PFile` is nil iff the function
-   encountered an unrecoverable Bad* node; in all other cases it is non-nil (possibly partial):
+   encountered an unrecoverable Bad* node; in all other cases it is non-nil (possibly partial).
+   `hasBadNode` is a ghost result that records whether `ast.Inspect` found a `BadStmt`,
+   `BadExpr`, or `BadDecl`. Declaring it as a ghost result (not a free variable) makes the
+   Gobra spec syntactically valid:
    ```go
    //@ ensures hasBadNode ==> pfile == nil
    //@ ensures !hasBadNode ==> pfile != nil
    func ParseFile(filename string, src []byte) (pfile *frontend.PFile,
-       annotations map[*frontend.PBlockStmt][]RawAnnotation, diags []Diagnostic)
+       annotations map[*frontend.PBlockStmt][]RawAnnotation, diags []Diagnostic,
+       /*@ ghost hasBadNode bool @*/)
    ```
-   The ghost variable `hasBadNode` is true iff `ast.Inspect` found a `BadStmt`, `BadExpr`,
-   or `BadDecl` during the walk.
+   The ghost result `hasBadNode` is set to `true` inside the `ast.Inspect` callback when a
+   Bad* node is encountered; otherwise it remains `false`. Callers may ignore it (Go ghost
+   results are invisible to non-Gobra callers).
 
 2. **Diagnostic completeness**: every `go/parser` error token is reflected in the returned
    `[]Diagnostic`; the slice is never nil (empty slice on success):

@@ -107,8 +107,12 @@ considers **all pairs**, not just adjacent ones. It uses a priority queue:
    - Remove both sub-programs; insert the merged result.
    - Enqueue new penalties for the merged result paired with every surviving sub-program.
 3. Repeat while: (a) the lowest-penalty pair has penalty ≤ 0 (free merge), **or** (b) the
-   current count exceeds `Bound`.
-4. Stop when: (a) no remaining pair has penalty ≤ 0, **and** (b) count ≤ `Bound`.
+   current count exceeds `Bound`. Also terminate immediately if the priority queue is empty
+   (all entries are stale — sub-programs have been consumed by earlier merges). A lazy priority
+   queue that does not eagerly remove stale entries must guard every pop with: "is the queue
+   empty? if so, stop."
+4. Stop when any of: (a) the queue is empty, **or** (b) no remaining valid pair has penalty ≤ 0
+   and count ≤ `Bound`.
 
 This is the algorithm in `Cut.mergePrograms` (Scala `Chopper.scala`): a lazy priority queue
 of all pairs, with stale entries discarded on pop. The order of sub-programs entering phase 3

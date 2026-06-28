@@ -111,6 +111,10 @@ Document this constraint in `--help` for both flags.
   create a `backend.SiliconInstance` for that worker; the `silicon` package is never imported
   by the `jvm` package. This is the authoritative `NewPool` constructor — it supersedes the
   skeleton from plan 15 (which delivered the `WorkerPool` struct and `Stop()` only).
+  **`runWorkerSkeleton` removal**: plan 15 delivers a `runWorkerSkeleton` stub. Plan 15b
+  delivers the full `runWorker` that supersedes it. When implementing plan 15b, **delete
+  `runWorkerSkeleton` from `jvm.go`** — only `runWorker` (defined in this plan) must remain.
+  Leaving both in the package produces dead code that misleads future readers.
 - Tests:
   - Start a pool with `poolSize=3`; submit 5 sequential jobs; confirm all return results.
   - Confirm `--z3APIMode --workers 3` logs exactly one warning and forces `--workers 1`.

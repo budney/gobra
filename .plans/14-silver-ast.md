@@ -101,12 +101,21 @@ equivalent of Scala Gobra's `Source.Verifier.Info`:
 
 ```go
 type NodeInfo struct {
-    File string // Go source file path
-    Line int    // 1-based line in Go source
-    Col  int    // 1-based column in Go source
-    Tag  string // identifies which Go construct produced this node (see below)
+    File   string // Go source file path
+    Line   int    // 1-based line in Go source
+    Col    int    // 1-based column in Go source
+    Tag    string // identifies which Go construct produced this node (see below)
+    NodeID uint64 // unique node ID assigned by plan 16's JNI builder; 0 for synthetic nodes
 }
 ```
+
+**`NodeID` assignment**: the JNI builder (plan 16) assigns a globally unique `uint64` ID to
+each Silver node at `Build()` time, stores it in the Java Silver node's `Info` chain as
+`gobra_node_id` (alongside `gobra_node_file`, `gobra_node_line`, etc.), and records the
+mapping `NodeID → silver.Node` in `BuiltProgram.NodeMap`. When Silicon reports an error on
+a node, the JNI worker calls `SilverBridge.getNodeId(offendingNode)` to extract the ID, then
+looks up `NodeMap[id]` to retrieve the Go Silver struct for `SearchInfo` DFS (plan 32).
+Synthetic nodes carry `NodeID = 0`; the worker skips the `NodeMap` lookup for ID 0.
 
 **Why `Tag`?** When Silicon reports an error on a Silver node, the error type alone (e.g.,
 "precondition might not hold") is not enough to generate the right Go-level message. A

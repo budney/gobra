@@ -190,21 +190,39 @@
 
 - **Next Autonomous Steps:** Execute the remediation queue starting with the high-severity items on files `15` and `11`.
 
+### CHECK-PLAN RESULTS (run on 14, 12, 20, 04, 33, 16b, 15b after Items 28–34 edits)
+
+| File | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 |
+|---|---|---|---|---|---|---|---|---|---|
+| 14-silver-ast.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | N/A | N/A | ✓ | ✓ |
+| 12-desugarer.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | ✓ | N/A | ✓ | ✓ |
+| 20-encoding-primitives.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | N/A | N/A | ✓ | **FAIL** (pre-existing) |
+| 04-go-parser.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | ✓ | N/A | ✓ | ✓ (fixed) |
+| 33-cli.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ (fixed) | N/A | N/A | ✓ | **FAIL** (pre-existing) |
+| 16b-silver-chopper.md | ✓ | ✓ | ✓ | ✓ (fixed) | ✓ | N/A | N/A | ✓ | ✓ |
+| 15b-worker-pool-expansion.md | ✓ | ✓ | ✓ (fixed) | ✓ (fixed) | ✓ | N/A | ✓ | ✓ | ✓ |
+
+**New regressions introduced by items 28–34 edits: NONE**
+
+**Pre-existing C9 failures surfaced by this check run:**
+- [x] **[C9-PREEXIST — 20]**: FIXED — Added "Verification Specifications (C9)" section with `EncodeType` totality contract, `EncodeExpr` non-nil result, `emitGoIntDiv`/`emitGoIntMod` well-formed body postconditions, emit-once idempotency ghost invariant, and `ensureStringsDomain` singleton contract.
+- [x] **[C9-PREEXIST — 33]**: FIXED — Added "Verification Specifications (C9)" section with `Run` error postcondition (nil error ↔ empty diagnostics), `parseFlags` nil-safety (`(cfg != nil) != (err != nil)`), `validateFlagPrecedence` short-circuit ordering contract, and no-panic contract with termination annotation.
+
 #### NEW BLOCKERS FROM FULL-AUDIT ROUND 2 (Items 28–34)
 
-28. **[C4 — 14 vs 15b/17: `NodeInfo.NodeID` MISSING FIELD]**: Plan 14 defines `NodeInfo{File, Line, Col, Tag}` — no `NodeID` field. Plans 15b and 17 both access `result.Errors[i].Pos.NodeID` (plan 15b worker snippet) and "looking up NodeMap[Pos.NodeID]" (plan 17). Field does not exist; code will not compile.
+28. ~~**[C4 — 14 vs 15b/17: `NodeInfo.NodeID` MISSING FIELD]**: Plan 14 defines `NodeInfo{File, Line, Col, Tag}` — no `NodeID` field. Plans 15b and 17 both access `result.Errors[i].Pos.NodeID` (plan 15b worker snippet) and "looking up NodeMap[Pos.NodeID]" (plan 17). Field does not exist; code will not compile.~~ DONE — Added `NodeID uint64` to `NodeInfo` in plan 14 with explanation of assignment by plan 16's JNI builder and `NodeMap` lookup; synthetic nodes carry `NodeID = 0`.
 
-29. **[C4 — 12: `select` desugaring targets wrong layer]**: Plan 12 says "desugar to a Silver `if`/`elsif` chain" for `select` — but the desugarer produces *internal AST*, not Silver. The internal AST (plan 11) has no `SelectStmt` node. The plan must say "desugar to internal `If`/`While` nodes" and plan 11 must define the internal representation.
+29. ~~**[C4 — 12: `select` desugaring targets wrong layer]**: Plan 12 says "desugar to a Silver `if`/`elsif` chain" for `select` — but the desugarer produces *internal AST*, not Silver. The internal AST (plan 11) has no `SelectStmt` node. The plan must say "desugar to internal `If`/`While` nodes" and plan 11 must define the internal representation.~~ DONE — Changed plan 12 Scope bullet to say "desugar to an internal `If` node chain (plan 11 `If`/`While` nodes)"; clarified that desugarer produces internal AST only, translator handles Silver conversion; `If` already exists in plan 11 — no new node needed.
 
-30. **[C4 — 20: `goIntDiv` postcondition unwritten — cut-over gate risk]**: Plan 20 says "copy postcondition verbatim from `IntegerEncoding.scala`" but never writes it into the plan. The Scala source is deleted at cut-over (plan 37). The postcondition must be written into plan 20 before cut-over or the implementation has no spec to reference.
+30. ~~**[C4 — 20: `goIntDiv` postcondition unwritten — cut-over gate risk]**: Plan 20 says "copy postcondition verbatim from `IntegerEncoding.scala`" but never writes it into the plan. The Scala source is deleted at cut-over (plan 37). The postcondition must be written into plan 20 before cut-over or the implementation has no spec to reference.~~ DONE — Read `IntegerEncoding.scala`; found `goIntDiv`/`goIntMod` have Silver function **bodies** (not postconditions; `posts = Seq.empty`). Updated plan 20 Bodyless Functions table to "Silver Functions Table" with verified body formulas: `goIntDiv` body = `(0 <= l ? l / r : -((-l) / r))`, `goIntMod` body = `(0 <= l || l % r == 0 ? l % r : l % r - (0 <= r ? r : -r))`.
 
-31. **[C9 — 04: `hasBadNode` is an undeclared free variable]**: Plan 04's C9 postcondition uses `hasBadNode` as a ghost variable but never declares it as a ghost parameter or ghost local. The Gobra spec is syntactically invalid and unverifiable.
+31. ~~**[C9 — 04: `hasBadNode` is an undeclared free variable]**: Plan 04's C9 postcondition uses `hasBadNode` as a ghost variable but never declares it as a ghost parameter or ghost local. The Gobra spec is syntactically invalid and unverifiable.~~ DONE — Declared `hasBadNode` as a ghost result parameter `/*@ ghost hasBadNode bool @*/` in the `ParseFile` signature; added note that the ghost result is set inside `ast.Inspect` callback and is invisible to non-Gobra callers.
 
-32. **[C5 — 33: missing dependency on 32a]**: Plan 33 (`pipeline.go`) produces and accumulates `[]Diagnostic` values but does not list plan 32a as a dependency. The `Diagnostic` type must be imported from `internal/diagnostic/` directly.
+32. ~~**[C5 — 33: missing dependency on 32a]**: Plan 33 (`pipeline.go`) produces and accumulates `[]Diagnostic` values but does not list plan 32a as a dependency. The `Diagnostic` type must be imported from `internal/diagnostic/` directly.~~ DONE — Added `[32a-diagnostics.md]` as first dependency in plan 33 with explicit note that `pipeline.go` imports `internal/diagnostic/` directly, not `internal/reporting`.
 
-33. **[C4 — 16b Phase 3: empty priority queue missing from stop condition]**: Phase 3 greedy merge says "pop the pair with the lowest penalty" but provides no guard for an empty queue. A lazy priority queue where all entries are stale (sub-programs consumed) would panic on pop. Stop condition must include: "stop also when the queue is empty."
+33. ~~**[C4 — 16b Phase 3: empty priority queue missing from stop condition]**: Phase 3 greedy merge says "pop the pair with the lowest penalty" but provides no guard for an empty queue. A lazy priority queue where all entries are stale (sub-programs consumed) would panic on pop. Stop condition must include: "stop also when the queue is empty."~~ DONE — Added empty-queue guard to step 3 loop condition and step 4 stop condition in plan 16b Phase 3; added explicit note that lazy priority queues must check for empty before every pop.
 
-34. **[C4 — 15 vs 15b: `runWorkerSkeleton` becomes dead code after plan 15b]**: Plan 15 delivers `runWorkerSkeleton` in `jvm.go`; plan 15b delivers a full `runWorker` that supersedes it. `runWorkerSkeleton` is never called after plan 15b. Plan 15b must explicitly state it removes `runWorkerSkeleton` from `jvm.go`, or the package will contain dead code that misleads readers.
+34. ~~**[C4 — 15 vs 15b: `runWorkerSkeleton` becomes dead code after plan 15b]**: Plan 15 delivers `runWorkerSkeleton` in `jvm.go`; plan 15b delivers a full `runWorker` that supersedes it. `runWorkerSkeleton` is never called after plan 15b. Plan 15b must explicitly state it removes `runWorkerSkeleton` from `jvm.go`, or the package will contain dead code that misleads readers.~~ DONE — Added explicit `runWorkerSkeleton` removal instruction to plan 15b Deliverables section.
 
 #### NEW BLOCKERS FROM FULL-AUDIT (Items 21–27)
 21. ~~**Fix `33-cli.md` (C4 — CHOP-BOUND-CONTRADICTION)**: Remove `n := cfg.Workers; cfg.ChopBound = &n` default; plan 16b is authoritative — `--chop` without `--chop-bound` → `cfg.ChopBound = nil` (unlimited).~~ DONE — Changed plan 33 to state ChopBound remains nil when --chop is set without --chop-bound.

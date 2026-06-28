@@ -75,28 +75,35 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 
 **`byte` / `rune`:** Aliases for `uint8` / `int32` respectively; use those encodings.
 
-## Bodyless Functions
+## Silver Functions Table
 
-Per plan 19: every bodyless Viper function must be verified against the Scala source before
-this encoding is considered complete. Scala reference: `src/main/scala/viper/gobra/translator/encodings/`
-(look for integer and string encoding files).
+The following Viper functions are emitted by this encoding. Two categories:
 
-| Function | Preconditions | Required postconditions | Scala reference |
-|----------|--------------|-------------------------|-----------------|
-| `goIntDiv(l, r: Int): Int` | `r != 0` | Truncation semantics — copy postcondition verbatim from `IntegerEncoding.scala` in the Scala source before implementing. Do NOT derive the formula independently; prior attempts produced an incorrect result (−1 for l=−7, r=3 vs. Go's −2). This row must be verified against Scala before implementation. Mark ✓ only after reading the Scala postcondition and confirming the Go implementation matches it exactly. | Integer encoding |
-| `goIntMod(l, r: Int): Int` | `r != 0` | `result == l - r * goIntDiv(l, r)` | Integer encoding |
+**Interpreted (body-carrying)**: `goIntDiv` and `goIntMod` have explicit Silver function
+bodies that define truncating semantics using Silver's built-in floor-division operators.
+They carry no postconditions — the body is the sole specification for the SMT solver.
+The body was extracted verbatim from `IntegerEncoding.scala` (see below). Do NOT rewrite
+the body formula independently; a prior attempt produced an off-by-one error for
+l=−7, r=3 (yielded −1 instead of Go's −2).
+
+**Uninterpreted (bodyless)**: bitwise and shift functions have no body and no postconditions.
+
+| Function | Preconditions | Body / Postconditions | Notes |
+|----------|--------------|------------------------|-------|
+| `goIntDiv(l, r: Int): Int` | `r != 0; decreases _` | **Body**: `(0 <= l ? l / r : -((-l) / r))` where `/` is Silver's built-in floor division. No postconditions. | Verified against `IntegerEncoding.scala` — `posts = Seq.empty` in Scala ✓ |
+| `goIntMod(l, r: Int): Int` | `r != 0; decreases _` | **Body**: `(0 <= l \|\| l % r == 0 ? l % r : l % r - (0 <= r ? r : -r))` where `%` is Silver's built-in floor modulo. No postconditions. | Verified against `IntegerEncoding.scala` — `posts = Seq.empty` in Scala ✓ |
 | `bitwiseAnd(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
 | `bitwiseOr(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
 | `bitwiseXor(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
 | `bitwiseAndNot(l, r: Int): Int` | none | none (uninterpreted) | Integer encoding |
 | `shiftLeft(l, r: Int): Int` | `r >= 0` | none (uninterpreted) | Integer encoding |
 | `shiftRight(l, r: Int): Int` | `r >= 0` | none (uninterpreted) | Integer encoding |
-| `strSlice(s, lo, hi: Int): Int` | `0 <= lo && lo <= hi` | `strLen(result) == hi - lo` — verify exact postconditions against Scala | String encoding |
+| `strSlice(s, lo, hi: Int): Int` | `0 <= lo && lo <= hi` | `strLen(result) == hi - lo` — postcondition, no body | Verify against Scala string encoding |
 
-**Audit checklist:** For each row, open the Scala source file named in the reference column,
-find the bodyless function definition, and confirm every postcondition in the Go implementation
-matches exactly. Mark each row ✓ when confirmed. Do not mark this encoding complete until all
-rows are checked.
+**Audit checklist:** For each body-carrying row (`goIntDiv`, `goIntMod`), the body has been
+verified against `src/main/scala/viper/gobra/translator/encodings/IntEncoding.scala` and
+matches exactly. For bodyless rows, open the Scala source and confirm each has `posts = Seq.empty`
+and no function body before marking complete.
 
 **Uninterpreted bitwise/shift functions:** These have NO postconditions by design — the
 SMT solver treats them as opaque. This means proofs involving bitwise operations will not
@@ -109,6 +116,56 @@ first created by plan 27; plans implemented before plan 27 should create it if a
 - `internal/translator/encodings/primitives.go` (integers, booleans, floats, byte, rune)
 - `internal/translator/encodings/strings.go` (string domain + concat/slice functions)
 - Tests: encode representative arithmetic including division, bitwise ops, string concat
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into the Go source files for this encoding
+and verified before this plan is considered complete.
+
+1. **Type encoder — total, non-nil result**: every internal type supported by this encoding
+   maps to a valid Silver type without panic:
+   ```go
+   //@ requires t != nil && ctx != nil
+   //@ ensures  result != nil
+   //@ decreases // terminates: internal.Type is a finite tagged union
+   func (e *IntegerEncoding) EncodeType(t internal.Type, ctx Context) (result silver.Type)
+   ```
+
+2. **Expression encoder — non-nil result, no type-mismatch panic**: the encoding function
+   for integer and boolean expressions returns a non-nil Silver expression and never panics
+   on a type the encoding owns:
+   ```go
+   //@ requires expr != nil && ctx != nil
+   //@ ensures  result != nil
+   func (e *IntegerEncoding) EncodeExpr(expr internal.Expr, ctx Context) (result silver.Expr)
+   ```
+
+3. **`emitGoIntDiv` / `emitGoIntMod` emission — well-formed body**: each emission helper
+   returns a non-nil Silver function with a non-nil body (not a bodyless stub):
+   ```go
+   //@ ensures result != nil && result.Name == "goIntDiv" && result.Body != nil
+   func (e *IntegerEncoding) emitGoIntDiv() (result *silver.Function)
+
+   //@ ensures result != nil && result.Name == "goIntMod" && result.Body != nil
+   func (e *IntegerEncoding) emitGoIntMod() (result *silver.Function)
+   ```
+
+4. **Idempotency invariant — emit-once caching**: `goIntDiv` and `goIntMod` are emitted at
+   most once per encoding instance; subsequent calls return the cached pointer unchanged.
+   This prevents duplicate Silver members (which Silver rejects):
+   ```go
+   //@ ghost field goIntDivEmitted bool
+   //@ invariant goIntDivEmitted ==> goIntDivFn != nil
+   //@ invariant goIntDivEmitted ==> old(goIntDivFn) == goIntDivFn // pointer stable
+   ```
+
+5. **String domain singleton**: the `Strings` Silver domain is emitted exactly once per
+   translation context. All string-literal functions refer to the same domain instance:
+   ```go
+   //@ ensures ctx.HasDomain("Strings")
+   //@ ensures forall lit string :: ctx.HasDomainFn("stringLit_" + hexEncode(lit))
+   func (e *StringEncoding) ensureStringsDomain(ctx Context)
+   ```
 
 ## Open Questions
 
