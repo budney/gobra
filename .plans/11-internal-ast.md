@@ -39,10 +39,15 @@ constructs are unified.
 - **Members**: `Method`, `Function`, `FPredicate`, `MPredicate`, `Field`, `GlobalVar`
 - **Statements**: `Seqn`, `Assign`, `Return`, `If`, `While`, `Assert`, `Assume`,
   `Exhale`, `Inhale`, `Fold`, `Unfold`, `PackageWand`, `ApplyWand`, `New`,
-  `Make`, `GoCall`, `Defer`, `FunctionCall`, `MethodCall`, `ClosureCall`
+  `Make`, `GoCall`, `Defer`, `FunctionCall`, `MethodCall`, `ClosureCall`,
+  `Break`, `Continue`, `Label`
   - Note: `FunctionCall`, `MethodCall`, and `ClosureCall` carry a `targets: []LocalVar` slice
     for the multiple assignment targets at call sites. This is how multiple return values are
     decomposed: the call is a statement with N targets, not an expression.
+  - `Break` and `Continue` carry an optional `Label string` field (the target label, or empty
+    for unlabeled break/continue). `Label` wraps a `Body` statement with a `Name string`;
+    labeled `break`/`continue` in desugared form jump to the labeled statement. The Scala
+    implementation uses `LabelProxy`; Go-Gobra uses `Label` for the same role.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
   `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
   `Tuple` (transient desugaring-only construct — see below; not stable in the final AST)

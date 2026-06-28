@@ -99,11 +99,20 @@ and the default. Both branches must verify independently.
 
 **`select` without `default` (N blocking cases)**: a `select` with N purely blocking channel
 cases (no default) must be encoded with an integer discriminant `d: Int` non-deterministically
-chosen in `[0, N-1]`, with N arms in a Silver `if`/`elsif` chain — one per channel case. A
-boolean discriminant suffices only for N=2; for N≥3 a boolean would merge cases and silently
-drop coverage of some arms. The desugarer (plan 12) must count `select` arms before choosing
-the discriminant type: if N=2 (with default), use a boolean; if N≥2 (without default), use
-an integer in `[0, N-1]`.
+chosen in `[0, N-1]`, with N arms in a Silver `if`/`elsif` chain — one per channel case.
+
+**`select` discriminant type rule (canonical definition — also specified in plan 12):** Let C
+= the number of channel-operation arms and D = 1 if a `default` arm is present, 0 otherwise.
+
+- **C=1, D=1** (exactly one channel op + one default): use a `bool` discriminant.
+- **C≥2 or (C≥1, D=0)**: use an `Int` discriminant in `[0, C+D-1]`. Arms 0..C-1 correspond
+  to channel operations; arm C (if D=1) corresponds to the default.
+- **C=0, D=1** (only default, no channel ops): degenerate case — reduce to the default body
+  directly; no discriminant needed.
+- **C=0, D=0**: compile error; rejected by the type checker before desugaring.
+
+A boolean discriminant is NOT sufficient when C≥2 even if a default is present, because
+C+D≥3 total arms cannot be encoded with 1 bit.
 
 **Interaction with `Poly[chan T]` boxing (plan 25):** When a channel value is stored in an
 `interface{}`, the exclusive `chan T` encoding (`vpr.Int`) is boxed via `Poly[Int]` (since

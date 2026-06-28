@@ -75,13 +75,21 @@ plus blank Go stubs). The annotation parser must therefore handle not only inlin
 but also **top-level ghost declarations** when they appear in file-scope `//@ ` comment blocks:
 
 - `//@ adt T { C1{...}; C2{...} }` → `PAdtType` declaration node
-- `//@ ghost func f(x T) T { body }` → `PFunctionDecl` with ghost marker
-- `//@ pred P(x *int) { body }` → predicate declaration node
+- `//@ ghost func f(x T) T { body }` → `PGhostFunc` declaration node
+- `//@ pred P(x *int) { body }` → `PPredDecl` declaration node
 
 These file-scope annotations are recognized by their position (comment group immediately before
 or not associated with any Go declaration) and by their leading keyword. The parser should
 dispatch on the first token of each `//@ ` block at file scope to determine whether it is an
 inline spec clause or a top-level ghost declaration.
+
+**`PDecl` requirement for file-scope ghost declarations:** The three node types produced above
+(`PAdtType`, `PGhostFunc`, and `PPredDecl`) are **file-scope declaration nodes** — they will be
+stored in `PFile.GhostDecls []PDecl` (plan 03). All three must therefore implement both `PNode`
+and `PDecl` (the marker interface defined in plan 03). The annotation parser is responsible for
+producing values whose dynamic type satisfies `PDecl` for these three cases. Inline spec nodes
+(`PFunctionSpec`, `PAssertion`, `PGhostStatement`, etc.) are NOT stored in `GhostDecls` and
+need only implement `PNode`.
 
 ## Inline Annotation Positional Patterns (Complete List)
 

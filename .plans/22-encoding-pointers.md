@@ -53,8 +53,18 @@ value it points to — it is a pure mathematical value, not a heap location.
   - `*bool`: `dflt(Bool)` = false
   - `*S` (struct): `dflt(Tuple[...])` = default tuple (via `TupleDomain`)
   - `*[]int`: `dflt(Slice[Int])` = `nilSlice_{Int}()`
-  - `*Ref`-typed T: `null`
-  
+  - `*I` where `I` is a Go interface: `T°` is `InterfaceDomain`; `dflt(InterfaceDomain)` is
+    the nil interface encoding `iface(null, nilType())` (see plan 25).
+  - `*P` where `P` is itself a pointer type: apply the rule recursively — `dflt((P)°)`.
+
+  **Note on `null`:** Silver's `null` literal is the default `Ref` value and equals `dflt(Ref)`
+  by Silver's built-in semantics. When `T°` happens to be `Ref` (i.e., `T` encodes exclusively
+  as `Ref`), then `dflt(T°) = dflt(Ref) = null`. This is correct — no additional axiom is
+  needed because Silver defines `null` as the zero `Ref`. The bullet "`*Ref`-typed T → null"
+  previously in this list was a shorthand for this case; it has been removed to avoid confusion
+  with the shared encoding (where `T@` is always `Ref`, but that is irrelevant to the exclusive
+  nil). Always derive the exclusive nil as `dflt(T°)` for the specific Silver type that `T°` is.
+
   **Do not use `dflt(T@)`** (the default of the shared encoding). For primitive types, `T@` is
   `Ref` and `dflt(Ref) = null`, which has Silver type `Ref` — but exclusive `*int` has Silver
   type `Int`, producing a type error. Always use `dflt(T°)` for exclusive nil pointers.

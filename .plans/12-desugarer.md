@@ -26,6 +26,11 @@ overflow checks stubs), and produces the flat, uniform representation the transl
   - Variadic call argument desugaring (see Resolved Questions below)
   - Spec desugaring: `preserves P` → `requires P` + `ensures P`
   - Ghost statement desugaring
+  - `break` / `continue` (labeled and unlabeled) → internal `Break` / `Continue` with optional
+    label field; labeled statements → internal `Label` wrapping the body
+  - `select` statement: count arms (channel cases + optional default), choose discriminant
+    type (see Resolved Questions below), desugar to a Silver `if`/`elsif` chain; delegate
+    channel send/receive encoding to plan 28
 
 **Out of scope:**
 - Overflow check insertion (13-internal-transforms.md)
@@ -89,6 +94,19 @@ Detect the variadic case by checking whether the last parameter type is `Variadi
    count - 1. Append `in.NilLit(SliceT(elem, nil))` as the variadic argument.
 
 Any other shape is an internal bug (type checker should have caught it) — panic.
+
+**`select` discriminant type (resolved):** The desugarer counts arms before choosing the
+discriminant type. Let C = the number of channel-operation arms (not counting any `default` arm),
+and D = 1 if a `default` arm is present, 0 otherwise.
+
+- **C=1, D=1** (one channel op + default): use a `bool` discriminant — `true` → channel op,
+  `false` → default.
+- **C≥2 or (C≥1 and D=0)**: use an `Int` discriminant chosen non-deterministically in `[0, C+D-1]`,
+  where arms 0..C-1 correspond to channel operations and arm C (if D=1) corresponds to default.
+
+A `select` with C=0 (no channel arms) and D=1 (only a default) reduces to the default body;
+the discriminant is unnecessary. A `select` with C=0 and D=0 is a compile error; the type
+checker rejects it.
 
 **Division by zero (resolved):** The desugarer does NOT insert a call-site assertion for
 `r != 0` before integer division or modulo. The generated `goIntDiv`/`goIntMod` Viper functions

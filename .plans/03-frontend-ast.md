@@ -57,6 +57,24 @@ type checker.
 - `internal/ast/frontend/` package with all node type definitions
 - `Visitor` interface and default no-op implementation
 - Position wrapper that maps nodes to source file + line + column
+- `PDecl` interface (a sub-interface of `PNode`) implemented by all declaration node types:
+  `PMethodDecl`, `PFunctionDecl`, `PVarDecl`, `PConstDecl`, `PTypeDecl`, plus ghost-only
+  declaration nodes (`PAdtType`, ghost function/predicate declarations produced by plan 05).
+  Definition:
+  ```go
+  // PDecl is implemented by all declaration-level nodes (Go and ghost).
+  // It narrows PNode to the declaration category, allowing GhostDecls to be typed as []PDecl
+  // while remaining assignable from the []PNode returned by ParseAnnotation for file-scope nodes.
+  type PDecl interface {
+      PNode
+      pDecl() // unexported marker method
+  }
+  ```
+  All concrete declaration types in `internal/ast/frontend/` must implement `pDecl()`.
+  Ghost declaration types produced by plan 05 (`PAdtType`, `PGhostFunc`, `PPredDecl`, etc.)
+  must also implement `PDecl`. Plan 07's `MergeGhostStatements` type-asserts file-scope
+  `PNode` values to `PDecl` before appending to `GhostDecls`; nodes that do not implement
+  `PDecl` are a desugaring error (panic).
 - `PFile` exposes the embedded `*ast.File` (e.g., a public `GoFile *ast.File` field) so that
   the type checker (plan 08) can pass it directly to `go/types.Check` without unwrapping, plus
   a `GhostDecls []PDecl` slice for file-scope ghost declarations (ADTs, ghost funcs, predicates)

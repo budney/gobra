@@ -26,8 +26,11 @@ the full stdlib source to be verified.
 - [07-package-resolver.md](07-package-resolver.md) — the `//go:embed`-based stub-resolution
   framework (custom importer, embedded `stubs/` directory, virtual package loading) must exist
   before plan 31's stub files are loadable at runtime. Plan 07 provides this mechanism;
-  plan 31 provides the stub file contents. Plan 31 is blocked until plan 07 and plan 10's
-  custom importer (which plan 07 depends on) are complete.
+  plan 31 provides the stub file contents.
+- [10-type-checker-multipackage.md](10-type-checker-multipackage.md) — the custom
+  `types.Importer` (owned by plan 10, exported from `internal/info/importer.go`) performs
+  stub-directory-first resolution and must be complete before stub packages can be loaded
+  through plan 07's resolver. Plan 31 is blocked until both plan 07 and plan 10 are complete.
 - [27-encoding-methods.md](27-encoding-methods.md) — stubs define function contracts; the
   method encoding must be complete before stubs can be loaded and used
 

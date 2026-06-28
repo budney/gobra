@@ -221,6 +221,11 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   confirm the resulting object passes `silver.ast.Program.checkTransitively()`; confirm that
   `NodeMap` contains an entry for the method's body statement whose `NodeInfo` matches the
   Go source position used during construction
+- **Dual-NodeInfo sync test**: for the same minimal Silver program, assert that the position
+  extracted via `SilverBridge.getNodeFile/Line/Col/Tag(javaObject)` (the Java-side copy)
+  matches the Go-side `NodeInfo` field on the corresponding `*silver.Node` in `NodeMap`. This
+  test guards the invariant that both copies are written from the same source data during
+  `Build()` and will catch any future refactor that updates one copy but not the other.
 
 ## Dual NodeInfo Storage (Intentional)
 

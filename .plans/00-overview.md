@@ -33,7 +33,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [04-go-parser.md](04-go-parser.md) | Go Parser Integration | 03, 06 |
 | [05-annotation-parser.md](05-annotation-parser.md) | Annotation Mini-Parser | 02, 03 |
 | [06-gobrafier.md](06-gobrafier.md) | Go File Preprocessor (Gobrafier) | 01 |
-| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 03, 04, 05, 06 |
+| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 03, 04, 05, 06 (see note†) |
 
 ### Group 2: Type Checker
 | File | Title | Blocked by |
@@ -75,7 +75,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [28-encoding-channels.md](28-encoding-channels.md) | Encoding: Channels | 19, 26 |
 | [29-encoding-adts.md](29-encoding-adts.md) | Encoding: Ghost ADTs | 19 |
 | [30-encoding-generics.md](30-encoding-generics.md) | Encoding: Generics | 19, 21, 25 |
-| [31-encoding-builtins.md](31-encoding-builtins.md) | Encoding: Built-in Stubs | 07, 27 |
+| [31-encoding-builtins.md](31-encoding-builtins.md) | Encoding: Built-in Stubs | 07, 10, 27 |
 
 ### Group 6: Error Reporting
 | File | Title | Blocked by |
@@ -167,3 +167,11 @@ and independent of each other:
 Note: 04 (Go Parser Integration) is blocked by **both** 03 and 06; it cannot start until
 both the Frontend AST and the Gobrafier are complete. The Gobrafier is a text preprocessor
 that runs before the parser — it is a prerequisite for 04, not a downstream dependent of it.
+
+†**Plan 07 / Plan 10 runtime coupling note:** The WBS lists plan 07 as blocked only by 03,
+04, 05, 06 — which is correct for **implementation**. However, plan 07's multi-package path
+requires plan 10's custom `types.Importer` at **runtime**. Plan 07 can be implemented and
+single-package tested without plan 10, but end-to-end multi-package resolution cannot be
+exercised until plan 10 is complete. This is intentional: plan 10 is blocked by plan 07 (a
+true build-ordering constraint), so plan 10 cannot be listed as a plan-07 dependency without
+creating a cycle. The coupling is documented in plan 07's "Stub package resolution" note.

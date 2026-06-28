@@ -50,12 +50,20 @@ verified as a whole.
 - `ExternalTypeInfo` interface and implementation
 - `Serialize() ([]byte, error)` and `DeserializeExternalTypeInfo` / `ErrStaleCacheEntry`
   as **stubs only** in this plan (see note below)
-- Custom `types.Importer` bridging the package resolver to `go/types.Check`
+- Custom `types.Importer` bridging the package resolver to `go/types.Check`; exported from
+  `internal/info/importer.go`. The importer must:
+  - Perform stub-directory-first resolution (check embedded `stubs/<importPath>/` before
+    falling through to real stdlib packages).
+  - Return an error for `"unsafe"` import requests. Error message:
+    `"import of package \"unsafe\" is not supported by Gobra"`.
+    (Plan 07 also scans the import graph for `"unsafe"` at the resolver level; this importer
+    rejection is the second line of defense for imports that reach type-checking.)
 - Integration with 08's symbol table to expose imported symbols (both Go and ghost)
 - Commented-out `// TODO: cache` insertion point in the type-checker after each package
   completes (see Resolved Questions)
 - Tests:
   - Multi-package regression tests from `src/test/resources/regressions/`
+  - Confirm that importing `"unsafe"` returns the expected error (not a panic)
 
 **Serialization stub note:** The `Serialize()` and `DeserializeExternalTypeInfo` functions
 are delivered as stubs in this plan:

@@ -96,7 +96,7 @@ and `src/main/scala/viper/gobra/translator/encodings/arrays/`.
 | Function | Preconditions | Required postconditions | Scala reference |
 |----------|--------------|-------------------------|-----------------|
 | `sconstruct_{T}(a: Array[T], offset, len, cap: Int): Slice[T]` | `0 <= offset`, `0 <= len`, `len <= cap` | `sarray(result) == a`, `soffset(result) == offset`, `slen(result) == len`, `scap(result) == cap` | `SliceEncoding.scala` |
-| `nilSlice_{T}(): Slice[T]` | none | `slen(result) == 0`, `scap(result) == 0` | `SliceEncoding.scala` |
+| `nilSlice_{T}(): Slice[T]` | none | `slen(result) == 0`, `scap(result) == 0`, `sarray(result) == nilArray_{T}()` (or equivalent nil-array sentinel — verify exact form against Scala) | `SliceEncoding.scala` |
 | `ssliceFromSlice_{T}(s: Slice[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= slen(s)` | `slen(result) == hi - lo`, `scap(result) == scap(s) - lo` — verify exact form against Scala | `SliceEncoding.scala` |
 | `sfullSliceFromSlice_{T}(s: Slice[T], lo, hi, max: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= max`, `max <= scap(s)` | `slen(result) == hi - lo`, `scap(result) == max - lo` — verify exact form | `SliceEncoding.scala` |
 | `ssliceFromArray_{T}(a: Array[T], lo, hi: Int): Slice[T]` | `0 <= lo`, `lo <= hi`, `hi <= alen(a)` | `slen(result) == hi - lo`, `sarray(result) == a`, `soffset(result) == lo` — verify | `SliceEncoding.scala` |
