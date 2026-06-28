@@ -8,9 +8,12 @@ Edit this file to add, remove, or tighten criteria as the project evolves.
 ## C1 — Registry completeness
 
 Every entry in the `00-overview.md` WBS table exists as a file in `.plans/`.
-Every `.plans/*.md` file (other than this file, `DECISIONS.md`, and `CONTEXT.md`) is listed
-in the WBS. Reference documents (`DECISIONS.md`, `CONTEXT.md`) must be listed in the
-"Reference Documents" table in `00-overview.md` instead.
+Every `.plans/*.md` file is either (a) listed in the WBS, or (b) listed in the "Reference
+Documents" table in `00-overview.md`, or (c) is `CRITERIA.md` itself (this file), or (d)
+is `00-overview.md` (the master index — it cannot list itself).
+Reference documents have no Objective/Scope/Deliverables sections; they belong in the
+"Reference Documents" table, not the WBS. Current reference documents:
+`DECISIONS.md`, `CONTEXT.md`, `COVERAGE.md`.
 No orphan docs. No phantom plans.
 
 ## C2 — Required sections

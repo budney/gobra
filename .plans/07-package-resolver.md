@@ -23,7 +23,9 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 ## Dependencies
 
+- [03-frontend-ast.md](03-frontend-ast.md) — `PPackage`, `PFile`, `PProgram` types assembled by this plan
 - [04-go-parser.md](04-go-parser.md) — parse each package's files
+- [05-annotation-parser.md](05-annotation-parser.md) — `ParseAnnotation` called in step 3 of the per-file coordination sequence
 - [06-gobrafier.md](06-gobrafier.md) — preprocess `.go` files before parsing
 
 ## Reference: Current Gobra
@@ -79,7 +81,11 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - Built-in stubs (Go stdlib ghost specs) ship as embedded resources in the Go binary using
   `//go:embed`; they are parsed the same way as user packages.
 - The resolver produces a `PackageInfo` list in topological order: each entry is
-  `{ImportPath string, Files []*frontend.PFile, Deps []string}`.
+  `{ImportPath string, Package *frontend.PPackage, Files []*frontend.PFile, Deps []string}`.
+  `Package` is assembled from `Files` after the 4-step per-file sequence completes for all
+  files in the package; it is the `*frontend.PPackage` value that plan 08 (`Check`) and plan
+  12 (`Desugar`) consume. `Files` is retained in `PackageInfo` for diagnostic tools and
+  selective re-parsing; `Package` is the authoritative assembled form.
 
 ## Deliverables
 
@@ -94,7 +100,19 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   ```
   `ResolverConfig` includes: stub directory (embedded), Go module root, any `--include`/
   `--exclude` patterns, and a reference to the type-checked package cache for plan 10.
-- `PackageInfo` type: `{ImportPath string, Files []*frontend.PFile, Deps []string}`
+- `PackageInfo` type:
+  ```go
+  type PackageInfo struct {
+      ImportPath string
+      Package    *frontend.PPackage  // assembled from Files; nil if parsing failed
+      Files      []*frontend.PFile   // individual file ASTs (used by diagnostic tools)
+      Deps       []string            // import paths of direct dependencies
+  }
+  ```
+  `Resolve` assembles `Package` from the parsed `Files` after completing the 4-step per-file
+  sequence. The `PPackage` contains the merged file list in declaration order. Plan 08's
+  `Check(pkg *frontend.PPackage, ...)` and plan 12's `Desugar(pkg *frontend.PPackage, ...)`
+  both receive `info.Package` from the caller (plan 33 `pipeline.go`).
 - `ResolverConfig` type (see above)
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
 - Coordination note: for each file, `Resolve` runs a **4-step sequence**:

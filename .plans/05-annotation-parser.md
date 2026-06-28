@@ -61,8 +61,8 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 
 ## Deliverables
 
-- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) ([]SpecNode, []Diagnostic)`
-  - Returns all parse diagnostics (zero or more); a non-empty `[]Diagnostic` does not prevent returning any successfully-parsed nodes. Callers decide whether to abort on errors.
+- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) ([]PNode, []Diagnostic)`
+  - Returns the parsed spec/ghost AST nodes as `[]PNode` (the unified node interface defined in plan 03; concrete types are `PFunctionSpec`, `PAssertion`, `PGhostStatement`, `PAdtType`, etc., all of which implement `PNode`). Returns all parse diagnostics (zero or more); a non-empty `[]Diagnostic` does not prevent returning any successfully-parsed nodes. Callers decide whether to abort on errors.
 - Full grammar coverage of the Gobra annotation language
 - Position-accurate error messages (column relative to comment start)
 - Table-driven tests covering each annotation form, including error cases

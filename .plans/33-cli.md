@@ -52,8 +52,12 @@ status code.
 
 ## Dependencies
 
-- [07-package-resolver.md](07-package-resolver.md) — package loading
-- [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline
+- [07-package-resolver.md](07-package-resolver.md) — package loading (produces `[]*PackageInfo` with assembled `*frontend.PPackage` per package)
+- [08-type-checker-core.md](08-type-checker-core.md) — `Check(pkg *frontend.PPackage, importer types.Importer) (*TypeInfo, []Diagnostic)`; invoked by pipeline for each package
+- [09-type-checker-specs.md](09-type-checker-specs.md) — `CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic`; invoked after plan 08 per package
+- [10-type-checker-multipackage.md](10-type-checker-multipackage.md) — custom `types.Importer` and `ExternalTypeInfo`; wired into plan 08's `Check` call
+- [12-desugarer.md](12-desugarer.md) — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, []Diagnostic)`; invoked after type checking
+- [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline (`Apply`)
 - [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and WorkerPool
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver JNI builder (Build + nodeMap)
 - [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend

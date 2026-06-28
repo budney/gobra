@@ -33,7 +33,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [04-go-parser.md](04-go-parser.md) | Go Parser Integration | 03, 06 |
 | [05-annotation-parser.md](05-annotation-parser.md) | Annotation Mini-Parser | 02, 03 |
 | [06-gobrafier.md](06-gobrafier.md) | Go File Preprocessor (Gobrafier) | 01 |
-| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 04, 05, 06 |
+| [07-package-resolver.md](07-package-resolver.md) | Package Resolver | 03, 04, 05, 06 |
 
 ### Group 2: Type Checker
 | File | Title | Blocked by |
@@ -56,9 +56,9 @@ self-hosting: Go-Gobra verifies its own source code.
 | [15-jni-setup.md](15-jni-setup.md) | JNI Setup & JVM Lifecycle | 01 |
 | [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver JNI Builder | 14, 15 |
 | [16b-silver-chopper.md](16b-silver-chopper.md) | Silver Program Chopper | 14 |
-| [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 16 |
-| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16b, 17 |
-| [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16 |
+| [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 15, 16 |
+| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15, 16, 16b, 17 |
+| [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16, 17 |
 
 ### Group 5: Translator
 | File | Title | Blocked by |
@@ -66,7 +66,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [19-translator-core.md](19-translator-core.md) | Translator Core & Context | 11, 14 |
 | [20-encoding-primitives.md](20-encoding-primitives.md) | Encoding: Primitive Types | 19 |
 | [21-encoding-structs.md](21-encoding-structs.md) | Encoding: Structs & Fields | 19 |
-| [22-encoding-pointers.md](22-encoding-pointers.md) | Encoding: Pointers | 19 |
+| [22-encoding-pointers.md](22-encoding-pointers.md) | Encoding: Pointers | 19, 21 |
 | [23-encoding-slices.md](23-encoding-slices.md) | Encoding: Slices & Arrays | 19 |
 | [24-encoding-maps.md](24-encoding-maps.md) | Encoding: Maps | 19, 25 |
 | [25-encoding-interfaces.md](25-encoding-interfaces.md) | Encoding: Interfaces | 19, 21 |
@@ -75,17 +75,17 @@ self-hosting: Go-Gobra verifies its own source code.
 | [28-encoding-channels.md](28-encoding-channels.md) | Encoding: Channels | 19, 26 |
 | [29-encoding-adts.md](29-encoding-adts.md) | Encoding: Ghost ADTs | 19 |
 | [30-encoding-generics.md](30-encoding-generics.md) | Encoding: Generics | 19, 21, 25 |
-| [31-encoding-builtins.md](31-encoding-builtins.md) | Encoding: Built-in Stubs | 27 |
+| [31-encoding-builtins.md](31-encoding-builtins.md) | Encoding: Built-in Stubs | 07, 27 |
 
 ### Group 6: Error Reporting
 | File | Title | Blocked by |
 |------|-------|------------|
-| [32-reporter.md](32-reporter.md) | Reporter & Error Mapping | 14, 17 |
+| [32-reporter.md](32-reporter.md) | Reporter & Error Mapping | 08, 14, 16, 17 |
 
 ### Group 7: CLI & Integration
 | File | Title | Blocked by |
 |------|-------|------------|
-| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 13, 15, 16, 16b, 17, 17b, 19, 27, 32 |
+| [33-cli.md](33-cli.md) | CLI & Entry Point | 07, 08, 09, 10, 12, 13, 15, 16, 16b, 17, 17b, 19, 27, 32 |
 
 ### Group 8: Testing
 | File | Title | Blocked by |
@@ -107,6 +107,7 @@ These files have no Objective/Scope/Deliverables — they provide background con
 |------|---------|
 | [CONTEXT.md](CONTEXT.md) | Project orientation for new contributors and AI agents |
 | [DECISIONS.md](DECISIONS.md) | Log of resolved architectural decisions (D1–D11+) |
+| [COVERAGE.md](COVERAGE.md) | Go AST coverage table mapping internal AST node types to encoding plans |
 
 ## Key Reference: Current Gobra Pipeline
 

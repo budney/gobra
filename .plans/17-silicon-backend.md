@@ -103,6 +103,7 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
   type VerificationResult struct {
       Success bool
       Errors  []VerificationError         // non-nil only when Success == false
+      Err     error                       // non-nil if the JNI build or verify call itself failed (infrastructure error, not a verification failure)
       NodeMap map[uint64]*silver.Node     // stable node ID → Go Silver node; for searchInfo fallback
       Close   func()                      // caller must defer result.Close() before Report()
   }
