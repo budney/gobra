@@ -76,7 +76,10 @@ file path, not any temp-file path.
   - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `PGoStmt`-wrapped Go statements at this point. Plan 07 calls plan 05 on the returned `map` and runs `MergeGhostStatements` to complete each `PBlockStmt` (step 4 of the coordination model in plan 07).
   - **File-scope annotations** (those not inside any block — produced by the Gobrafier for ghost ADTs, predicates, funcs) are collected into `map[*frontend.PBlockStmt][]RawAnnotation` under the key `nil`. Plan 07 detects the `nil` key and routes these to `PFile.GhostDecls` instead of any `PBlockStmt`. **Callers must always check for the nil key explicitly** — iterating the map with `range` visits the nil key, but a range loop body that type-asserts the key as non-nil will panic. Plan 07's `MergeGhostStatements` handles this with an explicit `if key == nil { ... }` branch before the merge loop.
 - `RawAnnotation` type: `{Text string; Pos token.Pos}` — the raw `//@ ...` text stripped of the `//@ ` prefix, with its source position
-- Structured `Diagnostic` type re-exported from `internal/reporting` (see plan 00 cross-cutting contract)
+- `Diagnostic` type imported from `internal/diagnostic/` (owned by plan 32a; do NOT import
+  `internal/reporting` — that package is downstream of the parser and would break pipeline
+  layering). The `[]Diagnostic` return value uses the same type as all other early-pipeline
+  stages (plans 05, 06, 07, 08) per the cross-cutting contract in plan 00.
 - Tests: parse a representative set of `.go` and `.gobra` files from
   `src/test/resources/regressions/` and verify the AST shape
 
@@ -97,6 +100,44 @@ This is separate from the parse errors already returned in `(*ast.File).Comments
 `token.FileSet` error lists; Bad* node detection is a belt-and-suspenders check to ensure
 no malformed node reaches the desugarer. Do not add explicit handling for Bad* nodes in the
 desugarer (plan 12) or the catch-all panic (plan 19) — they must never reach that far.
+
+## Verification Specifications (C9)
+
+Plan 04's `ParseFile` is a pure transformation function (no shared mutable state, no JNI)
+so its Gobra specifications focus on nil-safety, termination, and diagnostic completeness.
+
+1. **`ParseFile` nil-safety postcondition**: the returned `*PFile` is nil iff the function
+   encountered an unrecoverable Bad* node; in all other cases it is non-nil (possibly partial):
+   ```go
+   //@ ensures hasBadNode ==> pfile == nil
+   //@ ensures !hasBadNode ==> pfile != nil
+   func ParseFile(filename string, src []byte) (pfile *frontend.PFile,
+       annotations map[*frontend.PBlockStmt][]RawAnnotation, diags []Diagnostic)
+   ```
+   The ghost variable `hasBadNode` is true iff `ast.Inspect` found a `BadStmt`, `BadExpr`,
+   or `BadDecl` during the walk.
+
+2. **Diagnostic completeness**: every `go/parser` error token is reflected in the returned
+   `[]Diagnostic`; the slice is never nil (empty slice on success):
+   ```go
+   //@ ensures diags != nil
+   ```
+
+3. **Termination**: `ParseFile` terminates on all inputs because `ast.Inspect` terminates
+   (the `go/ast` tree is finite and acyclic) and the annotation map is bounded by the number
+   of comment groups in the file:
+   ```go
+   //@ decreases len(src)
+   func ParseFile(filename string, src []byte) (...)
+   ```
+
+4. **No aliasing between output types**: the returned `*PFile` and annotation map share no
+   mutable state; the caller may safely pass them to concurrent downstream stages (plan 05,
+   plan 07) without additional synchronization:
+   ```go
+   //@ ensures forall k *frontend.PBlockStmt ::
+   //@     k != nil ==> acc(k) && acc(annotations[k])
+   ```
 
 ## Resolved Questions
 

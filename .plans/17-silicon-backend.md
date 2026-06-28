@@ -30,7 +30,7 @@ return structured verification results (success or a list of errors with positio
 
 ## `Verify` Function Scope
 
-The top-level Go function `Verify(prog jobject, cfg SiliconConfig) (*VerificationResult, error)`
+The top-level Go function `Verify(prog jobject, cfg backend.SiliconConfig) (*backend.VerificationResult, error)`
 defined in this plan is used in **two scenarios only**:
 
 1. **Test infrastructure (plan 34)**: `TestMain` creates one `SiliconFrontendAPI`, starts it
@@ -59,8 +59,10 @@ will corrupt JNI thread state and crash the JVM.
 
 ## Relationship to Chopping and Parallelism
 
-This plan establishes the **single-program, single-worker** baseline: `Verify` accepts one
-`*silver.Program`, builds its Java equivalent via plan 16, calls Silicon, and returns a result.
+This plan establishes the **single-program, single-worker** baseline: `Verify` accepts a
+pre-built Java Silver AST object (`jobject`, produced by plan 16's `Build()`) and a
+`SiliconConfig`, calls Silicon, and returns a result. The Go `*silver.Program` → `jobject`
+conversion is plan 16's responsibility; plan 17 operates on the already-constructed Java AST.
 
 Chopping and parallel verification are layered on top in separate plans:
 - Plan 16b (Silver Chopper) splits a `*silver.Program` into sub-programs before JNI-building.
@@ -97,56 +99,92 @@ Each `AbstractError` has `.pos`, `.fullId`, `.readableMessage`, `.reason`.
 
 ## Deliverables
 
-- `internal/backend/silicon/silicon.go` — `Verify(prog jobject, cfg SiliconConfig) (*VerificationResult, error)`
-- `VerificationResult` Go type:
+### `internal/backend/types.go` — Shared Types (defined in plan 15, consumed here)
+
+The shared types `VerificationResult`, `VerificationError`, `SiliconInstance`, and
+`SiliconConfig` are defined in `internal/backend/types.go` (package `backend`), owned by
+**plan 15**. Plan 17 depends on plan 15 and consumes these types from `gobra/internal/backend`.
+
+**Position filling**: for each `VerificationError` in `Errors`, the JNI worker fills in
+`Pos` by calling `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` (plan 16) to
+extract the `NodeInfo` embedded in the Java Silver node's `Info` chain. The worker also
+populates `Node` by looking up `NodeMap[Pos.NodeID]` — this gives the reporter the Go
+Silver struct for `searchInfo` DFS without a separate nodeMap parameter. For synthetic nodes
+(where `Tag == "synthetic"`), the reporter (plan 32) walks `Node.Children()` to find a
+non-synthetic ancestor. `NodeMap` carries the full Go Silver struct (needed for `Children()`
+calls) and is NOT used for primary position lookup.
+
+`NodeMap` and `Close` are set by the JNI worker (plan 15b); callers must `defer
+result.Close()` in the same stack frame as the `Report()` call — this releases JNI global
+references held for the Java Silver objects. Failure to call `Close()` leaks JNI memory.
+
+**Warm path**: when `SiliconConfig.Instance` is non-nil, `Verify` skips `Initialize` and
+uses the provided instance directly. When nil, `Verify` calls `Initialize` and `Stop` around
+the verification call (cold path; slower, for one-off invocations). The test infrastructure
+(`TestMain` in plan 34) creates one `SiliconFrontendAPI`, starts it once, and passes it as
+`Instance` in every test call. `NewInstance` is used only by `NewPool` (plan 15b) to create
+per-worker instances at pool construction time.
+
+### `internal/backend/silicon/silicon.go` — Silicon Verification
+
+- `Verify(prog jobject, cfg backend.SiliconConfig) (*backend.VerificationResult, error)`
+- `SiliconFrontendAPI` struct — implements `backend.SiliconInstance`:
   ```go
-  type VerificationResult struct {
-      Success bool
-      Errors  []VerificationError         // non-nil only when Success == false
-      Err     error                       // non-nil if the JNI build or verify call itself failed (infrastructure error, not a verification failure)
-      NodeMap map[uint64]silver.Node      // stable node ID → Go Silver node (canonical definition; plans 16, 17b, 32 use this type); for searchInfo fallback
-      Close   func()                      // caller must defer result.Close() before Report()
-  }
-  type VerificationError struct {
-      Pos     NodeInfo
-      Node    silver.Node   // Go Silver node for searchInfo DFS; populated by worker via NodeMap[Pos.NodeID] lookup
-      FullID  string
-      Message string
-      Reason  string
-  }
+  type SiliconFrontendAPI struct { /* JNI handle fields */ }
+  func NewSiliconFrontendAPI() *SiliconFrontendAPI
+  func (s *SiliconFrontendAPI) Initialize(args []string)
+  func (s *SiliconFrontendAPI) Verify(prog jobject) *backend.VerificationResult
+  func (s *SiliconFrontendAPI) Stop()
   ```
-  **Position filling**: for each `VerificationError` in `Errors`, the JNI worker fills in
-  `Pos` by calling `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` (plan 16) to
-  extract the `NodeInfo` embedded in the Java Silver node's `Info` chain. The worker also
-  populates `Node` by looking up `NodeMap[Pos.NodeID]` — this gives the reporter the Go
-  Silver struct for `searchInfo` DFS without a separate nodeMap parameter. For synthetic nodes
-  (where `Tag == "synthetic"`), the reporter (plan 32) walks `Node.Children()` to find a
-  non-synthetic ancestor. `NodeMap` carries the full Go Silver struct (needed for `Children()`
-  calls) and is NOT used for primary position lookup.
-
-  `NodeMap` and `Close` are set by the JNI worker (plan 15/17b); callers must `defer
-  result.Close()` in the same stack frame as the `Report()` call — this releases JNI global
-  references held for the Java Silver objects. Failure to call `Close()` leaks JNI memory.
-- `SiliconConfig` struct, including a `Instance *SiliconFrontendAPI` field for the warm path:
-
-  ```go
-  type SiliconConfig struct {
-      Args     []string           // Silicon startup flags (Z3 path, timeout, etc.)
-      Instance *SiliconFrontendAPI // non-nil: reuse this already-started instance (warm path)
-                                   // nil: start a fresh Silicon instance (cold path)
-  }
-  ```
-
-  When `Instance` is non-nil, `Verify` skips `silicon.initialize(cfg.Args)` and uses the
-  provided instance directly. When `Instance` is nil, `Verify` calls `initialize` and `stop`
-  around the verification call (cold path; slower, used only for one-off invocations).
-  The test infrastructure (`TestMain` in plan 34) creates one `SiliconFrontendAPI`, starts it
-  once, and passes it as `Instance` in every test call. This is the primary motivation for the
-  warm-path design.
+  Note: `NewSiliconFrontendAPI` does NOT take a `*jvm.JVM` parameter — it accesses the
+  process-wide JNI environment via the `jnigi` package directly, avoiding an import of
+  `gobra/internal/backend/jvm`. The `silicon` sub-package imports only
+  `gobra/internal/backend` (parent) and external libraries. `jobject` is jnigi's JNI object
+  reference type, consistent with plan 16's `BuiltProgram.JavaObject jobject`.
 
 - Silicon initialization and teardown integrated with JVM lifecycle (15)
 - Tests: verify a trivially correct Silver program → expect Success; verify a trivially
   incorrect one → expect Failure with at least one error
+
+## Verification Specifications (C9)
+
+Plan 17's `Verify` function and `SiliconFrontendAPI` lifecycle must be formally specified
+so Gobra can statically enforce the threading precondition and result validity contract.
+
+1. **`Verify` threading precondition**: `Verify` makes JNI calls and may only be called from
+   a goroutine that holds the OS-thread lock and JVM attachment:
+   ```go
+   //@ requires acc(backend.ThreadAttached(jvm), 1)
+   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   //@ ensures  err == nil ==> result != nil
+   func Verify(prog jobject, cfg backend.SiliconConfig) (result *backend.VerificationResult, err error)
+   ```
+
+2. **`SiliconFrontendAPI.Initialize` — idempotency guard**: `Initialize` must only be called
+   once per instance; calling it a second time is a contract violation:
+   ```go
+   //@ ghost field initialized bool
+   //@ requires !initialized
+   //@ ensures  initialized
+   func (s *SiliconFrontendAPI) Initialize(args []string)
+   ```
+
+3. **`SiliconFrontendAPI.Stop` — requires initialized**: `Stop` may only be called after
+   `Initialize` has completed:
+   ```go
+   //@ requires initialized
+   //@ ensures  !initialized
+   func (s *SiliconFrontendAPI) Stop()
+   ```
+
+4. **`Verify` result contract**: on a successful JNI call (err == nil), the result
+   distinguishes success from verification failure; the `Errors` field is non-nil iff
+   `Success == false`:
+   ```go
+   //@ ensures err == nil ==>
+   //@     (result.Success ==> result.Errors == nil) &&
+   //@     (!result.Success ==> result.Errors != nil)
+   ```
 
 ## Resolved Questions
 

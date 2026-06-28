@@ -117,8 +117,14 @@ The JAR is compiled at build time (Makefile target), embedded in the Go binary v
   `BuiltProgram.Close()` to release them.
 - **Error handling**: check for Java exceptions after every jnigi call; convert them to Go errors.
 - **Memory**: Silver AST objects live on the JVM heap and are GC'd by the JVM; no manual free.
-- **All JNI calls via JNI worker**: as specified in plan 15, route all calls through the
-  dedicated JNI worker goroutine; `Build()` sends a request and waits for the result.
+- **Threading model for `Build()`**: `Build()` is a **direct, synchronous call** — it does NOT
+  dispatch via a channel or send a request to the worker pool. The caller is responsible for
+  ensuring it is already executing on the designated JNI OS thread (i.e., inside a goroutine
+  that has called `runtime.LockOSThread()` and `jvm.AttachCurrentThread()`). In practice,
+  `Build()` is called by plan 15b's worker goroutine from inside the `for job := range jobs`
+  loop. If `Build()` were to dispatch via the worker channel, the worker goroutine would
+  deadlock: it would block waiting for itself to process the dispatch request while already
+  blocked inside `Build()`. Do not add channel dispatch logic to `Build()`.
 
 ## Node Identity Map
 
@@ -270,6 +276,47 @@ To prevent silent breakage:
   clear message if they differ.
 - When the `viperserver/` submodule is updated, re-running `make SilverBridge.jar` is
   mandatory; document this in the repo README.
+
+## Verification Specifications (C9)
+
+Plan 16 constructs JNI global references and transfers them across the JNI boundary; Gobra
+permissions formalize the ownership contract so the compiler can statically reject use-after-
+close and double-close bugs.
+
+1. **`Build` postcondition — global-ref ownership**: `Build` produces a `*BuiltProgram` whose
+   `globalRefs` are live JNI references. The caller receives exclusive ownership of this
+   resource bundle, represented as a fractional permission:
+   ```go
+   //@ ensures err == nil ==>
+   //@     acc(built) && built != nil && acc(built.NodeMap) && built.NodeMap != nil
+   func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
+   ```
+
+2. **`Close` precondition — ownership required, consumed on call**: `Close` must be called
+   exactly once after `Verify` and `Report` have both returned. Gobra enforces this by
+   consuming the permission:
+   ```go
+   //@ requires acc(built) && acc(built.NodeMap)
+   //@ ensures  !acc(built) && !acc(built.NodeMap)
+   func (built *BuiltProgram) Close()
+   ```
+   A second call to `Close` after the permission is consumed is a static verification error.
+
+3. **Thread precondition on `Build`**: `Build` makes JNI calls and requires the caller to
+   already hold the OS-thread lock and JVM attachment (plan 15's `ThreadAttached` predicate):
+   ```go
+   //@ requires acc(backend.ThreadAttached(jvm), 1)
+   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
+   ```
+
+4. **NodeMap integrity**: after a successful `Build`, every entry in `built.NodeMap` is
+   non-nil and corresponds to a Silver node that was registered during the build:
+   ```go
+   //@ ensures err == nil ==>
+   //@     forall id uint64 :: id in domain(built.NodeMap) ==>
+   //@         built.NodeMap[id] != nil
+   ```
 
 ## Resolved Questions
 

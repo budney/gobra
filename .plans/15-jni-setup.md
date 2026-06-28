@@ -20,8 +20,10 @@ the rest of the backend uses.
   manage attach/detach around JNI calls
 - `WorkerPool` type skeleton and `workerJob` struct (channel infrastructure and thread-lifecycle
   skeleton; full Silicon-aware body is in plan 15b)
-- `VerificationResult` struct definition (the result type returned by a worker after calling
-  Silicon; plan 15b fills in the verification loop that populates it)
+- `internal/backend/types.go` — shared backend types owned by this plan: `VerificationResult`,
+  `VerificationError`, `SiliconInstance` interface, `SiliconConfig` struct. These live in the
+  parent `backend` package so both `jvm` and `silicon` sub-packages can import them without
+  a circular dependency. See Deliverables for the full definitions.
 
 **Out of scope:**
 - Building the Silver Java AST (16-silver-jni-builder.md)
@@ -30,8 +32,9 @@ the rest of the backend uses.
 ## Dependencies
 
 - [01-project-setup.md](01-project-setup.md) — repository and build tooling
-- [14-silver-ast.md](14-silver-ast.md) — `*silver.Program` is the job payload type in `workerJob`
-- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type used in `VerificationResult.Errors`
+- [14-silver-ast.md](14-silver-ast.md) — `*silver.Program` is the job payload type in `workerJob`;
+  `silver.Node` and `silver.NodeInfo` are used in `VerificationResult` and `VerificationError`
+  (defined by this plan in `internal/backend/types.go`)
 
 ## Reference: Prior Art
 
@@ -61,12 +64,15 @@ to enable jenv's export plugin: `jenv enable-plugin export`. Document this in th
 when `libjvm` is not found.
 
 **Worker pool skeleton**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines. This plan
-delivers the `poolSize=1` baseline pool skeleton: JVM lifecycle, thread attach/detach, and
-the `workerJob` channel infrastructure. The full Silicon-aware worker template (which
-initialises a `SiliconFrontendAPI` per worker) and N-worker expansion are in plan 15b
-(which depends on plan 17 for `SiliconFrontendAPI`). This plan does NOT reference
-`SiliconFrontendAPI` or `SiliconConfig` — doing so would create a dependency cycle
-(plan 17 depends on plan 15).
+delivers the JVM lifecycle, thread attach/detach, and the `workerJob` channel infrastructure.
+The full Silicon-aware worker template (which initialises a `SiliconFrontendAPI` per worker)
+and N-worker expansion are in plan 15b (which depends on plan 17).
+
+**Import discipline**: Plan 15 does NOT import the `silicon` sub-package. Both `jvm` and
+`silicon` sub-packages import their shared parent package `gobra/internal/backend` for
+`VerificationResult`, `SiliconInstance`, and `SiliconConfig`. This avoids the import cycle
+(`jvm` → `silicon` → `jvm`) that would arise if `SiliconConfig` were defined inside
+`internal/backend/silicon/`.
 
 Each worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock it.
 `LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
@@ -85,14 +91,64 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
 
 ## Deliverables
 
-- `internal/backend/jvm/jvm.go` — `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
+### `internal/backend/types.go` (package `backend`) — Shared Backend Types
+
+This file is the canonical home for all types shared between the `jvm` and `silicon`
+sub-packages. Both sub-packages import `gobra/internal/backend`; neither imports the other,
+preventing the `jvm` → `silicon` → `jvm` import cycle.
+
+```go
+// SiliconInstance is the interface implemented by silicon.SiliconFrontendAPI.
+// Defined here so the jvm sub-package can use it without importing silicon.
+type SiliconInstance interface {
+    Initialize(args []string)
+    Verify(prog jobject) *VerificationResult
+    Stop()
+}
+
+// SiliconConfig holds configuration for a Silicon verification session.
+type SiliconConfig struct {
+    Args        []string        // Silicon startup flags (Z3 path, timeout, etc.)
+    Instance    SiliconInstance // non-nil: reuse existing instance (warm path, e.g. tests)
+                                // nil: NewInstance will be called (cold path)
+    NewInstance func() SiliconInstance // factory: called once per worker in NewPool
+}
+
+// VerificationResult holds the outcome of one Silicon verification call.
+type VerificationResult struct {
+    Success bool
+    Errors  []VerificationError    // non-nil only when Success == false
+    Err     error                  // non-nil if the JNI call itself failed
+    NodeMap map[uint64]silver.Node // stable node ID → Go Silver node; for searchInfo fallback
+    Close   func()                 // caller must defer result.Close() before Report()
+}
+
+// VerificationError is a single verification failure with position and message.
+type VerificationError struct {
+    Pos     silver.NodeInfo
+    Node    silver.Node  // Go Silver node for searchInfo DFS; populated by worker
+    FullID  string
+    Message string
+    Reason  string
+}
+```
+
+`jobject` is jnigi's JNI object reference type (`*jnigi.JObject`); used here and in plan 16
+to refer to Java objects passed across the JNI boundary. `silver.Node` and `silver.NodeInfo`
+are from plan 14's `internal/silver/` package (plan 15's listed dependency).
+
+Plan 17 (`internal/backend/silicon/`) and plan 15b (`internal/backend/jvm/`) both import
+`gobra/internal/backend` (this package) for these shared types.
+
+### `internal/backend/jvm/jvm.go` — JVM Lifecycle
+
+- `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
 - `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
-- `WorkerPool` type skeleton: `NewPool(jvm *JVM, poolSize int) *WorkerPool`; `Stop()`.
+- `WorkerPool` type skeleton: the `WorkerPool` struct and `Stop()` method.
   This plan delivers the channel infrastructure and thread-lifecycle skeleton only.
-  The `Submit(prog *silver.Program) *VerificationResult` method and the full Silicon-aware
-  worker goroutine template are defined in plan 15b (which has the `SiliconFrontendAPI`
-  dependency). Plan 15 exports the `workerJob` channel and the `WorkerPool` struct so that
-  plan 15b can complete the implementation.
+  `NewPool` (the constructor with full signature) and `Submit` are defined in plan 15b.
+  Plan 15 exports the `workerJob` channel and the `WorkerPool` struct fields so that
+  plan 15b can complete the implementation without a circular import.
 - Worker goroutine skeleton — establishes the thread-locking invariant:
 
   ```go
@@ -110,19 +166,13 @@ to a temp directory and add it to the classpath alongside the ViperServer JAR.
   ```go
   type workerJob struct {
       prog   *silver.Program
-      result chan *VerificationResult
+      result chan *backend.VerificationResult
   }
   ```
-- `VerificationResult` struct (defined here; plan 15b populates it from Silicon output):
-  ```go
-  // VerificationResult holds the outcome of one Silicon verification call.
-  // Errors is nil on success; non-nil indicates verification failure with diagnostics.
-  type VerificationResult struct {
-      Errors []Diagnostic // nil on success; plan 32a owns the Diagnostic type
-  }
-  ```
-  Plan 15 owns this type. Plan 15b reads it (populating `Errors` from Silicon's response).
-  Plan 17 and plan 32 consume it for error reporting.
+  `backend.VerificationResult` is defined by this plan in `internal/backend/types.go` (see
+  deliverable above). Plan 15b (in the same `jvm` package) populates it. Plan 17 and plan 32
+  consume it. The import path `gobra/internal/backend` is the parent package of `jvm`; both
+  `jvm` and `silicon` sub-packages import it.
 - `libjvm` runtime probing across all known paths
 - Build tag or `cgo` preamble isolating the JNI dependency
 - Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns

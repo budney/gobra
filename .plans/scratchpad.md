@@ -13,7 +13,9 @@
 | `Visitor` interface (internal) | 11 |
 | `internal/silver/` (Program, Member, Node, NodeInfo, VprInfo, NoInfo, AnnotationInfo, ConsInfo) | 14 |
 | `internal/silver/printer.go` (Print) | 14 |
-| `internal/backend/jvm/jvm.go` (JVM, Start, Stop, JVMConfig, WorkerPool, workerJob, VerificationResult) | 15 |
+| `internal/backend/jvm/jvm.go` (JVM, Start, Stop, JVMConfig, WorkerPool skeleton, workerJob, Stop()) | 15 |
+| `internal/backend/jvm/jvm.go` (NewPool, Submit, full Silicon-aware worker goroutine) | 15b |
+| `internal/backend/types.go` (VerificationResult, VerificationError, SiliconInstance interface, SiliconConfig) | 15 |
 | `internal/diagnostic/` (Diagnostic struct) | 32a |
 | `internal/reporting/tags.go` (tag constants) | 32 |
 
@@ -26,8 +28,8 @@
 | Type Checker (08) | `*PFile` | side-table `map[PNode]TypeInfo` | `[]Diagnostic` |
 | Desugarer (12) | `*PFile` + type tables | `*internal.Program` | `[]Diagnostic` |
 | Translator (19) | `*internal.Program` | `*silver.Program` | `[]Diagnostic` |
-| Silicon Backend (17) | `*silver.Program` | `*VerificationResult` | `[]Diagnostic` |
-| Reporter (32) | `*VerificationResult` | formatted output | — |
+| Silicon Backend (17) | `*silver.Program` | `*backend.VerificationResult` | `[]Diagnostic` |
+| Reporter (32) | `*backend.VerificationResult` | formatted output | — |
 
 ### Synchronization Contracts
 | Resource | Mechanism | Plan |
@@ -108,13 +110,10 @@
 ## 3. ACTIVE VERIFICATION LOOP LOG
 
 ### Active Blockers / Contradictions (To Be Resolved by Agents)
-- [ ] **[CIRCULAR-IMPORT-BLOCKER]:** `15b-worker-pool-expansion.md` introduces a circular import (`jvm` -> `silicon` -> `jvm`) by trying to import `SiliconConfig` into the JVM package.
-  - *Fix Strategy:* Abstract `SiliconConfig` out to a shared configuration package or pass it as an untyped interface/primitive value.
-- [ ] **[STRUCT-MISMATCH]:** `VerificationResult` has two incompatible shapes across `15`, `15b`, and `17`.
-  - *Fix Strategy:* Centralize `VerificationResult` into a single shared types package (e.g., `internal/backend/types.go`) and delete conflicting definitions.
-- [ ] **[OVERLOAD-ERR]:** Duplicate `NewPool` constructors in `15` and `15b`.
-  - *Fix Strategy:* Refactor `15b` to explicitly state that it *replaces* the signature in `15`, or rename it to `NewConfiguredPool`.
-- [ ] **[DIAGNOSTIC-LAYERING]:** File `04` breaks early-pipeline separation rules by importing `Diagnostic` from `internal/reporting` instead of `internal/diagnostic/` (defined in `32a`).
+- [x] **[CIRCULAR-IMPORT-BLOCKER]:** RESOLVED — `internal/backend/types.go` (package `backend`) introduced as neutral shared package. `jvm` and `silicon` both import parent `backend`; neither imports the other.
+- [x] **[STRUCT-MISMATCH]:** RESOLVED — canonical `VerificationResult` lives in `internal/backend/types.go` (plan 17 ownership). Plans 15 and 15b reference it; plan 15's local definition removed.
+- [x] **[OVERLOAD-ERR]:** RESOLVED — plan 15 delivers `WorkerPool` struct + `Stop()` skeleton only; `NewPool` explicitly owned by plan 15b with supersession noted.
+- [x] **[DIAGNOSTIC-LAYERING]:** RESOLVED — plan 04 deliverables now explicitly import from `internal/diagnostic/` (plan 32a) with a warning against importing `internal/reporting`.
 - [ ] 1**C1**: `scratchpad.md` present in `.plans/` but not listed in WBS or Reference Documents in `00-overview.md` (pre-existing). NOTE: `00-overview.md` Reference Documents table already includes `scratchpad.md` — this was resolved.
 - [ ] **C4** (00-overview.md): Cross-Cutting Notes says "defined in plan 32" for Diagnostic — should say "defined in plan 32a". Pre-existing; not in scope for this run.
 - [ ] **C5** (33): Dependencies omits `15b`; pre-existing. Not in scope for this run.
@@ -162,11 +161,11 @@
 ### Remediation Queue (ordered by severity)
 
 #### CRITICAL GLOBAL ARCHITECTURAL BLOCKERS
-1. **Fix package layout (C5)**: Resolve the `jvm` ➔ `silicon` ➔ `jvm` circular import introduced by plan 15b passing `SiliconConfig` directly into the JVM package.
-2. **Harmonize `VerificationResult` (C4/C6)**: Redefine `VerificationResult` in a shared neutral types package to eliminate the structural mismatch between plans 15, 15b, and 17.
-3. **De-duplicate constructors (C3)**: Refactor `NewPool` in plan 15b to explicitly replace or cleanly differentiate itself from plan 15's constructor signature to prevent Go compilation errors.
-4. **Fix worker deadlock (C4)**: Align plan 16 and 15b so that synchronous worker routines do not self-deadlock against internal channel queues inside `Build()`.
-5. **Fix pipeline layering break (C5)**: Rewrite plan 04 to pull the `Diagnostic` type from `internal/diagnostic/` (plan 32a) instead of violating boundaries via `internal/reporting`.
+1. ~~**Fix package layout (C5)**: Resolve the `jvm` ➔ `silicon` ➔ `jvm` circular import introduced by plan 15b passing `SiliconConfig` directly into the JVM package.~~ DONE
+2. ~~**Harmonize `VerificationResult` (C4/C6)**: Redefine `VerificationResult` in a shared neutral types package to eliminate the structural mismatch between plans 15, 15b, and 17.~~ DONE
+3. ~~**De-duplicate constructors (C3)**: Refactor `NewPool` in plan 15b to explicitly replace or cleanly differentiate itself from plan 15's constructor signature to prevent Go compilation errors.~~ DONE
+4. ~~**Fix worker deadlock (C4)**: Align plan 16 and 15b so that synchronous worker routines do not self-deadlock against internal channel queues inside `Build()`.~~ DONE
+5. ~~**Fix pipeline layering break (C5)**: Rewrite plan 04 to pull the `Diagnostic` type from `internal/diagnostic/` (plan 32a) instead of violating boundaries via `internal/reporting`.~~ DONE
 
 #### LOCAL FOCUS TARGET EDITS (FOUNDATION & PIPELINE)
 6. ~~Fix `03-frontend-ast.md`: rename `C10` → `C9`.~~ DONE
@@ -188,4 +187,54 @@
 20. **Fix `35-regression-suite.md` (Gates)**: Harmonize the contradictory entry criteria for phase 36 (95% pass rate gate vs concurrent parallel tracking).
 
 - **Next Autonomous Steps:** Execute the remediation queue starting with the high-severity items on files `15` and `11`.
+
+### CHECK-PLAN RESULTS (run on 04, 15, 15b, 16, 17 after Phase 1 edits)
+**Outcome: 11 passed, 6 failed** — 3 regressions + 3 pre-existing C9 gaps + 1 pre-existing C9 gap
+
+#### SECOND CHECK-PLAN RUN FAILURES (04, 15, 15b, 16, 17)
+- [x] **[C4 — 15b stale refs]**: FIXED — Both occurrences of "owned by plan 17" corrected to "owned by plan 15".
+- [x] **[C4 — 17 narrative]**: FIXED — "Relationship" section updated: Verify takes a pre-built `jobject` (from plan 16's `Build()`), not a `*silver.Program`.
+
+#### CRITICAL REGRESSIONS — FIXING NOW
+- [x] **[C5-REG — 15]** FIXED: Plan 15 now listed plan 17 as dependency, but 17→15 already existed → cycle. Fix: moved `internal/backend/types.go` ownership to plan 15 (already depends on plan 14 for silver.Node). Removed plan 17 from plan 15's Dependencies.
+- [x] **[C4-REG — 15b]** FIXED: `runWorker` body called `cfg.Args` but `cfg` not in scope. Fix: added `args []string` param; body uses `args` directly.
+- [x] **[C4-REG — 15b vs 16]** FIXED: `SiliconInstance.Verify(prog jnigi.ObjectRef)` mismatched plan 16's `jobject`. Fix: changed to `jobject` throughout types.go and SiliconFrontendAPI signature.
+
+#### PRE-EXISTING C9 FAILS — QUEUED FOR PHASE 2
+- [x] **[C9-PREEXIST — 04]**: FIXED — Added C9 section with nil-safety postcondition (PFile nil iff hasBadNode), diagnostic completeness (diags != nil), termination (decreases len(src)), and no-aliasing contract for downstream concurrent use.
+- [x] **[C9-PREEXIST — 15b]**: FIXED — Added C9 section with ThreadAttached invariant, Submit postcondition, NewPool precondition, and z3APIMode ghost-field invariant.
+- [x] **[C9-PREEXIST — 16]**: FIXED — Added C9 section with Build postcondition (global-ref ownership), Close pre/postcondition (permission consumed on call), ThreadAttached precondition, and NodeMap integrity invariant.
+- [x] **[C9-PREEXIST — 17]**: FIXED — Added C9 section with Verify threading precondition, Initialize idempotency guard, Stop requires-initialized contract, and Verify result contract (Success ↔ Errors nil).
+
+---
+
+## 4. PHASE 1 EXECUTION LOG
+
+### Item 1 — Circular Import Analysis (IN PROGRESS)
+**Root cause confirmed**: `internal/backend/jvm` (plan 15b) imports `internal/backend/silicon` for `SiliconConfig`, `SiliconFrontendAPI`, and `VerificationResult`. `internal/backend/silicon` (plan 17) lists plan 15's `WorkerPool` as a dependency — a `silicon` → `jvm` import. Cycle is real.
+
+**Chosen fix strategy**: Introduce `internal/backend/types.go` (package `backend`) as a neutral artifact owned by plan 17. Moves out of `silicon.go`:
+- `VerificationResult` + `VerificationError` (canonical, full form)
+- `SiliconInstance` interface (replaces concrete `*SiliconFrontendAPI` in config)
+- `SiliconConfig` struct (Instance field becomes `SiliconInstance` interface)
+
+Both `jvm` and `silicon` sub-packages import the parent `backend` package. Neither imports the other. Cycle broken.
+
+**Secondary fixes bundled in same edit pass**:
+- Item 2 (VerificationResult mismatch): plan 15's incomplete `VerificationResult{Errors []Diagnostic}` replaced by a reference to the canonical struct in `internal/backend/types.go`; plan 15b's usage of `{Err: err}`, `NodeMap`, `Close` fields consistent with that canonical struct.
+- Item 3 (NewPool duplicate): plan 15 delivers pool skeleton only (no `NewPool` function); plan 15b explicitly owns and delivers `NewPool` with the full signature `NewPool(jvm *JVM, poolSize int, cfg backend.SiliconConfig) *WorkerPool`.
+
+**Status**: DONE
+
+### Item 2 — VerificationResult Struct Mismatch (DONE)
+Resolved as part of Item 1 edit pass. Canonical `VerificationResult` (full form with `Success`, `Errors []VerificationError`, `Err`, `NodeMap`, `Close`) now lives exclusively in `internal/backend/types.go` (plan 17). Plan 15's incomplete `{Errors []Diagnostic}` definition removed. Plan 15b's usage of `{Err: err}` / `NodeMap` / `Close` fields is now consistent with the canonical struct.
+
+### Item 3 — Duplicate NewPool Constructors (DONE)
+Plan 15 now delivers only the `WorkerPool` struct and `Stop()` (the skeleton). `NewPool` is explicitly owned by plan 15b, which states it supersedes the skeleton. No compilation conflict.
+
+### Item 4 — Worker Synchronous Deadlock (DONE)
+Fixed in `16-silver-jni-builder.md`. The incorrect note "Build() sends a request and waits for the result" (via channel dispatch) was replaced with an explicit contract: `Build()` is a direct synchronous call executed inline by the calling goroutine. The worker goroutine calls `Build()` directly inside its `for job := range jobs` loop; any channel dispatch inside `Build()` would deadlock the pool. The fix note explicitly warns against adding such dispatch.
+
+### Item 5 — Pipeline Layering Break (DONE)
+Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `internal/reporting`" to "imported from `internal/diagnostic/` (owned by plan 32a)". Explicit warning added that importing `internal/reporting` from plan 04 breaks layering.
 
