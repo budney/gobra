@@ -120,9 +120,24 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   1. `Gobrafy(rawBytes, filename)` (plan 06) → preprocessed `[]byte` (no temp file written)
   2. `ParseFile(filename, preprocessedBytes)` (plan 04) → `(*PFile, map[*PBlockStmt][]RawAnnotation, diags)` — `PBlockStmt` nodes contain Go statements only at this point
   3. For each `RawAnnotation` in the returned map: `ParseAnnotation(raw.Text, raw.Pos)` (plan 05) → ghost statement nodes
-  4. `MergeGhostStatements(pfile, ghostNodes)` → interleaves ghost statement nodes into each `PBlockStmt.Stmts` by `Pos()`, completing the block's statement list in source order
+  4. `MergeGhostStatements(pfile, ghostNodes)` → interleaves ghost statement nodes into the
+     correct locations in the `PFile`. Two separate routing rules apply:
 
-  `MergeGhostStatements` is a pure function in `internal/frontend/packageresolver.go`; it sorts a merged slice of `PGoStmt` and ghost nodes by their `Pos()` value.
+     **Rule A — loop invariant routing**: Any ghost node whose annotation keyword is
+     `invariant` (i.e., the raw annotation text parsed by plan 05 begins with `invariant`)
+     must be appended to `PForStmt.Invariants` (or `PRangeStmt.Invariants`) on the `PForStmt`
+     or `PRangeStmt` node whose `Pos()` immediately follows the invariant's `Pos()` in the
+     enclosing `PBlockStmt.Stmts`. Do NOT insert invariant nodes into `PBlockStmt.Stmts` —
+     they are not statements. If no `PForStmt`/`PRangeStmt` immediately follows, emit a
+     diagnostic: `"invariant annotation not attached to a for-loop"`.
+
+     **Rule B — all other ghost nodes**: Insert into `PBlockStmt.Stmts` in source order by
+     `Pos()`, interleaved with existing `PGoStmt` nodes.
+
+  `MergeGhostStatements` is a pure function in `internal/frontend/packageresolver.go`. It
+  first separates ghost nodes by type (invariants vs. other), routes invariants to their
+  enclosing for-loop (Rule A), then merges the remainder into the block's statement list
+  in `Pos()` order (Rule B).
 
   File-scope `//@ ` comments (those not within any block, e.g. ghost ADT/predicate/func declarations produced by the Gobrafier) are identified by position (no enclosing `*PBlockStmt` in the map) and attached to `PFile.GhostDecls` rather than any `PBlockStmt`.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify

@@ -25,8 +25,11 @@ Implement the encoding of Go map types into Silver.
 
 - [19-translator-core.md](19-translator-core.md) — Context
 - [25-encoding-interfaces.md](25-encoding-interfaces.md) — **required**: the `Type` domain and
-  `comparableType` function are defined by the interface encoding and emitted at every map lookup
-  and key-in-map check; plan 24 cannot emit correct Silver without plan 25 having run first
+  `comparableType` function are defined there. Plan 24 must call `ensureTypeDomain(ctx)` (defined
+  in plan 25) before emitting any `comparableType` assertion. This helper is idempotent and safe
+  to call from map encoding even in programs with no interfaces; it must NOT be replaced by a
+  bare assumption that plan 25's interface encoding has already run, since map-only programs
+  would produce invalid Silver with an undefined `comparableType` function.
 
 ## Reference: Current Gobra
 

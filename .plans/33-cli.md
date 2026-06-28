@@ -25,14 +25,16 @@ status code.
   `Chop(silverProg, chop.ChopConfig{Bound: cfg.ChopBound})` to produce `[]*silver.Program`
   (sub-programs split by method for parallel verification). `cfg.ChopBound` is a `*int`
   populated from the `--chop-bound N` flag (nil means unlimited). When `--chop` is set without
-  an explicit `--chop-bound`, the default bound copies the workers value:
-  `n := cfg.Workers; cfg.ChopBound = &n` — do NOT write `cfg.ChopBound = &cfg.Workers`, as
-  that aliases into the Config struct and any later mutation of `cfg.Workers` would silently
-  corrupt the chop bound. This slice is then passed to `WorkerPool.DispatchChopped`
-  (plan 17b). If `--workers 1` (the default), Chopper produces a single-element slice and
-  `DispatchChopped` degenerates to a single serial call. If `--workers N > 1`, the sub-programs
-  are dispatched to N workers in parallel. Pipeline.go must import plan 16b and call `Chop`
-  explicitly — plan 17b's `DispatchChopped` does not call it internally.
+  an explicit `--chop-bound`, `cfg.ChopBound` remains nil — the chopper merges freely until
+  no free merges remain (see plan 16b Phase 3 stop condition). Use `--chop-bound N` to cap
+  the final sub-program count explicitly. Do NOT default `cfg.ChopBound` to `cfg.Workers`;
+  doing so over-constrains merging when the user sets `--workers` for unrelated reasons.
+  This slice is then passed to `WorkerPool.DispatchChopped`
+  (plan 17b), which dispatches sub-programs to up to `--workers N` JNI workers concurrently.
+  The number of sub-programs is determined by the chopper (via `--chop-bound`), not by
+  `--workers`; if there are fewer sub-programs than workers, the excess workers simply idle.
+  Pipeline.go must import plan 16b and call `Chop` explicitly — plan 17b's `DispatchChopped`
+  does not call it internally.
 - **`{pkg}_run_inits` invocation**: the translator (plan 27) synthesizes a Silver method
   `{pkg}_run_inits` for each package. This method is a regular member of the `*silver.Program`
   returned by the translator — Silicon verifies it independently, like any other Silver method.

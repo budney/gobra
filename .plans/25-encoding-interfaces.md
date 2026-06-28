@@ -46,6 +46,17 @@ collision with exclusive 2-field structs encoded by plan 21). `InterfaceDomain` 
 lazily on the first use of any interface type in the program and cached (like `TupleDomain` in
 plan 19). If no interface values appear in the program, the domain is never emitted. The domain is:
 
+**`Type` domain emission trigger (critical — shared with plan 24):** The `Type` domain must be
+emitted on the **first occurrence of any feature that references it**, which includes:
+1. First use of any interface type (the primary trigger, covered below).
+2. First map lookup or key-in-map check — because `comparableType(kType)` is emitted by plan 24
+   for every such operation, even in programs with no interfaces.
+The encoding module must expose a `ensureTypeDomain(ctx *Context)` helper that emits the domain
+on first call and is a no-op on subsequent calls. Plan 24's map encoding calls this helper before
+emitting any `comparableType` assertion; plan 25's interface encoding calls it before emitting
+`InterfaceDomain`. Do NOT make plan 24 depend on plan 25 having already executed; the trigger
+must be idempotent and callable from any encoding module.
+
 ```silver
 domain InterfaceDomain {
   function iface(polyVal: Ref, dynType: Type): InterfaceDomain

@@ -122,11 +122,11 @@ thread ownership and result validity using Gobra permissions.
 
 1. **Worker thread-lock invariant** — each `runWorker` goroutine holds an exclusive
    `ThreadAttached` token for its lifetime (produced by `AttachCurrentThread`, consumed by
-   `DetachCurrentThread` on defer). This mirrors plan 15's predicate and ensures no two
-   goroutines share a JNI attachment:
+   `DetachCurrentThread` on defer). `ThreadAttached` is declared **once** in plan 15's C9
+   (`internal/backend/jvm/jvm.go`); plan 15b reuses it — do NOT redeclare it here, as both
+   plans contribute to the same `jvm` package and Gobra rejects duplicate predicate declarations.
    ```go
-   //@ pred ThreadAttached(jvm *JVM)
-
+   // ThreadAttached is declared in plan 15 (jvm.go) — reference only, not redeclared.
    //@ requires acc(ThreadAttached(jvm), 1)
    //@ ensures  acc(ThreadAttached(jvm), 1) && acc(result) && result != nil
    func (instance *SiliconFrontendAPI) Verify(prog jobject) *backend.VerificationResult

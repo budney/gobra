@@ -18,6 +18,8 @@
 | `internal/backend/types.go` (VerificationResult, VerificationError, SiliconInstance interface, SiliconConfig) | 15 |
 | `internal/diagnostic/` (Diagnostic struct) | 32a |
 | `internal/reporting/tags.go` (tag constants) | 32 |
+| `internal/backend/dedup.go` (Deduplicate) | 17b |
+| `internal/backend/types.go` (Backend interface) | 18 |
 
 ### Pipeline Stage I/O Types
 | Stage | Input Type | Output Type | Error Type |
@@ -188,6 +190,15 @@
 
 - **Next Autonomous Steps:** Execute the remediation queue starting with the high-severity items on files `15` and `11`.
 
+#### NEW BLOCKERS FROM FULL-AUDIT (Items 21–27)
+21. ~~**Fix `33-cli.md` (C4 — CHOP-BOUND-CONTRADICTION)**: Remove `n := cfg.Workers; cfg.ChopBound = &n` default; plan 16b is authoritative — `--chop` without `--chop-bound` → `cfg.ChopBound = nil` (unlimited).~~ DONE — Changed plan 33 to state ChopBound remains nil when --chop is set without --chop-bound.
+22. ~~**Fix `17b-parallel-workers.md` (C5 — DEDUP-CIRCULAR-IMPORT)**: `Deduplicate` in `internal/backend/silicon/dedup.go` forces `jvm → silicon` import. Move `Deduplicate` to `internal/backend/dedup.go` (parent package).~~ DONE — Changed deliverable path from `silicon/dedup.go` to `backend/dedup.go`; added explanatory note about circular import. Registry updated.
+23. ~~**Fix `24-encoding-maps.md` + `25-encoding-interfaces.md` (C4 — TYPE-DOMAIN-MAP)**: Map encoding emits `comparableType(kType)` but the `Type` domain (which contains `comparableType`) is only emitted on first interface use. Plan 24 must trigger `Type` domain emission unconditionally on first map use; plan 25 must note this.~~ DONE — Added `ensureTypeDomain(ctx)` idempotent helper contract to plan 25 with explicit trigger list (interface use OR map lookup); updated plan 24 dependency note to call this helper instead of assuming plan 25 ran first.
+24. ~~**Fix `19-translator-core.md` (C3 — TYPEENCODING-UNDEFINED)**: `TypeEncoding` interface (return type of `Context.TypeEncoding()`) is never defined. Add a `TypeEncoding` interface definition as a deliverable in plan 19.~~ DONE — Added full `TypeEncoding` interface definition with `TypeValue`, `BoxValue`, `UnboxValue`, `EnsureTypeDomain` methods; added to `encoding.go` deliverable; noted it is implemented by plan 25 and accessed via `ctx.TypeEncoding()` to keep deps a DAG.
+25. ~~**Fix `18-carbon-backend.md` (C3 — BACKEND-INTERFACE-UNDEFINED)**: `Backend` interface promised by plan 18 ("both Silicon and Carbon implement a common Backend interface") is never defined anywhere. Add definition as a deliverable in plan 18 (or plan 17).~~ DONE — Added `Backend` interface (`Initialize`, `Verify`, `Stop`) to plan 18; placed in `internal/backend/types.go`; added factory pattern for plan 33; updated registry.
+26. ~~**Fix `07-package-resolver.md` (C4 — LOOP-INV-ROUTING-GAP)**: `MergeGhostStatements` has no step routing `//@ invariant P` annotations to `PForStmt.Invariants`. Add an explicit routing rule.~~ DONE — Added Rule A (invariant routing to PForStmt.Invariants) and Rule B (all other ghosts into PBlockStmt.Stmts) to step 4 of the per-file coordination sequence; added diagnostic for unattached invariants.
+27. ~~**Fix `15b-worker-pool-expansion.md` (C9 — THREADATTACHED-REDECL)**: Plan 15b C9 redeclares `//@ pred ThreadAttached(jvm *JVM)` which is already declared in plan 15's C9 (same `jvm` package). Change to a reference, not a redeclaration.~~ DONE — Removed `//@ pred ThreadAttached(jvm *JVM)` declaration from plan 15b; replaced with comment noting the predicate is declared once in plan 15 and must not be redeclared; kept all requires/ensures annotations that reference it.
+
 ### CHECK-PLAN RESULTS (run on 06, 08, 12, 16b, 25, 35 after Items 14–20 edits)
 
 #### BLOCKERS FOUND — WRITING THROUGH IMMEDIATELY
@@ -261,4 +272,134 @@ Fixed in `16-silver-jni-builder.md`. The incorrect note "Build() sends a request
 
 ### Item 5 — Pipeline Layering Break (DONE)
 Fixed in `04-go-parser.md`. Deliverables line changed from "re-exported from `internal/reporting`" to "imported from `internal/diagnostic/` (owned by plan 32a)". Explicit warning added that importing `internal/reporting` from plan 04 breaks layering.
+
+---
+
+## 5. REVIEW-PLAN FULL-AUDIT RESULTS
+
+*Full audit of all 41 plan files. Run date: 2026-06-28.*
+
+### Contradictions
+
+#### BLOCKING
+
+- **[16b:Penalty vs 33:Chop default]** Plan 16b states "with `--chop`, `bound=nil` (unlimited)". Plan 33 states "default bound copies the workers value: `n := cfg.Workers; cfg.ChopBound = &n`". These are directly contradictory. With --chop and --workers 4, plan 16b produces unlimited merging while plan 33 produces bound=4. The authoritative behavior is undefined.
+
+- **[17b:Deliverables vs 15/architecture]** Plan 17b places `Deduplicate([]VerificationError) []VerificationError` in `internal/backend/silicon/dedup.go`. But `mergeResults` (which calls deduplication) lives inside `DispatchChopped` in `internal/backend/jvm/dispatch.go`. This requires `jvm` to import `silicon`, recreating the exact `jvm → silicon` circular import the prior audit remediated. `Deduplicate` must move to `internal/backend/dedup.go` (parent package).
+
+- **[24+25] Silver `comparableType` undefined when interfaces absent**: Plan 25 says the `Type` domain (which contains `comparableType`) is emitted lazily "on first use of any interface type." Plan 24 says every map lookup emits `comparableType(kType)`. A program with maps but no interfaces never triggers `Type` domain emission, yet references `comparableType` — producing invalid Silver (undefined function).
+
+#### SIGNIFICANT
+
+- **[15b:C9 vs 15:C9]** Plan 15b's C9 section redeclares `//@ pred ThreadAttached(jvm *JVM)`, which is already declared in plan 15's C9. Both are in the same `jvm` package. Gobra rejects duplicate predicate declarations. Plan 15b must reference plan 15's predicate.
+
+- **[32:Diagnostic re-export type]** Plan 32 says `Diagnostic` is "re-exported from `internal/reporting/` for callers" but does not specify it must be a Go type alias (`type Diagnostic = diagnostic.Diagnostic`). A type redefinition creates an incompatible type, breaking assignments from `diagnostic.Diagnostic` to `reporting.Diagnostic` throughout the pipeline.
+
+- **[00-overview vs 32a]** Cross-Cutting Notes still says "defined in plan 32" for Diagnostic. Pre-existing, unfixed.
+
+- **[33:Dependencies]** Plan 33 omits plan 15b as a dependency. Pre-existing, unfixed.
+
+#### MINOR
+
+- **[27 vs 20] `KNOWN_LIMITATIONS.md`**: Plan 20 says "append to or create"; plan 27 says "created by this plan". Plan 20 runs first in dependency order, making plan 27's claim false.
+
+- **[34:JNI single-worker claim]** Main text says "single JNI worker" but pool is N workers after plan 17b (which plan 34 transitively depends on).
+
+---
+
+### Gaps
+
+#### BLOCKING
+
+- **[19] `TypeEncoding` interface undefined**: Plan 19 says `Context` exposes `TypeEncoding() TypeEncoding` and `TypeValue(t internal.Type) silver.Expr`. The `TypeEncoding` type is used by plans 24 and 25 but never defined as a Go interface in any plan. No method set is specified.
+
+- **[18] `Backend` interface undefined**: Plan 18 deliverables state "Both Silicon and Carbon implement a common `Backend` interface." No plan defines this interface — not plan 17, not plan 18, not plan 19.
+
+#### SIGNIFICANT
+
+- **[07] Loop invariant routing not specified**: Plan 03 specifies `PForStmt.Invariants []PAssertion` for `//@ invariant P` annotations. Plan 07's 4-step coordination model only describes merging ghost statements into `PBlockStmt.Stmts`. No step routes `PAssertion` (invariant) nodes to `PForStmt.Invariants`. Without an explicit routing rule in `MergeGhostStatements`, invariants are either silently dropped or incorrectly placed as pre-loop statements.
+
+- **[20] `goIntDiv` postcondition unspecified**: The "Bodyless Functions" table row for `goIntDiv` says "copy postcondition verbatim from `IntegerEncoding.scala`" but provides no formula. The Scala source is scheduled for deletion at cut-over (plan 37). The postcondition must be written into this table before cut-over.
+
+- **[08] `GhostType extends types.Type` scope undefined**: No plan specifies which package boundaries are allowed to hold `GhostType` values, or what behavior is expected if a `GhostType` is passed to a `go/types` function expecting `types.Type`. This creates a latent panic hazard.
+
+- **[04] `hasBadNode` in C9 is invalid Gobra**: `hasBadNode` used in postconditions is a free variable — not syntactically valid Gobra. Ghost variables must be declared as ghost parameters or ghost locals. The spec is informative but unverifiable.
+
+#### MINOR
+
+- **[08] Unsupported constructs omits `unsafe`**: Plan 08's unsupported-constructs section lists `goto`, `fallthrough`, `recover` but not `unsafe`. Plans 07 and 10 reject it earlier; plan 08 provides no third-line-of-defense check.
+
+- **[30] Generics audit fields are stale**: Plan 30's `Audit status`, `Generics found`, and `Chosen option` fields remain `_not yet run_` / `_unknown_` / `_N/A_`. No owner or trigger is specified.
+
+---
+
+### Logic errors
+
+#### BLOCKING
+
+- **[24+25] `comparableType` undefined without interfaces** (see Contradictions): Reproduced as logic error. Map programs without interfaces reference an unemitted Silver function, producing invalid Silver rejected by Silicon's consistency checker.
+
+#### SIGNIFICANT
+
+- **[17b:Phase 3 greedy merge] Missing empty-queue termination condition**: Plan 16b says stop "when no remaining pair has penalty ≤ 0 and count ≤ Bound." With a lazy priority queue, all remaining entries could be stale (sub-programs consumed). The loop must also terminate when the queue is empty; the plan's stop condition omits this case.
+
+- **[12/29] Sparse sequence literal encoding path missing**: Plan 29 specifies `emptySeq_{T}` for sequence literals with gaps ≥ 5 indices. Plan 11 defines no internal AST node for sparse sequence literals. Plan 12 does not mention gap detection or the chunking threshold. There is no specified path from a `PSeqLit` frontend node with sparse indices through the internal AST to plan 29's `EmptyChunk`/`NonEmptyChunk` logic.
+
+- **[27:opaque Info chain order]** Plan 27 places `@opaque` as `ConsInfo(AnnotationInfo{"opaque",...}, NodeInfo{...})` on the Go Silver node. Plan 16's builder then prepends `gobra_node_id` and `gobra_node_*` annotations in front. The resulting Java Info chain has `@opaque` deep in the chain. If Silicon's `@opaque` handling searches only the chain head (not recursively), the annotation is silently ignored. The plan does not confirm Silicon's chain-search behavior.
+
+#### MINOR
+
+- **[33:ChopBound + z3APIMode interaction]** `cfg.ChopBound = &n` (where `n = cfg.Workers`) is set at flag-parse time, before `--z3APIMode` forces poolSize to 1. With `--workers 4 --chop --z3APIMode`, the chopper produces up to 4 sub-programs while only 1 worker exists. Functionally correct (serial) but documents a counterintuitive interaction not addressed in the plan.
+
+- **[04:ParseFile nil-key C9 postcondition]** `//@ ensures forall k *frontend.PBlockStmt :: k != nil ==> acc(k) && acc(annotations[k])` excludes the nil key (file-scope annotations). The Gobra spec does not account for `annotations[nil]`, leaving the nil-key permission unspecified.
+
+---
+
+### Design concerns
+
+- **[08] `GhostType extends types.Type`**: Ghost types satisfy `types.Type` and can be passed anywhere `types.Type` is expected. Any `go/types` utility that tries to type-switch on concrete `*types.Named` / `*types.Slice` etc. will get an unhandled case or panic. A separate `GhostType` interface (not extending `types.Type`) with explicit adapters at boundary points would be safer.
+
+- **[07] `PackageInfo.Files` alongside `Package`**: Having both `Files []*frontend.PFile` and `Package *frontend.PPackage` in `PackageInfo` creates ambiguity. The plan calls `Package` authoritative but retains `Files` for diagnostics. Any code that uses `Files` for type-checking or desugaring is a bug; this must be stated explicitly.
+
+- **[15:JVM singleton + test isolation]** If `Start()` fails in one test (bad JDK path), `jvmErr` is set permanently for the binary. Subsequent tests that call `Start()` with correct config get the old error. Test isolation for JVM startup failures is impossible. Document that each test binary gets at most one JVM configuration attempt.
+
+- **[33:flag package + conflicting short-circuit flags]** Plan 33 never specifies precedence for `--parseOnly`, `--typeCheckOnly`, and `--noVerify` when passed simultaneously. The Scala `GobraConfig` handles this; plan 33 should specify the precedence.
+
+- **[29:ADT mutual recursion]** Plan 29's rank axiom for termination handles direct recursion. For mutually recursive ADTs (A references B references A), a rank function over a single type cannot express the inter-type decrease. The plan does not address mutual recursion in ADTs.
+
+---
+
+### Simplifications / improvements
+
+- **[19/08] Name mangling reserved patterns missing from plan 08's unsupported-constructs list**: Plan 19 says the type checker must reject identifiers matching `_u[0-9A-F]{1,6}_` and names beginning with `gobra__`. Plan 08's unsupported-constructs section does not list these. They should be added to plan 08 for self-containment.
+
+- **[01] Create `KNOWN_LIMITATIONS.md` in project setup**: Plans 20, 27, and 28 all independently try to create/append to this file. Creating it in plan 01 as an empty file eliminates "create if absent" boilerplate in three plans.
+
+- **[10:Serialize stub test]** Plan 10's stubs have no test coverage. A smoke test asserting `Serialize()` returns a non-nil error and `DeserializeExternalTypeInfo` returns `ErrStaleCacheEntry` would guard the stub contract without requiring the real format.
+
+- **[37:cut-over checklist]** The checklist item "Phase 2 self-hosting verification succeeds" lacks a quantitative criterion. It should reference the blocking tier from the CI Gate Strategy section explicitly.
+
+- **[32a:Category names]** `Error` and `Warning` constants in `internal/diagnostic/` may shadow local error variables in files that also use the `errors` package. Consider `DiagError`, `DiagWarning`, `DiagInfo`.
+
+- **[35:UNEXPECTED_FAIL sentinel]** Plan 35 mentions that CI greps for `UNEXPECTED_FAIL:` lines but provides no explicit command or CI step. Plan 34 specifies the sentinel format; plan 35 should include the exact grep command in the CI job spec.
+
+---
+
+### New Active Blockers (to be resolved)
+
+The following items are BLOCKING and must be added to Section 3 of the scratchpad:
+
+1. **[CHOP-BOUND-CONTRADICTION — 16b vs 33]**: Plan 16b says `--chop` without bound → `nil` (unlimited). Plan 33 says → `workers`. One must be authoritative. Recommended: plan 16b's algorithm is correct (unlimited by default, bound only via `--chop-bound N`). Plan 33 should remove the `&n` default assignment.
+
+2. **[DEDUP-CIRCULAR-IMPORT — 17b]**: `Deduplicate` in `silicon/dedup.go` forces `jvm → silicon` import. Move to `internal/backend/dedup.go` (parent package).
+
+3. **[TYPE-DOMAIN-MAP — 24 vs 25]**: Map encoding references `comparableType` from the `Type` domain which is only emitted on first interface use. Plan 24 must trigger Type domain emission unconditionally on first map use.
+
+4. **[TYPEENCODING-UNDEFINED — 19]**: `TypeEncoding` interface return type of `Context.TypeEncoding()` is never defined. Must be defined in plan 19 (or a new plan) before plans 24 and 25 can be implemented.
+
+5. **[BACKEND-INTERFACE-UNDEFINED — 18]**: `Backend` interface promised by plan 18 is never defined anywhere.
+
+6. **[LOOP-INV-ROUTING-GAP — 07]**: `MergeGhostStatements` (plan 07) has no step routing `//@ invariant P` annotations to `PForStmt.Invariants`. Must add an explicit routing rule.
+
+7. **[THREADATTACHED-REDECL — 15b]**: Plan 15b's C9 redeclares `//@ pred ThreadAttached(jvm *JVM)` from plan 15. Must change to a reference, not a redeclaration.
 

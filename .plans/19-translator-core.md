@@ -72,7 +72,7 @@ from the desugarer.
 ## Deliverables
 
 - `internal/translator/context.go` — `Context` interface and implementation
-- `internal/translator/encoding.go` — `Encoding` interface
+- `internal/translator/encoding.go` — `Encoding` interface and `TypeEncoding` interface (see below)
 - `internal/translator/translator.go` — `Translate(prog *internal.Program, info *TypeInfo) (*silver.Program, error)`
 - `internal/translator/mangle.go` — name mangling utilities (see spec below)
 - `TupleDomain(n int) *silver.Domain` helper on `Context`: lazily emits (and caches) a Silver
@@ -252,6 +252,40 @@ and produce a cryptic failure downstream.
 **Relationship to coverage:** The catch-all is a runtime safety net, not a substitute for
 coverage analysis. Gaps should be discovered by auditing internal AST node types against the
 encoding plans before implementation, not by waiting for a panic in production.
+
+## `TypeEncoding` Interface Definition
+
+`TypeEncoding` is the interface returned by `ctx.TypeEncoding()`. It is implemented by the
+interface encoding module (plan 25). Any encoding module that needs to box/unbox values or
+reference the Silver `Type` domain calls through this interface.
+
+```go
+// TypeEncoding provides access to the Silver Type domain and boxing/unboxing helpers.
+// Implemented by the interface encoding (plan 25); exposed on Context.TypeEncoding().
+type TypeEncoding interface {
+    // TypeValue returns the Silver Type domain expression for Go type t.
+    // E.g., int_Type() for int, bool_Type() for bool, struct_Type_Foo() for struct Foo.
+    // Triggers Type domain emission (ensureTypeDomain) on first call.
+    TypeValue(t internal.Type) silver.Expr
+
+    // BoxValue boxes a value of Go type T into Poly[T].box(val), for use in interface encoding.
+    // Requires that the Silver Type domain has already been emitted (call TypeValue first).
+    BoxValue(ctx *Context, val silver.Expr, T internal.Type) silver.Expr
+
+    // UnboxValue unboxes a Ref into a value of Go type T via Poly[T].unbox(val).
+    // Caller is responsible for establishing dynType(iface) == TypeValue(T) before calling.
+    UnboxValue(ctx *Context, val silver.Expr, T internal.Type) silver.Expr
+
+    // EnsureTypeDomain forces emission of the global Type domain into the Silver program
+    // accumulator if it has not been emitted yet. Idempotent; safe to call from any encoding.
+    EnsureTypeDomain(ctx *Context)
+}
+```
+
+`TypeEncoding` is distinct from the general `Encoding` interface. `Context` holds one
+`TypeEncoding` implementation (the plan 25 module) and exposes it via `TypeEncoding()`. All
+other encoding modules call `ctx.TypeEncoding().TypeValue(t)` rather than importing plan 25
+directly, keeping the dependency graph a DAG through `Context`.
 
 ## Resolved Questions
 

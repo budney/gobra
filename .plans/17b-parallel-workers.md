@@ -140,7 +140,10 @@ Document this constraint in `--help` for both flags.
 
 - `internal/backend/jvm/dispatch.go` — `func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult`
   (WorkerPool expansion to configurable poolSize and Submit are delivered by plan 15b)
-- `internal/backend/silicon/dedup.go` — `Deduplicate([]VerificationError) []VerificationError`
+- `internal/backend/dedup.go` — `Deduplicate([]VerificationError) []VerificationError`
+  (package `backend`, not `silicon` — placing it in `silicon` would force `jvm → silicon`,
+  recreating the circular import resolved in plan 15b. Both `jvm/dispatch.go` and any future
+  carbon merge path import the parent `backend` package, which already holds `VerificationError`.)
 - `--workers N` CLI flag (plan 33 integration)
 - Tests:
   - Verify a 3-method Silver program with `--chop --workers 3`; confirm result matches
