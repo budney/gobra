@@ -173,3 +173,13 @@ tag constants are defined in `internal/reporting/tags.go` (owned by plan 32). En
 import `reporting.TagXxx` constants when constructing `NodeInfo`; the reporter imports the same
 constants for its dispatch table. No bare string literals for tags anywhere outside `tags.go`.
 See plan 32 for the full constant definitions and the canonical list of tags.
+
+### Verification Specifications (C9)
+
+The Silver IR generation module must prove structural validity:
+
+1. All factory functions for constructing `*silver.Program` or
+   `*silver.Expression` must enforce strict structural well-formedness
+   invariants (e.g., acyclic expression trees) via recursive
+   predicates.
+

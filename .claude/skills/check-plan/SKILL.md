@@ -12,6 +12,12 @@ broken.
 
 ## Setup
 
+0. PRE-FLIGHT BOUNDARY: Read `.plans/scratchpad.md` first. If a plan file passes all criteria in
+   `CRITERIA.md`, update its status checkbox in the scratchpad to
+   `[x] PASSED`. If it fails, update its status to `[ ] FAILED` and
+   append the detailed structural failure text directly into the
+   scratchpad's "Active Blockers / Contradictions" section so it
+   is preserved across execution turns.
 1. Read `.plans/CRITERIA.md` in full first — this is the authoritative checklist.
 2. Read `.plans/00-overview.md` to load the WBS, dependency graph, and cross-cutting notes.
 3. If `$ARGUMENTS` names specific files, check only those files against the criteria that apply

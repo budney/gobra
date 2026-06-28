@@ -142,3 +142,14 @@ concurrently with any JNI worker.
 compilation is limited to target platforms where a JVM is available. Document in the README:
 "Go-Gobra requires CGo and cannot be cross-compiled to platforms without JVM support. Set
 `CGO_ENABLED=1` (the default) when building."
+
+### Synchronization Contract (C7)
+
+1. Operating System Thread Lock: Every Go function initializing or invoking a JNI call must explicitly execute `runtime.LockOSThread()` before interacting with the `jnigi` environment.
+2. JVM Attach/Detach Lifecycle: All entry points must utilize a `defer` block ensuring the current OS thread is cleanly detached from the JVM upon function exit.
+3. Global Instance Mutex: Access to the initialized JVM instance pointer must be guarded by a package-level sync.Once or sync.Mutex.
+
+### Verification Specifications (C9)
+
+1. The JNI bridge package must formally specify thread state. It must use Gobra thread-ownership permissions to prove that an un-locked or un-attached thread can never issue a raw call to the JVM helper (`SilverBridge.java`).
+

@@ -45,6 +45,11 @@ For each document (or across documents when doing a full review), evaluate:
 
 ## How to conduct the review
 
+0. BEFORE READING TARGET FILES: Open and read `.plans/scratchpad.md`.
+   Check Section 1 for Active Global Constraints. If any file you are
+   reviewing violates a constraint listed there, immediately mark it
+   as a high-severity "Design Concern" or "Logic Error" in your findings
+   and log the conflict in Section 3 of the scratchpad.
 1. Read `.plans/00-overview.md` first to load the WBS and resolved architectural decisions.
 2. Read each targeted plan file fully before commenting on it.
 3. When you spot an issue, note the specific file and section, quote the relevant text, and

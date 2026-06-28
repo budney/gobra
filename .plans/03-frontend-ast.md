@@ -13,6 +13,7 @@ type checker.
 - Source position tracking (`token.Pos` or a wrapper) on every node
 - Node categories: declarations, statements, expressions, types, specifications, ghost constructs
 - Visitor/walker interface for traversal (used by type checker and desugarer)
+- Definition of formal Gobra ghost fields or predicates tracking memory ownership of wrapped go/ast nodes.
 
 **Out of scope:**
 - Parsing logic (04-go-parser.md, 05-annotation-parser.md)
@@ -235,3 +236,12 @@ type PForStmt struct {
 
 `PRangeStmt` follows the same pattern. The body's `PBlockStmt` contains only statements
 inside the braces, not the invariants.
+
+### Verification Specifications (C10)
+
+All AST traversal methods and wrapper lookups must include
+pre/postconditions (`//@ requires`/`//@ ensures`) proving:
+
+1. Non-nil pointer validity for embedded `go/ast` fields via access permissions (`acc(node.Underlying)`).
+2. Deep structural immutability invariants during read-only transformation passes.
+

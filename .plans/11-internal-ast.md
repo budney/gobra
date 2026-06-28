@@ -91,3 +91,12 @@ internal AST handed to the translator, and the translator has no encoding for it
 `Tuple` node reaches the translator, it is a desugarer bug (panic, do not silently drop it).
 `TupleT` is similarly transient. Pure functions (`PureFunctionCall`, `PureMethodCall`) return
 a single value (Go's `pure` functions are restricted to a single non-error return).
+
+### Verification Specifications (C9)
+
+The Desugarer pipeline stage must formally specify its transformation
+contracts:
+
+1. `//@ ensures` predicates verifying that the returned internal AST structure matches the exact semantic shape expected as input by `14-silver-ast.md`.
+2. Data loss prevention: Loop invariants proving that type-casting or stripping sugar (like converting `switch` statements to nested `if` blocks) retains original source token position mapping.
+
