@@ -116,10 +116,10 @@
 - [x] **[STRUCT-MISMATCH]:** RESOLVED — canonical `VerificationResult` lives in `internal/backend/types.go` (plan 17 ownership). Plans 15 and 15b reference it; plan 15's local definition removed.
 - [x] **[OVERLOAD-ERR]:** RESOLVED — plan 15 delivers `WorkerPool` struct + `Stop()` skeleton only; `NewPool` explicitly owned by plan 15b with supersession noted.
 - [x] **[DIAGNOSTIC-LAYERING]:** RESOLVED — plan 04 deliverables now explicitly import from `internal/diagnostic/` (plan 32a) with a warning against importing `internal/reporting`.
-- [ ] 1**C1**: `scratchpad.md` present in `.plans/` but not listed in WBS or Reference Documents in `00-overview.md` (pre-existing). NOTE: `00-overview.md` Reference Documents table already includes `scratchpad.md` — this was resolved.
-- [ ] **C4** (00-overview.md): Cross-Cutting Notes says "defined in plan 32" for Diagnostic — should say "defined in plan 32a". Pre-existing; not in scope for this run.
-- [ ] **C5** (33): Dependencies omits `15b`; pre-existing. Not in scope for this run.
-- [ ] **C4** (17b): Objective incorrectly references plan 15's scope. Pre-existing; not in scope.
+- [x] 1**C1**: `scratchpad.md` present in `.plans/` but not listed in WBS or Reference Documents in `00-overview.md` (pre-existing). NOTE: `00-overview.md` Reference Documents table already includes `scratchpad.md` — this was resolved.
+- [x] **C4** (00-overview.md): Cross-Cutting Notes says "defined in plan 32" for Diagnostic — should say "defined in plan 32a". VERIFIED ALREADY CORRECT — line 140 reads "defined in plan 32a, `internal/diagnostic/`".
+- [x] **C5** (33): Dependencies omits `15b`; VERIFIED ALREADY CORRECT — line 67 includes `15b-worker-pool-expansion.md`.
+- [x] **C4** (17b): Objective incorrectly references plan 15's scope. VERIFIED ALREADY CORRECT — all Objective/Scope references use "plan 15b"; no bare "plan 15" references found.
 
 
 ### Current Target Files: 03, 11, 14, 15
