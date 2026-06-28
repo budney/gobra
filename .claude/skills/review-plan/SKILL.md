@@ -50,13 +50,17 @@ For each document (or across documents when doing a full review), evaluate:
    reviewing violates a constraint listed there, immediately mark it
    as a high-severity "Design Concern" or "Logic Error" in your findings
    and log the conflict in Section 3 of the scratchpad.
-1. Read `.plans/00-overview.md` first to load the WBS and resolved architectural decisions.
-2. Read each targeted plan file fully before commenting on it.
-3. When you spot an issue, note the specific file and section, quote the relevant text, and
-   explain the problem concisely.
-4. Group findings by dimension (Contradictions / Gaps / Logic Errors / Design / Simplifications).
-5. Within each group, order findings by severity: blocking > significant > minor.
-6. If `$ARGUMENTS` is empty, explicitly note which files you reviewed so the user knows the
+1. Streaming State: Do not wait until the entire command is finished to
+   output data. Write severe violations (Blockers/Contradictions)
+   to `.plans/scratchpad.md` immediately upon discovery before
+   processing the next file in the glob.
+2. Read `.plans/00-overview.md` first to load the WBS and resolved architectural decisions.
+3. Read each targeted plan file fully before commenting on it.
+4. When you spot an issue, note the specific file and section, quote the relevant text, and
+5  explain the problem concisely.
+6. Group findings by dimension (Contradictions / Gaps / Logic Errors / Design / Simplifications).
+7. Within each group, order findings by severity: blocking > significant > minor.
+8. If `$ARGUMENTS` is empty, explicitly note which files you reviewed so the user knows the
    scope was complete.
 
 ## Output format

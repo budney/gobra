@@ -38,6 +38,11 @@ text is silent, that is a FAIL, not a PASS.
 When checking cross-file criteria (interface consistency, dependency graph, data flow), read
 all relevant files before rendering a verdict — do not rely on memory of earlier reads.
 
+Streaming State: Do not wait until the entire command is finished
+to output data. Write severe violations (Blockers/Contradictions)
+to `.plans/scratchpad.md` immediately upon discovery before processing
+the next file in the glob.
+
 ## Output format
 
 ```

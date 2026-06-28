@@ -73,3 +73,11 @@ Note that `silver` is a submodule of both `carbon` and `silicon`. The respective
 ## Parser Regeneration
 
 The ANTLR4 parser is auto-generated before compilation via `genparser.sh`. Generated files land in `.genparser/`. Usually handled automatically by SBT; run `genparser.sh --download` manually if needed.
+
+# Agent Memory Protocol (Critical)
+
+- You have an active, physical scratchpad at `.plans/scratchpad.md`.
+- You are strictly FORBIDDEN from keeping state in your chat context.
+- Every time you finish a sub-task, find a bug, or modify a plan file, your very next tool call must be to append to, edit, or check off items inside `.plans/scratchpad.md`.
+- Treat the scratchpad as a transactional database: log the change on disk first, then proceed to the next file.
+
