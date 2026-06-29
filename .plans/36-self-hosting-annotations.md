@@ -17,7 +17,7 @@ intellectual heart of the self-hosting milestone.
   - JNI backend: resource safety (JVM is started before any JNI calls)
 - Write ghost helper functions and predicates as needed (e.g., `ValidAST(n Node) bool`)
 - Annotate data structure invariants (e.g., scope chain properties, Silver program properties)
-- Ghost fields on structs where needed (if Go-Gobra's annotation language supports them)
+- Ghost fields on structs where needed — ghost fields are a first-class Gobra annotation feature (full parity per D5); plan 05 implements ghost field syntax in the annotation parser. If a ghost field cannot be expressed with the current Go-Gobra parser, treat it as an annotation language gap per D11 and document it in `SELF_HOSTING.md`.
 - Prioritize: start with the simplest modules (CLI, reporter, Silver printer) and work up
   to the hardest (type checker, translator)
 

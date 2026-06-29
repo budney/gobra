@@ -67,3 +67,33 @@ Plan 09 receives the same `*TypeInfo` pointer returned by plan 08 and mutates `i
 directly — no type assertion or interface casting needed, because `TypeInfo` is a concrete
 struct. This matches the current Gobra architecture and avoids complicating the core type
 checker with spec-specific rules.
+
+## Verification Specifications (C9)
+
+```go
+// CheckSpecs pre/postcondition:
+//@ requires pkg != nil && info != nil && info.Go != nil
+//@ ensures  len(result) >= 0
+//@ ensures  forall i int :: 0 <= i && i < len(result) ==> result[i] != (Diagnostic{})
+//@ ensures  len(result) == 0 ==> (info.Ghost != nil)
+//@ decreases
+func CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) (result []Diagnostic)
+```
+
+**Contracts:**
+- `CheckSpecs` requires `info != nil` and `info.Go != nil`; calling before plan 08's `Check` completes is a precondition violation.
+- If `CheckSpecs` returns a non-empty diagnostics slice, `info.Ghost` may be partially populated; callers must not use `info.Ghost` if any diagnostics have `Category == DiagError`.
+- Result slice is never nil; an empty slice (not nil) is returned when no errors are found.
+
+**Spec-scope balance invariant**: Every quantifier bound-variable scope opened during spec traversal must be closed before `CheckSpecs` returns. Formally, the scope depth counter satisfies:
+
+```go
+//@ invariant scopeDepth >= 0
+//@ ensures   scopeDepth == 0   // no open scopes on exit
+```
+
+**Incremental-fill postcondition** (matches plan 08 C9 contract): `info.Ghost` fields are filled monotonically — once set for a node they are never cleared. This allows callers to partially consume `info.Ghost` while `CheckSpecs` is still running (e.g., parallel spec checking of independent packages).
+
+```go
+//@ ensures forall n PNode :: old(info.Ghost[n]) != nil ==> info.Ghost[n] == old(info.Ghost[n])
+```

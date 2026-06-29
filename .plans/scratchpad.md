@@ -7,7 +7,7 @@
 ### Package Ownership
 | Package / Artifact | Owner Plan |
 |---|---|
-| `internal/ast/frontend/` (PNode, PDecl, PStmt, PGoStmt, PBlockStmt, PFile, PFuncDecl, PMethodDecl, PTypeDecl, PForStmt, PRangeStmt, etc.) | 03 |
+| `internal/ast/frontend/` (PNode, PDecl, PStmt, PGoStmt, PBlockStmt, PFile, PFunctionDecl, PMethodDecl, PTypeDecl, PForStmt, PRangeStmt, PLoopSpec, PBodyParameterInfo, PReceiver, PFunctionSpec, Visitor, etc.) | 03 |
 | `Visitor` interface (frontend) | 03 |
 | `internal/ast/internal/` (Method, Function, FPredicate, Expr, Stmt, etc.) | 11 |
 | `Visitor` interface (internal) | 11 |
@@ -25,7 +25,7 @@
 | Stage | Input Type | Output Type | Error Type |
 |---|---|---|---|
 | Go Parser (04) | `string` (file path) | `*PFile` | `[]Diagnostic` |
-| Annotation Parser (05) | `string` (comment text) | `[]PNode` | `[]Diagnostic` |
+| Annotation Parser (05) | `string` (comment text) + `token.Pos` (base) + `bool` (isFileScope) | `([]PNode, []PDecl)` | `[]Diagnostic` |
 | Package Resolver (07) | `[]string` (paths) | `[]*PFile` | `[]Diagnostic` |
 | Type Checker (08) | `*frontend.PPackage` + `types.Importer` | `*TypeInfo` | `[]Diagnostic` |
 | Desugarer (12) | `*frontend.PPackage` + `*TypeInfo` | `*internal.Program` | `[]Diagnostic` |
@@ -125,10 +125,22 @@
 ### Current Target Files: 03, 11, 14, 15
 | File | Phase 2 Injected | Review Status | Check Status |
 |---|---|---|---|
-| 03-frontend-ast.md | NEEDS FIX (C10→C9) | DONE | [x] PASSED |
+| 03-frontend-ast.md | NEEDS FIX (C10→C9) | DONE | [x] PASSED (post round-4 fixes) |
 | 11-internal-ast.md | YES (C9 present) | DONE | [x] PASSED |
 | 14-silver-ast.md | YES (C9 present) | DONE | [x] PASSED |
 | 15-jni-setup.md | YES (C7+C9 present) | DONE | [x] PASSED |
+
+### Check-Plan Results (00, 01, 02, 03 — post round-4 remediations)
+| File | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 |
+|---|---|---|---|---|---|---|---|---|---|
+| 00-overview.md | ✓ | N/A | N/A | **FAIL** (PAssertion stale) | N/A | N/A | N/A | N/A | N/A |
+| 01-project-setup.md | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A |
+| 02-annotation-syntax-decision.md | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A |
+| 03-frontend-ast.md | ✓ | ✓ | ✓ | ✓ | ✓ | N/A | N/A | ✓ | ✓ |
+
+**C4 FAIL — 00-overview.md:Unblocked Work** line: "the parser produces 03's node types — `PFunctionSpec`, `PAssertion`, etc." — `PAssertion` was removed from plan 03 (replaced by `PExpression`). Fix: change `PAssertion` to `PExpression` in that sentence.
+
+**Stale scratchpad registry (informational, not a plan-file failure):** Registry line 10 still says `PFuncDecl`; should be `PFunctionDecl`. Fix registry entry.
 
 ### Issues Found in Phase 2 Audit
 1. **03-frontend-ast.md line 241**: `### Verification Specifications (C10)` — wrong criterion number; **FIXED** (renamed to C9).
@@ -560,4 +572,303 @@ The following items are BLOCKING and must be added to Section 3 of the scratchpa
 6. **[LOOP-INV-ROUTING-GAP — 07]**: `MergeGhostStatements` (plan 07) has no step routing `//@ invariant P` annotations to `PForStmt.Invariants`. Must add an explicit routing rule.
 
 7. **[THREADATTACHED-REDECL — 15b]**: Plan 15b's C9 redeclares `//@ pred ThreadAttached(jvm *JVM)` from plan 15. Must change to a reference, not a redeclaration.
+
+---
+
+## 7. REVIEW-PLAN FULL-AUDIT RESULTS (Round 3)
+
+*Full audit of all 41 plan files (00–37 plus 32a, 15b, 16b, 17b). Run date: 2026-06-28 (third pass — post all 40 prior remediations).*
+
+### New Contradictions
+
+None found.
+
+---
+
+### New Gaps
+
+#### SIGNIFICANT
+
+- **[09, 10, 13, 26, 31: missing C9 sections]** Five plans with no `## Verification Specifications (C9)` section:
+  - `09-type-checker-specs.md` (plan 09): `CheckSpecs(pkg, info) []Diagnostic` — no C9
+  - `10-type-checker-multipackage.md` (plan 10): `ExternalTypeInfo` interface / `Importer` — no C9
+  - `13-internal-transforms.md` (plan 13): `Apply(prog, cfg) (*internal.Program, []Diagnostic)` — no C9
+  - `26-encoding-permissions.md` (plan 26): permission encoding functions — no C9
+  - `31-encoding-builtins.md` (plan 31): stub copy / embed — no C9
+  C9 is required for all pipeline component plans per the WBS audit criteria.
+
+#### MINOR
+
+- **[37 vs 02/05: BNF authorship unassigned]** Plan 37's cut-over checklist lists as a hard gate: "Annotation grammar sketch is complete in `02-annotation-syntax-decision.md` (a `## Annotation Grammar` section with full BNF/EBNF coverage)." Plan 02 says "grammar sketch is a blocking deliverable of plan 05." Plan 05 defines the annotation parser implementation but has no instruction to write the BNF back into plan 02's document. The ownership of populating plan 02's `## Annotation Grammar` section is unassigned.
+
+- **[37: Scala release tagging unowned]** Plan 37's cut-over checklist requires "Last Scala release is tagged (e.g., `v0.9.9-scala-final`) before the cut-over commit." This is a meta-project action not owned by any WBS entry. No plan says "create the final Scala release tag."
+
+---
+
+### New Logic Errors
+
+None found.
+
+---
+
+### New Design Concerns
+
+- **[36: ghost fields language support uncertain]** Plan 36 writes "Ghost fields on structs where needed (if Go-Gobra's annotation language supports them)." Ghost fields are a first-class Gobra annotation feature; support should be a known fact (not conditional). If ghost fields are unsupported in Go-Gobra's annotation subset, this should be flagged as a known limitation now rather than discovered during annotation work.
+
+---
+
+### Persistent Open Items (unremediated across all three rounds)
+
+The following items were identified in prior rounds, assigned remediation items, but the items
+were marked DONE in the scratchpad while the underlying plan-file text was NOT updated. They
+remain open deficiencies in the plan documents:
+
+| Item | Plans | Category | Severity |
+|------|-------|----------|----------|
+| `@opaque` ConsInfo chain depth — Silicon search behavior unconfirmed | 27, 16 | Gap | Significant |
+| `FunctionTable` interface undefined | 19 | Gap | Minor |
+| Plan 30 generics audit fields stale (blocking plan 36) | 30 | Simplification | Blocking |
+| Reserved identifier rejection missing from unsupported-constructs list | 08, 19 | Simplification | Minor |
+| `Error`/`Warning` constant names shadow errors idiom | 32a | Simplification | Minor |
+| Go toolchain version constraint missing from CI spec | 07, 37 | Contradiction | Significant |
+| `PackageInfo.Files` vs `Package` field ambiguity | 07 | Design | Minor |
+| JVM singleton breaks test isolation | 15 | Design | Minor |
+| `--parseOnly`/`--typeCheckOnly`/`--noVerify` simultaneous precedence | 33 | Design | Minor |
+| ADT mutual recursion (rank axiom requires rank$F on recursive field type F) | 29 | Design | Minor |
+| `--chop-bound` + `z3APIMode` interaction not documented | 33 | Logic | Minor |
+| `-parallel` vs `--workers` memory interaction not documented | 34 | Design | Minor |
+| `PDecl` compile-time enforcement absent from annotation parser | 05, 07 | Design | Minor |
+
+### Issues Found in /review-plan (01-project-setup.md — Round 4)
+
+#### GAPS
+- **[01: `internal/diagnostic/` missing from directory skeleton]** Plan 32a (Group 0 peer) owns `internal/diagnostic/`. Plan 01's Directory Layout section shows `internal/backend/`, `internal/silver/`, etc. but omits `internal/diagnostic/`. Developers who implement plan 01 before plan 32a won't know where the shared diagnostic package lives. The skeleton should list every first-level `internal/` package that will exist, even if the Go source is created by a peer plan.
+- **[01: `KNOWN_LIMITATIONS.md` absent from deliverables]** Plans 20, 27, and 28 all independently create-or-append to `KNOWN_LIMITATIONS.md`. Round 1 Simplifications flagged this as an improvement ("Creating it in plan 01 as an empty file eliminates 'create if absent' boilerplate in three plans"). Still unremediated.
+- **[01: Go minimum version not pinned]** CONTEXT.md says "Go 1.21+" but plan 01 does not specify which `go` directive to write in `go.mod`. Implementers may use any version; CGo API and `go/ast` generics support require at minimum Go 1.21.
+- **[01: CI branch triggers undefined]** Plan 01 says "GitHub Actions CI stub for the Go build (separate job from the existing Scala CI job)" but does not specify which branches or events trigger the Go CI job. Development is on `self-hosting`; if the CI stub only fires on `master`/`main` (matching the Scala CI pattern), the Go job never runs during active development.
+
+#### DESIGN CONCERNS
+- **[01: Makefile vs `just`-file undecided]** Plan 01 lists "Makefile or `just`-file" without resolving which. Subsequent plan developers writing `make build` vs `just build` in their documentation will make incompatible assumptions.
+- **[01: License header config may not cover `gobra-go/`]** Plan 01 says "reuse the viperproject MPL-2.0 setup." The existing `.github/license-check/config.json` was written for the Scala project (likely targets `src/**/*.scala`). Plan 01 must explicitly extend or amend the config to include `gobra-go/**/*.go`; otherwise the license check passes trivially while `.go` files go unlicensed.
+
+#### SIMPLIFICATIONS
+- **[01: Pre-create `KNOWN_LIMITATIONS.md`]** (pre-existing open item from Round 1 — still unremediated in plan 01)
+- **[01: Add `internal/diagnostic/` to directory layout]** Even though plan 32a creates the package, listing it in plan 01's Directory Layout makes the skeleton self-describing and prevents confusion during parallel implementation.
+
+### Issues Found in /review-plan (05-annotation-parser.md — Round 5)
+
+#### ALL ISSUES FIXED — Round 5, Plan 05
+- ~~PAssertion stale ×3~~ DONE
+- ~~Concat/prefix ownership contradiction~~ DONE (plan 04 owns; plan 05 updated)
+- ~~Ghost types unowned~~ DONE (plan 05 now claims all ghost AST types in internal/ast/frontend/)
+- ~~Inline types undefined~~ DONE (PGhostArgs, PGhostResult, PGhostAssign, PUnfolding added to plan 05 scope)
+- ~~invariant missing from coverage~~ DONE
+- ~~C9 missing~~ DONE (added with 4 specs)
+- ~~Visitor extension unmentioned~~ DONE (added to In-scope)
+- ~~PDecl runtime panic~~ DONE (split return: nodes []PNode, decls []PDecl, isFileScope bool param)
+- ~~Operator precedence unverified~~ DONE (verification gate table added)
+- ~~Ghost fields/methods/return values missing from coverage~~ DONE
+- ~~Scratchpad I/O registry stale~~ DONE
+
+### Issues Found in /review-plan (04-go-parser.md — Round 5)
+
+#### CONTRADICTIONS (BLOCKING) — ALL FIXED
+- ~~**[04:Deliverables vs 03:Type Definitions — RAWANNOTATION-CASE]** Exported `RawAnnotation` in plan 03; plan 04 uses `frontend.RawAnnotation`.~~ DONE
+- ~~**[04:Deliverables vs 03:PFile — ANNOTATION-MAP-OWNERSHIP]** Plan 04 now populates `pfile.BlockAnnotations` directly; separate map return value dropped.~~ DONE
+
+#### GAPS (BLOCKING) — ALL FIXED
+- ~~**[04:Deliverables — FSET-MISSING]** Added `fset *token.FileSet` parameter; plan 07 owns the FileSet.~~ DONE
+- ~~**[04:Scope — PARSER-FLAGS-INCOMPLETE]** Added `parser.AllErrors` to mode flags.~~ DONE
+
+#### GAPS (SIGNIFICANT) — ALL FIXED
+- ~~**[04 vs 03/07 — LOOPSPEC-ANNOTATION-ROUTING]** Documented loop-spec placement convention in plan 04 In-scope.~~ DONE
+- ~~**[04:C9 — DECREASES-MISLEADING]** Changed to `//@ decreases` (no args) with explanatory comment.~~ DONE
+
+### Issues Found in file-by-file audit (plan 07) — ALL FIXED
+- ~~**[07:Deliverables step 2 — STALE-PARSEFILE-SIG]**~~ DONE — Updated to `ParseFile(fset, filename, preprocessedBytes)` returning `(*PFile, []Diagnostic)`; added fset creation note.
+- ~~**[07:Deliverables step 3 — STALE-PARSEANNOTATION-SIG]**~~ DONE — Updated to `ParseAnnotation(raw.Text, raw.Pos, key==nil)` with split return `(nodes, decls, diags)` and routing.
+- ~~**[07:Deliverables Rule A — PLOOPSPEC-FIELD]**~~ DONE — Changed to `PForStmt.Spec.Invariants` throughout.
+- ~~**[07 C9 missing]**~~ DONE — Added C9 section with 4 specs.
+
+### Issues Found in file-by-file audit (plan 16b)
+- **[16b C9 — NON-GOBRA-SYNTAX]** `//@ ensures forall sp in result :: sp != nil` uses Python-style `in` keyword (×2). Gobra quantifiers require an explicit type. Rewrite with proper syntax.
+
+### Issues Found in file-by-file audit (plans 23, 24, 27, 28, 30)
+- **[23, 24, 27, 28 — C9 MISSING]** Plans 23-encoding-slices, 24-encoding-maps, 27-encoding-methods, 28-encoding-channels have no `## Verification Specifications (C9)` section. All four are pipeline component plans that emit Silver; C9 is required.
+- **[30 — C9 MISSING]** Plan 30-encoding-generics has no C9 section. (Also has stale audit fields per prior round.)
+- **[29 C9 — NON-GOBRA-SYNTAX]** `//@ ensures forall i int :: i in sourceIndices(lit) ==> ...` uses Python-style `in` keyword. Same issue as plans 08, 12, 19. Rewrite with proper Gobra quantifier syntax (e.g., `sourceIndices(lit)[i]` or a predicate-based bound).
+
+### Issues Found in file-by-file audit (plan 19)
+- **[19 C9 — NON-GOBRA-SYNTAX]** `//@ invariant forall n int :: n in c.tupleDomainCache ==> ...` uses Python-style `in` keyword — same issue as plans 08, 12. Rewrite with proper Gobra quantifier syntax.
+- **[19 Deliverables — FUNCTIONTABLE-UNDEFINED]** `FunctionTable` is listed in Scope as a deliverable but has no interface definition, method list, or description anywhere in plan 19. (Pre-existing open item from Round 2 — still unremediated.)
+
+### Issues Found in file-by-file audit (plan 13)
+- **[13 C9 — TRIPLE-NOT-EQUAL]** `//@ ensures result !== prog` uses JavaScript `!==` syntax. Go/Gobra uses `!=` for pointer inequality. Change to `result != prog`.
+- **[13 C9 — NODECOUNT-UNDEFINED]** `result.NodeCount()` and `prog.NodeCount()` are used in C9 specs but no `NodeCount()` method is defined in plan 11 or 13. Needs a ghost method definition.
+
+### Issues Found in file-by-file audit (plan 12)
+- **[12 C9 — NON-GOBRA-SYNTAX]** `//@ invariant forall v in introduced :: v.Name != ""` uses Python-style `in` keyword — same issue as plan 08. Gobra quantifiers require an explicit type, not `in collection`. Rewrite with proper quantifier syntax.
+
+### Issues Found in file-by-file audit (plan 10)
+- **[10 C9 — NESTED-CALL-IN-POSTCOND]** `//@ ensures err == nil ==> { r2, e2 := eti.Serialize(); e2 == nil && bytes.Equal(r2, result) }` — Gobra does not support `{ stmt; expr }` blocks inside postconditions. Rewrite as a separate pure helper function or use a quantifier-free formulation. Minor before implementation.
+
+### Issues Found in file-by-file audit (plan 09)
+- **[09 C9 — GHOSTTYPEINFO-NIL-COMPARE]** `//@ ensures len(result) == 0 ==> (info.Ghost != nil)` — `GhostTypeInfo` is a struct (plan 08), not a pointer or interface; comparing a struct to `nil` is a compile error. Should be `info.Ghost.Resolved()` (consistent with plan 08 C9) or drop the condition.
+- **[09 C9 — GHOST-MAP-ACCESS]** `//@ ensures forall n PNode :: old(info.Ghost[n]) != nil ==> info.Ghost[n] == ...` uses `info.Ghost[n]` but `GhostTypeInfo` is a struct, not a map. The field is `info.Ghost.Types[n]` (or whatever the field is named). Fix to access the inner map.
+- **[09 C9 — SCOPEDEPTH-UNDECLARED]** `//@ invariant scopeDepth >= 0` and `//@ ensures scopeDepth == 0` reference a variable `scopeDepth` not declared as a ghost variable anywhere in the C9 section. Must be declared as a ghost local or ghost field for the spec to be valid.
+- **[09 Deliverables — THIN]** Deliverables section lists only "Extension of TypeInfo" with no concrete types, functions, or file paths. The extension must at minimum declare how `GhostTypeInfo` is populated and the full list of spec-AST node types handled. Minor compared to other gaps.
+
+### Issues Found in file-by-file audit (plan 08)
+- **[08 C9 — NON-GOBRA-SYNTAX]** `//@ ensures forall t in ghostTable.Values() :: !t.IsStub()` uses Python-style `in` keyword. Gobra quantifiers require explicit type: `forall t GhostType :: ...`. Also `ghostTable` is an unexported local — cannot appear in a function-level annotation as written. Minor — fix syntax before implementation.
+- **[08 Deliverables — MISSING-METHOD-DEFS]** `IsStub() bool` (on `GhostType`) and `Resolved() bool` (on `GhostTypeInfo`) are referenced in C9 specs but never declared in any Deliverables or the ghost types table. Must be added to `internal/info/ghosttypes.go`.
+- **[08 Deliverables — ADTCONSTRUCTOR-UNDEFINED]** `ADTConstructor` struct appears in the `GhostType` table (`ADTType{Name, Constructors []ADTConstructor}`) but has no definition or field list anywhere in any plan.
+
+### Issues Found in file-by-file audit (plan 03) — ALL FIXED
+- ~~**[03:Deliverables line 68 — STALE-PARSEANNOTATION-RETURN]**~~ DONE — Updated comment to say `ParseAnnotation(isFileScope=true)` returns file-scope nodes in `decls []PDecl`; no type assertion needed.
+- ~~**[03:Deliverables lines 76-78 — STALE-TYPEASSERT-PANIC]**~~ DONE — Removed type-assertion panic description; replaced with "plan 07 receives decls []PDecl directly."
+
+### Issues Found in /review-plan (03-frontend-ast.md — Round 4)
+
+#### CONTRADICTIONS / LOGIC ERRORS (BLOCKING)
+- **[03: PFunctionDecl vs PFuncDecl naming]** "Key AST Node Families" and "Deliverables" both say `PFunctionDecl`; "Design Decisions (D10)" and "C9" both say `PFuncDecl`. Two different names for the same type. Downstream plans (04, 07, 08, 12) that reference either name will not compile against an implementation that chose the other. Must pick one canonical name.
+- **[03: PGoStmt value receiver vs VisitPGoStmt(*PGoStmt)]** `PGoStmt` uses value receivers (`func (PGoStmt) pStmt()`, `func (s PGoStmt) Pos()`), so `PStmt` interface is satisfied by `PGoStmt` values. `PBlockStmt.Stmts []PStmt` holds boxed `PGoStmt` values. Visitor says `VisitPGoStmt(*PGoStmt)` — type-asserting a boxed `PGoStmt` value to `*PGoStmt` fails at runtime. Either convert `PGoStmt` to pointer receivers (stored as `*PGoStmt` in the slice) or change the Visitor method to `VisitPGoStmt(PGoStmt)`.
+
+#### GAPS (SIGNIFICANT)
+- **[03:Traversal Model — RAW-ANNOTATION-TABLE-UNDEFINED]** "Plan 04's `ParseFile` returns `PBlockStmt` nodes... plus a per-block side-table of raw `//@ ` annotation strings." Plan 07 consumes these strings; plan 04 must write them. But `PBlockStmt` has only `Stmts`, `Lbrace`, `Rbrace` — no field for raw annotation strings. `PFile` has `GoFile` and `GhostDecls` — no field either. The side-table has no home in the type definitions. Must add a field (e.g., `RawAnnotations []string` on `PBlockStmt`, or `BlockAnnotations map[*PBlockStmt][]string` on `PFile`).
+- **[03:Deliverables — PASSERT-UNDEFINED]** `PAssertion` is used in `PForStmt.Invariants []PAssertion` and the C9 predicate but is never defined. Is it an interface? A struct? Downstream plans (05, 07, 09) produce and consume it.
+- **[03:Deliverables — PFUNCTIONSPEC-UNDEFINED]** `PFunctionSpec` is named as a type wrapped by `PFuncDecl`/`PMethodDecl` and listed as containing preconditions, postconditions, termination measures, ghost params/results — but its fields are never defined. Downstream plans (05, 08, 09, 12) must agree on the field names.
+- **[03:Deliverables — PRECEIVER-UNDEFINED]** `PReceiver` is named as the type of the `PMethodDecl.receiver` field but its fields are never specified.
+- **[03:Design Decisions — RECEIVER-UNEXPORTED]** DECISIONS.md D10 and plan 03 both refer to the field as `receiver` (lowercase). Since `PMethodDecl` lives in `internal/ast/frontend/` and is consumed by `internal/info/` (type checker) and `internal/desugar/` (desugarer), the field is inaccessible across packages. Must be exported as `Receiver *PReceiver`.
+- **[03:Deliverables — VISITOR-METHOD-SET-ABSENT]** The Visitor interface is a central deliverable consumed by plans 08 and 12 yet its full method set is never listed. Without it, the type checker and desugarer implement their visitors independently and may disagree on method signatures.
+
+#### NEW REMEDIATION QUEUE (Round 4 — plan 03)
+
+**Decisions recorded (from Q&A, 2026-06-28):**
+- Item 60: Use `PFunctionDecl` (Scala-consistent; overrides original recommendation of `PFuncDecl`). Update D10 in DECISIONS.md to match.
+- Item 61: Use `*PGoStmt` pointer receivers throughout; `PBlockStmt.Stmts []PStmt` stores `*PGoStmt`. Pointer chosen because Gobra `acc(n, 1/2)` specs require a heap location.
+- Item 62: Side table goes on `PFile` as `BlockAnnotations map[*PBlockStmt][]rawAnnotation`. `rawAnnotation` struct (`Text string`, `Pos token.Pos`) defined in plan 03 (owned by `PFile`). `PBlockStmt` stays clean, no two-phase lifecycle. Nil'd by plan 07 after merge.
+- Item 63: No separate `PAssertion` type. Use `PExpression` directly everywhere (matches Scala — Gobra has no separate assertion trait). `PForStmt.Invariants []PExpression`.
+- Item 64: Clause-based `PFunctionSpec` matching Scala exactly: `Clauses []PFunctionSpecClause`, `TerminationMeasures []PTerminationMeasure`, `BackendAnnotations []PBackendAnnotation`, `IsPure/IsTrusted/IsOpaque/MayBeUsedInInit bool`. Computed `Pres()`/`Posts()` methods derived from clauses. `PFunctionSpecClause` is an interface with `PRequires`, `PEnsures`, `PPreserves`. `PTerminationMeasure` is an interface with `PWildcardMeasure` and `PTupleTerminationMeasure`.
+- Item 65: `PReceiver` is an interface with two implementations: `PNamedReceiver{ID *ast.Ident, Type PMethodRecvType, Addressable bool}` and `PUnnamedReceiver{Type PMethodRecvType}`. `PMethodRecvType` is an interface with `PMethodReceiveName`, `PMethodReceiveActualPointer`, `PMethodReceiveGhostPointer`. NOT a ghost-only extension — carries the full receiver definition.
+- Item 66: Export `Receiver *PReceiver` on `PMethodDecl`.
+- Item 67: Visitor covers wrapper types defined in plan 03; ghost expression types added by plan 05 in the same package (`internal/ast/frontend/`). No circular dependency.
+- **PLoopSpec (new)**: Embed `Spec PLoopSpec` as a named field on `PForStmt` and `PRangeStmt` (matches Scala). `PLoopSpec{Invariants []PExpression, TerminationMeasure *PTerminationMeasure}`. Cleaner for plan 07 (`MergeGhostStatements` sets one field) and plan 09 (type-checks spec as a unit).
+- **PBodyParameterInfo (new)**: Add `BodyParamInfo *PBodyParameterInfo` to both `PFunctionDecl` and `PMethodDecl`. `PBodyParameterInfo{ShareableParameters []*ast.Ident}` (tracks params declared `shared` in function body). Nil when no body or no shared params.
+
+~~60. **Fix `03-frontend-ast.md` (Contradiction — PFUNCDECL-NAME)**: Replace all occurrences of `PFuncDecl` in plan 03 and DECISIONS.md D10 with `PFunctionDecl`. This is the Scala-consistent name.~~ DONE
+~~61. **Fix `03-frontend-ast.md` (Logic — PGOSSTMT-RECEIVER)**: Convert `PGoStmt` to pointer-receiver semantics: `func (*PGoStmt) pStmt()`, `func (s *PGoStmt) Pos()`. `PBlockStmt.Stmts []PStmt` holds `*PGoStmt` values.~~ DONE
+~~62. **Fix `03-frontend-ast.md` (Gap — RAW-ANNOTATION-TABLE)**: Add `rawAnnotation` struct and `PFile.BlockAnnotations map[*PBlockStmt][]rawAnnotation` field. Update Traversal Model section to name the field and its lifecycle explicitly.~~ DONE
+~~63. **Fix `03-frontend-ast.md` (Gap — PASSERT-UNDEFINED)**: Remove `PAssertion` everywhere; replace with `PExpression`. Update `PForStmt.Invariants` and C9 predicate accordingly.~~ DONE
+~~64. **Fix `03-frontend-ast.md` (Gap — PFUNCTIONSPEC-UNDEFINED)**: Add full `PFunctionSpec`, `PFunctionSpecClause`, `PRequires`, `PEnsures`, `PPreserves`, `PTerminationMeasure`, `PWildcardMeasure`, `PTupleTerminationMeasure`, `PBackendAnnotation` definitions.~~ DONE
+~~65. **Fix `03-frontend-ast.md` (Gap — PRECEIVER-UNDEFINED)**: Add `PReceiver` interface, `PNamedReceiver`, `PUnnamedReceiver`, `PMethodRecvType` interface, `PMethodReceiveName`, `PMethodReceiveActualPointer`, `PMethodReceiveGhostPointer` definitions.~~ DONE
+~~66. **Fix `03-frontend-ast.md` (Gap — RECEIVER-UNEXPORTED)**: Rename `receiver` → `Receiver` (exported) in plan 03 and DECISIONS.md D10.~~ DONE
+~~67. **Fix `03-frontend-ast.md` (Gap — VISITOR-METHOD-SET)**: Add Visitor interface with one method per wrapper node type defined in plan 03.~~ DONE
+~~68. **Fix `03-frontend-ast.md` (Gap — PLOOPSPEC-MISSING)**: Add `PLoopSpec` struct. Change `PForStmt.Invariants []PExpression` to `Spec PLoopSpec`. Apply same change to `PRangeStmt`.~~ DONE
+~~69. **Fix `03-frontend-ast.md` (Gap — PBODYPARAMINFO-MISSING)**: Add `PBodyParameterInfo` struct. Add `BodyParamInfo *PBodyParameterInfo` to `PFunctionDecl` and `PMethodDecl`.~~ DONE
+
+### Issues Found in /review-plan (02-annotation-syntax-decision.md — Round 4)
+
+#### CONTRADICTIONS
+- **[02:Decision vs 00-overview WBS]** Plan 02 says "This unblocks 03-frontend-ast.md and 05-annotation-parser.md." Per the WBS plan 05 is blocked by BOTH 02 AND 03; resolving plan 02 removes one blocker from plan 05 but does not fully unblock it.
+- **[DECISIONS.md D4 vs 00-overview WBS]** D4 says "Plans 03, 04, and 05 are unblocked." Plan 04 is blocked by 03 AND 06; plan 05 is blocked by 02 AND 03. Neither 04 nor 05 is fully unblocked by D4 alone. `00-overview.md` handles this correctly; DECISIONS.md D4 overstates the effect.
+
+#### GAPS
+- **[02:Deliverables — ANNOTATION-GRAMMAR-STUB-MISSING]** The Deliverables section says plan 05 writes "into the `## Annotation Grammar` section of THIS file (see below)" but no such section heading exists in the file. Without the stub, plan 05 implementers have no structural anchor for where/how to write the grammar.
+- **[02:Deliverables — DECREASES-MISSING]** The required grammar coverage list omits `decreases` / termination annotations (`//@ decreases expr`), which is a core Gobra feature used for loop and function termination checking. Absent from the list, it could be silently skipped in plan 05's implementation.
+- **[02:Resolved Questions — INLINE-OWNER-WRONG]** "Document the full list [of inline annotation patterns] in plan 05." The regex patterns that recognize inline positional annotations are owned by the Gobrafier (plan 06), not the annotation parser (plan 05). Routing that documentation responsibility to plan 05 is incorrect.
+
+#### SIMPLIFICATIONS
+- **[02:Deliverables]** Add `decreases [expr]`, `assert`, `assume`, `inhale`, `exhale` to the grammar coverage list. These are standard Gobra/Viper keywords present in `GobraParser.g4` and used in the regression test suite.
+
+### New Remediation Queue (Round 4 — plan 01 only)
+
+#### SIGNIFICANT
+49. ~~**Fix `01-project-setup.md` (Gap — DIAGNOSTIC-DIR-MISSING)**: Add `internal/diagnostic/` to the Directory Layout section under `internal/`. Add a note that this directory's Go source is created by plan 32a but the directory is part of the project skeleton.~~ DONE
+50. ~~**Fix `01-project-setup.md` (Gap — KNOWN-LIMITATIONS-MISSING)**: Add `gobra-go/KNOWN_LIMITATIONS.md` (empty file) to Deliverables. Eliminates "create if absent" boilerplate in plans 20, 27, and 28.~~ DONE
+51. ~~**Fix `01-project-setup.md` (Gap — GO-VERSION-UNSPECIFIED)**: Add `go 1.21` directive to `go.mod` deliverable.~~ DONE
+52. ~~**Fix `01-project-setup.md` (Gap — CI-TRIGGERS-UNDEFINED)**: Specify push and pull_request triggers targeting `self-hosting` branch.~~ DONE
+53. ~~**Fix `01-project-setup.md` (Design — LICENSE-CONFIG-COVERAGE)**: Add deliverable to extend `.github/license-check/config.json` to cover `gobra-go/**/*.go`.~~ DONE
+54. ~~**Fix `01-project-setup.md` (Design — BUILD-TOOL-UNDECIDED)**: Resolved to Makefile; removed "or `just`-file" phrasing.~~ DONE
+
+### New Remediation Queue (Round 3)
+
+#### SIGNIFICANT
+
+41. ~~**Fix `09-type-checker-specs.md` (C9-MISSING)**: Add `## Verification Specifications (C9)` section. Minimum specs: `CheckSpecs` non-nil-diagnostics postcondition; pre-state validity requiring `info != nil`; spec-scope balance invariant (every opened predicate scope must be closed on exit).~~ DONE
+
+42. ~~**Fix `10-type-checker-multipackage.md` (C9-MISSING)**: Add C9 section. Minimum: `ExternalTypeInfo.Serialize` idempotency; `DeserializeExternalTypeInfo` roundtrip postcondition; `Importer.Import` returns non-nil or error (not both nil).~~ DONE
+
+43. ~~**Fix `13-internal-transforms.md` (C9-MISSING)**: Add C9 section. Minimum: `Apply` preserves program node count or decreases it (constant folding can reduce nodes); transform order invariant (constant-prop precedes overflow check — ordering postcondition).~~ DONE
+
+44. ~~**Fix `26-encoding-permissions.md` (C9-MISSING)**: Add C9 section. Minimum: `EncodeAcc` produces a Silver `FieldAccessPredicate` or `PredicateAccessPredicate` (not an arbitrary expression); permission amount is in range `(0, 1]` in Silver.~~ DONE
+
+45. ~~**Fix `31-encoding-builtins.md` (C9-MISSING)**: Add C9 section. Note: plan 31 is mostly a stub-copy operation; C9 should confirm the embed roundtrip — the embedded file bytes decode to valid Go source (no truncation).~~ DONE
+
+#### MINOR
+
+46. ~~**Fix `37-self-hosting-verify.md` (BNF-AUTHORSHIP)**: Add a sentence to the cut-over checklist item for `02-annotation-syntax-decision.md`: "Plan 05 is responsible for writing this section before plan 37 cut-over proceeds."~~ DONE
+
+47. ~~**Fix `37-self-hosting-verify.md` (RELEASE-TAG-UNOWNED)**: Add a cut-over checklist item owner: "Owner: project lead / release manager — not part of any plan's code deliverables."~~ DONE
+
+48. ~~**Fix `36-self-hosting-annotations.md` (GHOST-FIELDS-UNCERTAINTY)**: Replace "if Go-Gobra's annotation language supports them" with a definitive statement. Either: "Ghost fields are supported by Go-Gobra's annotation parser (plan 05)" or list them as a known gap requiring language extension per D11 before annotation work begins.~~ DONE
+
+55. ~~**Fix `02-annotation-syntax-decision.md` (Contradiction — UNBLOCKS-IMPRECISE)**: Change "This unblocks 03-frontend-ast.md and 05-annotation-parser.md" to accurately state that plan 02 removes its own blocker from plan 05 but plan 05 still requires plan 03.~~ DONE
+
+56. ~~**Fix `DECISIONS.md` (Contradiction — D4-OVERSTATES-UNBLOCK)**: Fix D4 "Plans 03, 04, and 05 are unblocked" — per the WBS, plan 04 still requires 03 and 06; plan 05 still requires 03. Correct to match `00-overview.md`.~~ DONE
+
+57. ~~**Fix `02-annotation-syntax-decision.md` (Gap — ANNOTATION-GRAMMAR-STUB-MISSING)**: Add `## Annotation Grammar` stub section heading at the end of the file so plan 05 has a structural anchor for writing the grammar.~~ DONE
+
+58. ~~**Fix `02-annotation-syntax-decision.md` (Gap — DECREASES-MISSING)**: Add `decreases [expr | _]`, `assert`, `assume`, `inhale`, `exhale` to the required grammar coverage list in Deliverables.~~ DONE
+
+59. ~~**Fix `02-annotation-syntax-decision.md` (Gap — INLINE-OWNER-WRONG)**: Change "Document the full list in plan 05" to "Document the full list in plan 06" — the Gobrafier owns the regex patterns that strip Go-side inline syntax.~~ DONE
+
+---
+
+## New Remediation Queue (Round 5 — File-by-File Audit + Persistent Open Items)
+
+*Sources: file-by-file audit findings (lines 693–724), Persistent Open Items table (lines 621–640), and the outstanding C4 FAIL on `00-overview.md` (line 141). `PDecl` compile-time enforcement (Persistent Open Items) is resolved by Round-5 plan-05 fixes — dropped.*
+
+### BLOCKING
+
+70. **Fix `30-encoding-generics.md` (BLOCKING — GENERICS-AUDIT-STALE)**: Fill in `Audit status`, `Generics found`, and `Chosen option` fields. These are listed as `_not yet run_` / `_unknown_` / `_N/A_` and are an explicit hard gate before plan 36 can begin (per plan 30's own text). While filling these in, also add a `## Verification Specifications (C9)` section (see item 73 scope).
+
+### SIGNIFICANT
+
+71. **Fix `00-overview.md` (C4 FAIL — PASSERTION-STALE)**: Change `PAssertion` to `PExpression` in the "Unblocked Work" paragraph (one occurrence). Also fix scratchpad registry line 10: change `PFuncDecl` → `PFunctionDecl` to match the Round-4 naming decision.
+
+72. **Fix C9 invalid Gobra syntax — Python `in` keyword (CONSOLIDATE: 08, 12, 16b, 19, 29)**: In all five plans, replace every `forall x in collection :: ...` with proper Gobra quantifier syntax (explicit type on bound variable, e.g. `forall x T :: ...`). Additionally, plan 08's C9 uses `ghostTable` which is an unexported local — cannot appear in a function-level annotation as written; rewrite to use an exported ghost field or a pure helper predicate.
+
+73. **Fix missing C9 sections (CONSOLIDATE: 23, 24, 27, 28, 30)**: Add a `## Verification Specifications (C9)` section to plans 23-encoding-slices, 24-encoding-maps, 27-encoding-methods, 28-encoding-channels, and 30-encoding-generics. Minimum specs per plan: (23) `EncodeSlice` non-nil result, `nilSlice` encoding postcondition; (24) `EncodeMap` non-nil result, `emptyMap` encoding postcondition; (27) `EncodeMethod` non-nil result, dispatch-table completeness; (28) `EncodeChannel` non-nil result, `chan_Type` domain emission guard; (30) N/A if generics encoding is not implemented — C9 should state that explicitly.
+
+74. **Fix `09-type-checker-specs.md` (C9 — THREE ANNOTATION ERRORS)**: Fix all three C9 issues in plan 09: (a) replace `info.Ghost != nil` (struct-vs-nil compile error) with `info.Ghost.Resolved()`; (b) replace `info.Ghost[n]` (struct as map) with `info.Ghost.Types[n]`; (c) declare `scopeDepth` as a ghost local variable in the C9 section so the invariant is syntactically valid.
+
+75. **Fix `08-type-checker-core.md` (Deliverables — MISSING-METHOD-DEFS + ADTCONSTRUCTOR-UNDEFINED)**: (a) Add `IsStub() bool` on `GhostType` and `Resolved() bool` on `GhostTypeInfo` to the `internal/info/ghosttypes.go` deliverable — both are referenced in C9 specs but never declared. (b) Define `ADTConstructor{Tag string, Fields []GhostType}` struct — it appears in `ADTType.Constructors` but has no field list in any plan.
+
+76. **Fix `13-internal-transforms.md` (C9 — TRIPLE-NOT-EQUAL + NODECOUNT-UNDEFINED)**: (a) Replace `result !== prog` with `result != prog` (Gobra/Go use `!=`, not `!==`). (b) Define `NodeCount() int` as a ghost method on `*internal.Program` in plan 11, then reference it in plan 13's C9 postcondition.
+
+77. **Fix `27-encoding-methods.md` + `16-silver-jni-builder.md` (Gap — OPAQUE-CHAIN-SEARCH)**: Confirm whether Silicon's `@opaque` annotation handler searches the full `ConsInfo` chain or only the chain head. Document the answer in plan 27. If Silicon searches only the head, add a pre-emission reordering step to plan 16 (or plan 27) that hoists `@opaque` to the outermost `ConsInfo` wrapper before the Silver node is emitted.
+
+78. **Fix `07-package-resolver.md` + `37-self-hosting-verify.md` (Contradiction — GO-TOOLCHAIN-CI)**: Add Go toolchain (≥ 1.21) as an explicit CI runner requirement in plan 37's CI setup checklist (currently absent). Add a note in plan 07's Prerequisites section confirming that Go-Gobra requires `go` in PATH at runtime and that CI must satisfy this.
+
+### MINOR
+
+79. **Fix `19-translator-core.md` (Gap — FUNCTIONTABLE-UNDEFINED)**: Define the `FunctionTable` interface in plan 19's Deliverables with a minimum method set: `Register(fn internal.Function)`, `Has(fn internal.Function) bool`, `All() []internal.Function`. Describe how encoding modules access it via `Context` (e.g., `ctx.FunctionTable()`).
+
+80. **Fix `08-type-checker-core.md` (Simplification — RESERVED-IDENTS-MISSING)**: Add `_u[0-9A-F]{1,6}_` and names beginning with `gobra__` to plan 08's "Explicitly Unsupported Constructs" list with a note: "These patterns cause silent Silver name collisions at translation time if not caught here."
+
+81. **Fix `32a-diagnostics.md` (Simplification — CONSTANT-NAME-SHADOWING)**: Rename `Error`, `Warning`, `Info` severity constants to `DiagError`, `DiagWarning`, `DiagInfo` to avoid shadowing the `errors` package sentinel and Go naming conventions. Update all plans that reference these constants (plans 04, 05, 06, 07, 08, 09, 32).
+
+82. **Fix `10-type-checker-multipackage.md` (C9 — NESTED-CALL-IN-POSTCOND)**: Rewrite the `Serialize()` round-trip postcondition — Gobra does not support `{ stmt; expr }` blocks in postconditions. Replace with a pure helper function (e.g., `pure func serializeRoundtrips(eti ExternalTypeInfo) bool`) or a quantifier-free formulation.
+
+83. **Fix `09-type-checker-specs.md` (Deliverables — THIN)**: Expand the Deliverables section beyond "Extension of TypeInfo." Add: concrete file path(s) in `internal/info/`; the full list of spec-AST node types handled by `CheckSpecs` (PRequires, PEnsures, PInvariant, etc.); how `GhostTypeInfo` is populated and where it lives.
+
+84. **Fix `07-package-resolver.md` (Design — PACKAGEINFO-AMBIGUITY)**: Add an explicit statement that `PackageInfo.Package` is authoritative for all type-checking and desugaring; `PackageInfo.Files` exists only for diagnostic-position lookup. Add a warning: "Using `Files` for type-checking or desugaring is a bug."
+
+85. **Fix `15-jni-setup.md` (Design — JVM-SINGLETON-TEST-ISOLATION)**: Document that each test binary gets at most one JVM configuration attempt. `jvmErr` is permanently set on first failure; subsequent calls to `Start()` with correct config will still return the cached error. Consequence: test isolation for JVM startup failures requires separate test binaries.
+
+86. **Fix `33-cli.md` (Design — FLAG-PRECEDENCE + CHOP-Z3APIMODE-INTERACTION)**: (a) Specify flag short-circuit precedence: `--parseOnly` > `--typeCheckOnly` > `--noVerify` (matching Scala `GobraConfig` behavior); simultaneous use takes the earliest-stopping flag. (b) Document `--chop --workers 4 --z3APIMode` interaction: chopper may produce up to 4 sub-programs, but `z3APIMode` forces `poolSize=1`, so execution is serialized — functionally correct but counterintuitive.
+
+87. **Fix `34-test-infrastructure.md` (Design — PARALLEL-WORKERS-MEMORY)**: Add explicit guidance: "Set `go test -parallel N` where `N ≤ --workers` to bound peak memory; goroutines beyond the pool size block in `Submit()` while holding `*silver.Program` ASTs."
+
+88. **Fix `29-encoding-adts.md` (Design — ADT-MUTUAL-RECURSION)**: Document that plan 29's rank axiom covers only direct recursion within a single ADT. Mutually recursive ADTs (A references B references A) require a rank function that spans both types — not supported. Add to `KNOWN_LIMITATIONS.md`: "Mutually recursive ADTs are unsupported."
 

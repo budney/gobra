@@ -70,11 +70,14 @@ DECISIONS.md D8), all of the following must be satisfied:
       `## Annotation Grammar` section with full BNF/EBNF coverage of all annotation forms).
       This is a **hard gate** — the cut-over deletes `src/main/antlr4/GobraParser.g4` and
       `GobraLexer.g4`, which are the only complete specification of the annotation grammar.
+      **Owner: Plan 05** is responsible for writing the `## Annotation Grammar` section in
+      `02-annotation-syntax-decision.md` before plan 37 cut-over proceeds.
 - [ ] Phase 2 self-hosting verification succeeds (Go-Gobra verifies its own source).
 - [ ] CI job `gobra-self-verify` is passing for all blocking-tier modules.
 - [ ] `SELF_HOSTING.md` is written and up-to-date.
 - [ ] All regression tests pass (or are in `skip.txt` with documented reasons).
 - [ ] Last Scala release is tagged (e.g., `v0.9.9-scala-final`) before the cut-over commit.
+      **Owner: project lead / release manager** — this is a meta-project action, not part of any plan's code deliverables.
 
 ## CI Gate Strategy
 

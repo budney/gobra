@@ -10,11 +10,24 @@ process in a second pass.
 ## Scope
 
 **In scope:**
-- Drive `go/parser.ParseFile` with `parser.ParseComments` mode, passing the preprocessed
-  source bytes directly via `go/parser`'s `src interface{}` parameter — **no temp file needed**
+- Drive `go/parser.ParseFile` with `parser.AllErrors | parser.ParseComments` mode, passing
+  the preprocessed source bytes directly via `go/parser`'s `src interface{}` parameter —
+  **no temp file needed**. `parser.AllErrors` is required to report all parse errors, not
+  just the first ~10; without it the "accumulate all errors" goal is silently broken.
 - Walk the `go/ast` tree and produce Gobra frontend AST nodes
-- Collect all `//@ ...` comment groups and attach them (by position) to the AST nodes they
-  annotate, so 05 can parse them
+- Collect all `//@ ...` comment groups and record them in `PFile.BlockAnnotations`:
+  - Each `go/ast.CommentGroup` of consecutive `//@ ` lines becomes **one** `frontend.RawAnnotation`
+    (lines joined with `\n`, `//@ ` prefix stripped, `Pos` is the first line). Concatenation
+    happens here so plan 05 always receives one logical annotation per `RawAnnotation`.
+  - Each `RawAnnotation` is placed under the key of the **innermost enclosing `*PBlockStmt`**
+    whose source range contains the comment's `Pos()`. Loop-spec annotations (`//@ invariant P`,
+    `//@ decreases e`) that appear immediately before a `for` loop's `{` fall inside the
+    **enclosing block** (the block containing the `for` statement), not the loop body. They
+    are stored under that enclosing block's key; plan 07 routes them to `PForStmt.Spec` during
+    `MergeGhostStatements` (step 4, Rule A).
+  - File-scope annotations (from `//@ ` blocks at the top level, produced by the Gobrafier
+    for ghost ADTs / predicates / funcs) are stored under the **nil key**. Plan 07 detects
+    the nil key and routes these to `PFile.GhostDecls`.
 - Handle `.gobra` files (treated as Go with relaxed import rules — already handled upstream by
   the Gobrafier in 06, but the parser must accept the post-processed form)
 - Error recovery: surface parse errors as structured diagnostics; accumulate all errors in
@@ -58,24 +71,42 @@ file path, not any temp-file path.
 ## Key Implementation Notes
 
 - `go/parser` produces a `*ast.File`; walk it with `ast.Inspect` or a custom `ast.Visitor`
-- Comment association: `go/ast` attaches comments to `ast.File.Comments`; match them to
-  enclosing nodes by comparing `token.Pos` ranges
-- Position translation: `go/token.FileSet` maps `token.Pos` values to file/line/column;
-  store the `FileSet` alongside the AST for later error reporting
+- Comment association: `go/ast` attaches comments to `ast.File.Comments`; associate each
+  `CommentGroup` with the innermost enclosing scope by comparing its `Pos()` against the
+  source ranges of `PBlockStmt` nodes built during the walk
+- Position tracking: the `*token.FileSet` is owned by plan 07 (one per package) and passed
+  in as `fset`. `go/parser.ParseFile` records this file's byte range into `fset`.
+  `ParseFile` must NOT create its own FileSet; doing so makes positions from different files
+  incommensurable and breaks `go/types.Check` in plan 08, which requires a single `fset`
+  covering all files in the package
 - `.gobra` files may contain Gobra-specific syntax not in Go (e.g., ghost type declarations);
   the Gobrafier (06) transforms these to legal Go before this parser sees them
 
 ## Deliverables
 
-- `internal/frontend/parser.go` — `ParseFile(filename string, src []byte) (*frontend.PFile, map[*frontend.PBlockStmt][]RawAnnotation, []Diagnostic)`
-  - `filename` is the original source path (for position tracking and error messages).
-  - `src` is the Gobrafier-preprocessed content (passed directly to `go/parser.ParseFile` as the `src` parameter — no temp file).
-  - **Recoverable parse errors** (errors reported by `go/parser` that it recovered from): return a *partial* `*frontend.PFile` alongside the accumulated diagnostics. `go/parser` is designed for error recovery; callers (plan 07, plan 33) inspect the diagnostics and decide whether to abort.
-  - **Bad\* nodes** (see section below): return `nil` for `*frontend.PFile`. The presence of a `*ast.BadStmt`, `*ast.BadExpr`, or `*ast.BadDecl` node means the parser could not produce a valid subtree at that location; a partial AST containing Bad\* nodes is unusable by subsequent stages, so `nil` is the correct sentinel. Diagnostics are still returned.
-  - In both cases a non-empty `[]Diagnostic` is possible. The difference is whether `*frontend.PFile` is nil (Bad\* case) or partial-but-non-nil (recoverable-error case).
-  - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `PGoStmt`-wrapped Go statements at this point. Plan 07 calls plan 05 on the returned `map` and runs `MergeGhostStatements` to complete each `PBlockStmt` (step 4 of the coordination model in plan 07).
-  - **File-scope annotations** (those not inside any block — produced by the Gobrafier for ghost ADTs, predicates, funcs) are collected into `map[*frontend.PBlockStmt][]RawAnnotation` under the key `nil`. Plan 07 detects the `nil` key and routes these to `PFile.GhostDecls` instead of any `PBlockStmt`. **Callers must always check for the nil key explicitly** — iterating the map with `range` visits the nil key, but a range loop body that type-asserts the key as non-nil will panic. Plan 07's `MergeGhostStatements` handles this with an explicit `if key == nil { ... }` branch before the merge loop.
-- `RawAnnotation` type: `{Text string; Pos token.Pos}` — the raw `//@ ...` text stripped of the `//@ ` prefix, with its source position
+- `internal/frontend/parser.go` — `ParseFile(fset *token.FileSet, filename string, src []byte) (*frontend.PFile, []Diagnostic)`
+  - `fset` is the `*token.FileSet` owned by plan 07 (one per package, shared across all
+    files). Plan 07 creates it before the first `ParseFile` call; `go/parser.ParseFile`
+    records each file's position range into `fset`. Plan 08 receives the same `fset` to call
+    `go/types.Check`. **`ParseFile` must not create its own FileSet** — doing so makes
+    per-file positions incommensurable and breaks `go/types.Check` for multi-file packages.
+  - `filename` is the original source path (for position attribution in `fset` and error messages).
+  - `src` is the Gobrafier-preprocessed content (passed directly to `go/parser.ParseFile` as
+    the `src` parameter — no temp file).
+  - **`PFile.BlockAnnotations` is populated by `ParseFile`** before returning. Plan 07 accesses
+    annotations via `pfile.BlockAnnotations`; there is no separate annotation-map return value.
+    The nil-key convention (file-scope annotations) is described in the In-scope bullet above.
+    Plan 07's `MergeGhostStatements` must check `if key == nil { ... }` before the merge loop.
+  - **Recoverable parse errors**: return a *partial* `*frontend.PFile` alongside diagnostics.
+    `go/parser` (in `AllErrors` mode) reports all errors and continues; callers (plan 07, plan 33)
+    inspect diagnostics and decide whether to abort.
+  - **Bad\* nodes** (see section below): return `nil` for `*frontend.PFile`. Diagnostics still returned.
+  - In both cases `[]Diagnostic` is non-nil (empty slice on success, non-empty on any error).
+  - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `*PGoStmt`-wrapped Go
+    statements; plan 07 runs `MergeGhostStatements` to complete each `PBlockStmt`.
+- `frontend.RawAnnotation` type is defined in `internal/ast/frontend/` (plan 03):
+  `{Text string; Pos token.Pos}` — the logical annotation text with `//@ ` prefix stripped,
+  position of the first line. Multi-line annotations are pre-concatenated by `ParseFile`.
 - `Diagnostic` type imported from `internal/diagnostic/` (owned by plan 32a; do NOT import
   `internal/reporting` — that package is downstream of the parser and would break pipeline
   layering). The `[]Diagnostic` return value uses the same type as all other early-pipeline
@@ -106,21 +137,16 @@ desugarer (plan 12) or the catch-all panic (plan 19) — they must never reach t
 Plan 04's `ParseFile` is a pure transformation function (no shared mutable state, no JNI)
 so its Gobra specifications focus on nil-safety, termination, and diagnostic completeness.
 
-1. **`ParseFile` nil-safety postcondition**: the returned `*PFile` is nil iff the function
-   encountered an unrecoverable Bad* node; in all other cases it is non-nil (possibly partial).
-   `hasBadNode` is a ghost result that records whether `ast.Inspect` found a `BadStmt`,
-   `BadExpr`, or `BadDecl`. Declaring it as a ghost result (not a free variable) makes the
-   Gobra spec syntactically valid:
+1. **`ParseFile` nil-safety postcondition**: the returned `*PFile` is nil iff Bad\* nodes
+   were found; otherwise non-nil (possibly partial). `hasBadNode` is a ghost result:
    ```go
    //@ ensures hasBadNode ==> pfile == nil
    //@ ensures !hasBadNode ==> pfile != nil
-   func ParseFile(filename string, src []byte) (pfile *frontend.PFile,
-       annotations map[*frontend.PBlockStmt][]RawAnnotation, diags []Diagnostic,
-       /*@ ghost hasBadNode bool @*/)
+   func ParseFile(fset *token.FileSet, filename string, src []byte) (pfile *frontend.PFile,
+       diags []Diagnostic, /*@ ghost hasBadNode bool @*/)
    ```
-   The ghost result `hasBadNode` is set to `true` inside the `ast.Inspect` callback when a
-   Bad* node is encountered; otherwise it remains `false`. Callers may ignore it (Go ghost
-   results are invisible to non-Gobra callers).
+   `hasBadNode` is set to `true` inside the `ast.Inspect` callback on any Bad\* node.
+   Callers may ignore it (ghost results are invisible to non-Gobra callers).
 
 2. **Diagnostic completeness**: every `go/parser` error token is reflected in the returned
    `[]Diagnostic`; the slice is never nil (empty slice on success):
@@ -128,20 +154,20 @@ so its Gobra specifications focus on nil-safety, termination, and diagnostic com
    //@ ensures diags != nil
    ```
 
-3. **Termination**: `ParseFile` terminates on all inputs because `ast.Inspect` terminates
-   (the `go/ast` tree is finite and acyclic) and the annotation map is bounded by the number
-   of comment groups in the file:
+3. **Termination**: `ParseFile` is non-recursive and terminates unconditionally. The
+   `ast.Inspect` walk terminates because the `go/ast` tree is finite and acyclic:
    ```go
-   //@ decreases len(src)
-   func ParseFile(filename string, src []byte) (...)
+   //@ decreases
+   func ParseFile(fset *token.FileSet, filename string, src []byte) (...)
    ```
 
-4. **No aliasing between output types**: the returned `*PFile` and annotation map share no
-   mutable state; the caller may safely pass them to concurrent downstream stages (plan 05,
-   plan 07) without additional synchronization:
+4. **BlockAnnotations ownership**: after a successful call, `pfile.BlockAnnotations` is
+   fully populated and no other live reference to the map exists; plan 07 holds exclusive
+   access:
    ```go
-   //@ ensures forall k *frontend.PBlockStmt ::
-   //@     k != nil ==> acc(k) && acc(annotations[k])
+   //@ ensures pfile != nil ==>
+   //@     forall k *frontend.PBlockStmt ::
+   //@         k != nil ==> acc(k) && acc(pfile.BlockAnnotations[k])
    ```
 
 ## Resolved Questions

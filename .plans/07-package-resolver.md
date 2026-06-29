@@ -118,28 +118,40 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
 - Coordination note: for each file, `Resolve` runs a **4-step sequence**:
   1. `Gobrafy(rawBytes, filename)` (plan 06) → preprocessed `[]byte` (no temp file written)
-  2. `ParseFile(filename, preprocessedBytes)` (plan 04) → `(*PFile, map[*PBlockStmt][]RawAnnotation, diags)` — `PBlockStmt` nodes contain Go statements only at this point
-  3. For each `RawAnnotation` in the returned map: `ParseAnnotation(raw.Text, raw.Pos)` (plan 05) → ghost statement nodes
+  2. `ParseFile(fset, filename, preprocessedBytes)` (plan 04) → `(*PFile, []Diagnostic)` —
+     `pfile.BlockAnnotations` is fully populated on return; `PBlockStmt` nodes contain Go
+     statements only at this point. `fset` is a `*token.FileSet` created once per package
+     before the file loop and passed to every `ParseFile` call in that package.
+  3. For each `key, annotations := range pfile.BlockAnnotations`: call
+     `ParseAnnotation(raw.Text, raw.Pos, key == nil)` (plan 05) → `(nodes []PNode, decls []PDecl, diags)`.
+     - `key == nil` signals file-scope: `decls` contains ghost declaration nodes (`PAdtType`,
+       `PGhostFunc`, `PPredDecl`) which are appended directly to `pfile.GhostDecls []PDecl`.
+     - `key != nil` (block-scope): `nodes` contains spec clause and ghost statement nodes;
+       pass them to `MergeGhostStatements` for step 4.
   4. `MergeGhostStatements(pfile, ghostNodes)` → interleaves ghost statement nodes into the
      correct locations in the `PFile`. Two separate routing rules apply:
 
      **Rule A — loop invariant routing**: Any ghost node whose annotation keyword is
      `invariant` (i.e., the raw annotation text parsed by plan 05 begins with `invariant`)
-     must be appended to `PForStmt.Invariants` (or `PRangeStmt.Invariants`) on the `PForStmt`
-     or `PRangeStmt` node whose `Pos()` immediately follows the invariant's `Pos()` in the
-     enclosing `PBlockStmt.Stmts`. Do NOT insert invariant nodes into `PBlockStmt.Stmts` —
-     they are not statements. If no `PForStmt`/`PRangeStmt` immediately follows, emit a
-     diagnostic: `"invariant annotation not attached to a for-loop"`.
+     must be appended to `PForStmt.Spec.Invariants` (or `PRangeStmt.Spec.Invariants`) on the
+     `PForStmt` or `PRangeStmt` node (via the embedded `PLoopSpec` field) whose `Pos()`
+     immediately follows the invariant's `Pos()` in the enclosing `PBlockStmt.Stmts`. Do NOT
+     insert invariant nodes into `PBlockStmt.Stmts` — they are not statements. If no
+     `PForStmt`/`PRangeStmt` immediately follows, emit a diagnostic:
+     `"invariant annotation not attached to a for-loop"`.
 
      **Rule B — all other ghost nodes**: Insert into `PBlockStmt.Stmts` in source order by
      `Pos()`, interleaved with existing `PGoStmt` nodes.
 
   `MergeGhostStatements` is a pure function in `internal/frontend/packageresolver.go`. It
   first separates ghost nodes by type (invariants vs. other), routes invariants to their
-  enclosing for-loop (Rule A), then merges the remainder into the block's statement list
-  in `Pos()` order (Rule B).
+  enclosing for-loop via `PForStmt.Spec.Invariants` (Rule A), then merges the remainder into
+  the block's statement list in `Pos()` order (Rule B).
 
-  File-scope `//@ ` comments (those not within any block, e.g. ghost ADT/predicate/func declarations produced by the Gobrafier) are identified by position (no enclosing `*PBlockStmt` in the map) and attached to `PFile.GhostDecls` rather than any `PBlockStmt`.
+  File-scope `//@ ` comments are stored under the **nil key** in `pfile.BlockAnnotations`
+  (plan 04 convention). `ParseAnnotation(isFileScope=true)` returns their parsed declarations
+  directly in `decls []PDecl`. `MergeGhostStatements` must check `if key == nil` before the
+  merge loop and append `decls` to `pfile.GhostDecls` rather than routing through Rule A/B.
 - Tests: resolve a multi-package example from `src/test/resources/regressions/` and verify
   the correct set of files is loaded in dependency order
 
@@ -168,3 +180,45 @@ or `--typeCheckOnly` mode), add lazy loading as an optimization at that time.
 them all together, regardless of whether individual files contain Gobra annotations. Files with
 no `//@ ` comments simply produce no ghost AST nodes. This is the simplest approach and
 matches the current Gobra behavior.
+
+## Verification Specifications (C9)
+
+`Resolve` orchestrates the 4-step per-file pipeline and produces a topologically-sorted
+package list. The following Gobra annotations will be written into
+`internal/frontend/packageresolver.go` and verified before this plan is considered complete.
+
+1. **`Resolve` output-safety postcondition** — returns a non-nil result list iff diagnostics
+   are empty (partial results are not returned — on any error, return nil + diagnostics):
+   ```go
+   //@ requires inputs != nil && cfg != nil
+   //@ ensures  (result != nil) == (len(diags) == 0)
+   //@ ensures  diags != nil
+   //@ decreases
+   func Resolve(inputs []string, cfg *ResolverConfig) (result []*PackageInfo, diags []Diagnostic)
+   ```
+
+2. **Topological order postcondition** — every package in the result slice appears after all
+   its dependencies:
+   ```go
+   //@ ensures forall i, j int ::
+   //@     0 <= i && i < j && j < len(result) ==>
+   //@     !result[j].dependsOn(result[i].ImportPath)
+   ```
+   (`dependsOn` is a ghost predicate: `p.dependsOn(path)` holds iff `path` is in `p.Deps`
+   or in the transitive deps of any element of `p.Deps`.)
+
+3. **`MergeGhostStatements` nil-key precondition** — the nil-key entry in `BlockAnnotations`
+   is processed before the block-keyed entries; `pfile.GhostDecls` is populated from the
+   nil-key decls before `MergeGhostStatements` merges block-scope nodes:
+   ```go
+   //@ requires pfile != nil && acc(pfile.BlockAnnotations)
+   //@ ensures  acc(pfile.GhostDecls)
+   //@ decreases
+   func MergeGhostStatements(pfile *frontend.PFile, blockNodes map[*frontend.PBlockStmt][]frontend.PNode) []Diagnostic
+   ```
+
+4. **Termination** — `Resolve` terminates because the import graph is finite and acyclic (cycles
+   are detected and reported as errors before recursion descends):
+   ```go
+   //@ decreases len(unresolved)
+   ```

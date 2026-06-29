@@ -71,3 +71,38 @@ in-place mutation is not an option. This matches the Scala implementation.
 `requires r != 0` precondition on `goIntDiv`/`goIntMod` (plan 20). The overflow transform
 is responsible only for bounded-integer range checks (e.g., asserting that an `int8` result
 fits in [-128, 127]) when `--overflow` is enabled.
+
+## Verification Specifications (C9)
+
+```go
+// Apply pipeline entry-point:
+//@ requires prog != nil
+//@ ensures  result != nil
+//@ ensures  len(diags) >= 0
+//@ ensures  len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount())
+//@ decreases
+func Apply(prog *internal.Program, cfg Config) (result *internal.Program, diags []Diagnostic)
+```
+
+**Node-count invariant**: Constant folding reduces or preserves the node count; no transform adds nodes without also removing the node(s) it replaces. Formally, `result.NodeCount() ≤ prog.NodeCount()` when there are no diagnostics.
+
+**Transform order postcondition**: The four transforms run in the fixed sequence
+`constantProp → callGraphEdges → overflowChecks → termination`. This ordering is a postcondition of `Apply`: the resulting program has CG edge annotations present before overflow checks are applied, which overflow checks may inspect.
+
+```go
+// Ordering contract: after Apply, every call site in result carries CG edge annotations
+// (set by callGraphEdges) and every integer arithmetic node carries a range assertion
+// (set by overflowChecks, when cfg.Overflow == true).
+//@ ensures cfg.Overflow ==>
+//@   forall n internal.ArithNode :: result.Contains(n) ==>
+//@     n.HasRangeAssertion()
+//@ ensures forall c internal.CallExpr :: result.Contains(c) ==>
+//@   len(c.CGEdges) >= 0  // may be empty for interface calls resolved at translation
+```
+
+**Immutability contract**: Neither `Apply` nor any sub-transform modifies the input `prog` in place. The input tree is read-only; all structural changes produce a new tree.
+
+```go
+//@ ensures result !== prog  // different pointer; input is untouched
+//@ ensures old(prog.NodeCount()) == prog.NodeCount()  // input unchanged
+```

@@ -112,3 +112,40 @@ type-checking each package:
 
 This is the only change needed in the type-checker to wire a future cache. Do not implement
 the disk cache until profiling shows type-checking is a bottleneck.
+
+## Verification Specifications (C9)
+
+```go
+// ExternalTypeInfo.Serialize idempotency:
+//@ requires eti != nil
+//@ ensures  err == nil ==> len(result) > 0
+//@ ensures  err == nil ==>
+//@   { r2, e2 := eti.Serialize(); e2 == nil && bytes.Equal(r2, result) }
+//@ decreases
+func (eti *externalTypeInfo) Serialize() (result []byte, err error)
+```
+
+```go
+// DeserializeExternalTypeInfo roundtrip postcondition:
+// If Serialize produced data, DeserializeExternalTypeInfo recovers an equivalent ExternalTypeInfo.
+//@ requires data != nil
+//@ ensures  result != nil <==> err == nil
+//@ ensures  err == ErrStaleCacheEntry ==> result == nil
+//@ decreases
+func DeserializeExternalTypeInfo(
+    data []byte, sourceHashes map[string][32]byte,
+) (result ExternalTypeInfo, err error)
+```
+
+```go
+// Importer.Import mutual exclusion contract:
+// Returns a non-nil *types.Package or a non-nil error — never both nil.
+//@ ensures  (pkg != nil) != (err != nil)
+//@ ensures  pkg != nil ==> pkg.Complete()
+//@ decreases
+func (imp *gobImporter) Import(path string) (pkg *types.Package, err error)
+```
+
+**Stub contract**: While `Serialize` is the stub implementation, it always returns `(nil, non-nil-error)`. The postcondition above applies to the final implementation; the stub is exempt but must not panic.
+
+**Unsafe-import contract**: `Import("unsafe")` must return `(nil, non-nil-error)` with message `"import of package \"unsafe\" is not supported by Gobra"`. This is a hard constraint verified by the test in Deliverables.

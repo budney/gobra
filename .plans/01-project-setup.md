@@ -26,9 +26,9 @@ a replacement, not a parallel tool. The subdirectory path avoids conflict during
 - Create `gobra-go/` directory at the repo root on the `self-hosting` branch
 - `go mod init github.com/viperproject/gobra` inside `gobra-go/`
 - Top-level directory skeleton mirroring the logical pipeline stages
-- Makefile or `just`-file with common targets (build, test, lint)
-- License header tooling (reuse the viperproject MPL-2.0 setup — MPL-2.0)
-- GitHub Actions CI stub for the Go build (separate job from the existing Scala CI)
+- Makefile with common targets (build, test, lint)
+- License header tooling: extend `.github/license-check/config.json` to cover `gobra-go/**/*.go` (MPL-2.0); verify with `npx github:viperproject/check-license-header#v1 check --config .github/license-check/config.json --strict`
+- GitHub Actions CI stub for the Go build (separate job from the existing Scala CI), triggered on push and pull_request events targeting the `self-hosting` branch
 - `.gitignore` additions for Go build artifacts and JVM temp files
 
 **Out of scope:**
@@ -62,9 +62,11 @@ gobra-go/                         ← Go module root (go.mod here)
     silver/                       ← Silver IR Go types + printer
     backend/                      ← JNI setup, Silicon/Carbon callers
     reporting/                    ← error reporter
+    diagnostic/                   ← shared Diagnostic type (source owned by plan 32a)
   tests/
     testdata/regressions/ → ../../src/test/resources/regressions/  (symlink or copy)
     testdata/stubs/       → ../../src/main/resources/               (symlink or copy)
+  KNOWN_LIMITATIONS.md                ← empty file; plans 20, 27, 28 append to it
 ```
 
 Note: there is no `pkg/` directory. This is a replacement tool, not a library — nothing should
@@ -82,11 +84,13 @@ viperproject/gobra/
 
 ## Deliverables
 
-- `gobra-go/` directory created on the `self-hosting` branch
+- `gobra-go/` directory created on the `self-hosting` branch with the skeleton layout above
+- `go.mod` with module path `github.com/viperproject/gobra` and minimum Go version `go 1.21`
 - `go build ./...` succeeds (even with only skeleton packages)
 - `go vet ./...` passes
-- License header check passes (MPL-2.0 headers on all `.go` files)
-- CI job `go-build` runs on push alongside the existing Scala CI job
+- `gobra-go/KNOWN_LIMITATIONS.md` created as an empty file (plans 20, 27, 28 append to it)
+- `.github/license-check/config.json` extended to cover `gobra-go/**/*.go`; license header check passes (MPL-2.0 headers on all `.go` files)
+- CI job `go-build` defined in `.github/workflows/`, triggered on push and pull_request to `self-hosting`, runs alongside the existing Scala CI job
 - Test data accessible from `gobra-go/tests/testdata/` (symlinks or relative paths)
 
 ## Open Questions

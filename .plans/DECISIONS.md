@@ -97,7 +97,9 @@ comment node's source position.
 ## D4 — Annotation syntax: keep `//@ ...` (resolved)
 
 **Status: RESOLVED.** See [02-annotation-syntax-decision.md](02-annotation-syntax-decision.md).
-Plans 03, 04, and 05 are unblocked.
+Plan 03 (Frontend AST) is fully unblocked. Plan 05 (Annotation Parser) has its 02-blocker
+removed but still requires plan 03 to complete. Plan 04 (Go Parser) still requires both 03
+and 06; see the WBS in `00-overview.md` for the authoritative dependency list.
 
 **Rationale:**
 - Full compatibility with all existing `.gobra` test files and the regression suite.
@@ -216,16 +218,18 @@ parallel `GhostTypeInfo` for Gobra-specific constructs. The two are combined int
 giving the type checker (08) and desugarer (12) one traversal mechanism.
 
 **Nodes that get wrappers** (only those Gobra actually extends):
-- `PFuncDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec`
-- `PMethodDecl` wraps `*ast.FuncDecl` + receiver + `*PFunctionSpec`
-  (The `receiver` field is a Gobra-specific `*PReceiver` carrying ghost annotations on the
-  receiver, e.g., ghost type assertions or spec-level permission info. It is distinct from
-  `ast.FuncDecl.Recv`, which holds the standard Go receiver parameter list. Both fields are
-  needed: `FuncDecl.Recv` for Go type checking; `PMethodDecl.receiver` for spec checking.)
+- `PFunctionDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec` + `*PBodyParameterInfo`
+- `PMethodDecl` wraps `*ast.FuncDecl` + `Receiver *PReceiver` + `*PFunctionSpec` + `*PBodyParameterInfo`
+  (The `Receiver` field is a Gobra-specific `*PReceiver` carrying the full method receiver
+  definition: named vs. unnamed, value/actual-pointer/ghost-pointer receiver type, and
+  addressability. `go/ast` cannot distinguish ghost pointer receivers from actual pointer
+  receivers — both are `*ast.StarExpr`. `PReceiver` fills this gap and is the authoritative
+  receiver for spec checking. `ast.FuncDecl.Recv` is still used by `go/types` for Go-level
+  type checking.)
 - `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
 - `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
 - `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
-- `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + loop invariants
+- `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + loop spec (`PLoopSpec`)
 
 Leaf nodes Gobra doesn't annotate (`*ast.BasicLit`, `*ast.Ident`, etc.) stay as `go/ast` types.
 

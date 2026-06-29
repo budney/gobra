@@ -8,12 +8,29 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 ## Scope
 
 **In scope:**
-- Lexer for annotation tokens (keywords, identifiers, operators, literals, punctuation)
+- Lexer for annotation tokens (keywords, identifiers, operators, literals, punctuation).
+  **Input is already `//@ `-prefix-stripped and multi-line-concatenated by plan 04** (see
+  `RawAnnotation.Text`). The lexer does NOT strip prefixes or concatenate lines.
 - Recursive-descent parser producing frontend AST specification nodes
 - Source position tracking relative to the comment's position in the file (so error messages
   point to the right line/column within the annotation, not just the comment start)
+- **Ghost AST type definitions** in `internal/ast/frontend/` (plan 05 owns these; plan 03
+  defines wrapper types for Go constructs, plan 05 defines the ghost-specific types):
+  - File-scope declaration nodes: `PAdtType`, `PAdtClause`, `PGhostFunc`, `PPredDecl`
+    (all implement `PDecl` so they can be stored in `PFile.GhostDecls`)
+  - Ghost statement nodes (implement `PStmt` for interleaving in `PBlockStmt.Stmts`):
+    `PFold`, `PUnfold`, `PAssert`, `PAssume`, `PExhale`, `PInhale`, `PPackageWand`, `PApplyWand`
+  - Inline pattern nodes (implement `PStmt`):
+    `PGhostArgs` (ghost call arguments), `PGhostResult` (ghost return result), `PGhostAssign`
+    (ghost assignment replacing a Go assignment)
+  - Ghost expression nodes (implement `PNode`):
+    `PForall`, `PExists`, `PAccess`, `POld`, `PBefore`, `PUnfolding`, `PPermission`,
+    sequence/set/multiset/dict/option literals and operations
+  - Visitor interface extensions: one `VisitP*` method per ghost type above, added to
+    the `Visitor` interface in `internal/ast/frontend/` (extending the base set from plan 03)
 - Full coverage of the Gobra annotation language as decided in 02:
   - Contract clauses: `requires`, `ensures`, `preserves`
+  - Loop invariants: `invariant`
   - Termination measures: `decreases`
   - Permission expressions: `acc(e)`, `acc(e, p)`, `wildcard`, `write`, `none`
   - Assertion operators: `&&`, `||`, `==>`, `!`, `--*`
@@ -28,6 +45,7 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
   - Labeled old: `old[l](e)`
   - Permission fractions: `1/2`, `p/q`
   - `unfolding e in e`
+  - Ghost fields, ghost methods, ghost return values
 
 **Out of scope:**
 - Parsing standard Go syntax (that's `go/parser` in 04)
@@ -51,19 +69,63 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
 
 - A hand-written recursive-descent parser is appropriate here: the annotation grammar is
   unambiguous, operator precedence is well-defined, and it avoids a parser-generator dependency
-- The lexer should skip whitespace and handle `//@ ` prefix stripping
-- Multi-line annotations: consecutive `//@ ` lines in the same comment block are concatenated
-  before lexing, with synthetic newlines to preserve line numbers
-- Operator precedence (low to high): `--*` (magic wand), `==>`, `||`, `&&`, comparison
+- **Input format**: `ParseAnnotation` receives `RawAnnotation.Text` from plan 04 — already
+  `//@ `-prefix-stripped and multi-line-concatenated with `\n` separators. The lexer starts
+  directly at the annotation keyword; it must NOT attempt to strip `//@ ` again.
+- Position reconstruction: `base token.Pos` is `RawAnnotation.Pos` (position of the first
+  `//@ ` line). Each token's position is `base + byteOffsetWithinText`. Newlines in
+  concatenated multi-line annotations advance the line counter; the lexer must track line
+  breaks within `Text` to report accurate line/column positions.
+- Operator precedence (low to high) — **must be verified against `GobraParser.g4` before
+  implementation; mark each level ✓ in the verification gate below**:
+  `--*` (magic wand), `==>`, `||`, `&&`, comparison
   (`==`, `!=`, `<`, `<=`, `>`, `>=`), additive (`+`, `-`), multiplicative (`*`, `/`, `%`),
   unary prefix (including `!`, unary `-`, `old`, `before`, `unfolding`), postfix/primary
 - Note: `!` is a unary prefix operator, not a binary one; it belongs at the unary level,
   not between `&&` and comparison
 
+**Operator Precedence Verification Gate** (blocking deliverable before implementation):
+
+Before writing the recursive-descent parser, cross-check each precedence level against the
+corresponding grammar rule in `GobraParser.g4`. Record the result here:
+
+| Precedence level | GobraParser.g4 rule | Checked |
+|---|---|---|
+| `--*` (magic wand / separating impl.) | _to be filled_ | ☐ |
+| `==>` (implication) | _to be filled_ | ☐ |
+| `\|\|` | _to be filled_ | ☐ |
+| `&&` | _to be filled_ | ☐ |
+| comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) | _to be filled_ | ☐ |
+| additive (`+`, `-`) | _to be filled_ | ☐ |
+| multiplicative (`*`, `/`, `%`) | _to be filled_ | ☐ |
+| unary prefix (`!`, `-`, `old`, `before`, `unfolding`) | _to be filled_ | ☐ |
+| postfix / primary | _to be filled_ | ☐ |
+
+Any divergence from the ANTLR4 grammar is a bug — fix it before proceeding. This table must
+be fully checked (all ☑) before plan 05 is marked complete.
+
 ## Deliverables
 
-- `internal/frontend/annotationparser.go` — `ParseAnnotation(src string, base token.Pos) ([]PNode, []Diagnostic)`
-  - Returns the parsed spec/ghost AST nodes as `[]PNode` (the unified node interface defined in plan 03; concrete types are `PFunctionSpec`, `PAssertion`, `PGhostStatement`, `PAdtType`, etc., all of which implement `PNode`). Returns all parse diagnostics (zero or more); a non-empty `[]Diagnostic` does not prevent returning any successfully-parsed nodes. Callers decide whether to abort on errors.
+- Ghost AST type definitions in `internal/ast/frontend/` — all ghost node types listed in
+  the In-scope section above (plan 05 is the owner; these extend the package begun by plan 03)
+- `internal/frontend/annotationparser.go` —
+  ```go
+  func ParseAnnotation(
+      src        string,     // RawAnnotation.Text: already stripped, already concatenated
+      base       token.Pos,  // RawAnnotation.Pos: position of first //@ line
+      isFileScope bool,      // true when parsing a nil-key (file-scope) annotation block
+  ) (nodes []PNode, decls []PDecl, diags []Diagnostic)
+  ```
+  - When `isFileScope` is false: all produced nodes go into `nodes` (`[]PNode`). These are
+    spec clauses (`PRequires`, `PEnsures`, etc.), ghost statements (`PFold`, `PAssert`, etc.),
+    or inline pattern nodes (`PGhostArgs`, `PGhostAssign`, etc.).
+  - When `isFileScope` is true: top-level ghost declarations (`PAdtType`, `PGhostFunc`,
+    `PPredDecl`) go into `decls` (`[]PDecl`); any unexpected non-declaration annotation
+    returns a diagnostic and is not placed in either slice.
+  - `diags` is never nil (empty slice on success). Non-empty `diags` does not prevent
+    returning nodes/decls — callers decide whether to abort.
+  - Callers: plan 07's `MergeGhostStatements` passes `isFileScope=true` for the nil-key
+    annotations and `isFileScope=false` for all block-keyed annotations.
 - Full grammar coverage of the Gobra annotation language
 - **`## Annotation Grammar` section written into `02-annotation-syntax-decision.md`** — this
   is a primary deliverable of plan 05. Once the parser is implemented and tested, extract the
@@ -93,10 +155,10 @@ inline spec clause or a top-level ghost declaration.
 **`PDecl` requirement for file-scope ghost declarations:** The three node types produced above
 (`PAdtType`, `PGhostFunc`, and `PPredDecl`) are **file-scope declaration nodes** — they will be
 stored in `PFile.GhostDecls []PDecl` (plan 03). All three must therefore implement both `PNode`
-and `PDecl` (the marker interface defined in plan 03). The annotation parser is responsible for
-producing values whose dynamic type satisfies `PDecl` for these three cases. Inline spec nodes
-(`PFunctionSpec`, `PAssertion`, `PGhostStatement`, etc.) are NOT stored in `GhostDecls` and
-need only implement `PNode`.
+and `PDecl` (the marker interface defined in plan 03). With the split-return signature, these
+appear in `decls []PDecl` directly — no type assertion needed in plan 07. Inline spec nodes
+(`PFunctionSpec`, `PExpression`, ghost statement nodes, etc.) go into `nodes []PNode` and
+are NOT stored in `GhostDecls`.
 
 ## Inline Annotation Positional Patterns (Complete List)
 
@@ -133,16 +195,49 @@ grammar into BNF/EBNF and write it into plan 02's `## Annotation Grammar` sectio
 each production against the ANTLR4 source and mark each ✓. Any discrepancy is a bug in the
 parser or the grammar — fix it before declaring plan 05 complete.
 
+## Verification Specifications (C9)
+
+`ParseAnnotation` is a pure transformation function (no shared mutable state, no JNI). Its
+Gobra specifications focus on nil-safety, termination, and the `PDecl` subtype guarantee.
+
+1. **Non-nil diagnostics postcondition**:
+   ```go
+   //@ ensures diags != nil
+   func ParseAnnotation(src string, base token.Pos, isFileScope bool) (nodes []PNode, decls []PDecl, diags []Diagnostic)
+   ```
+
+2. **`PDecl` subtype guarantee** (when `isFileScope` is true, every element of `decls`
+   implements `PDecl` — enforced by the return type; the spec makes it explicit):
+   ```go
+   //@ ensures isFileScope ==>
+   //@     forall i int :: 0 <= i && i < len(decls) ==> decls[i] != nil
+   ```
+
+3. **Termination**: the recursive-descent parser terminates because each recursive call
+   consumes at least one token, and the token stream is finite (bounded by `len(src)`):
+   ```go
+   //@ decreases len(src)
+   func ParseAnnotation(src string, base token.Pos, isFileScope bool) (...)
+   ```
+
+4. **No aliasing**: the returned slices share no mutable state with each other or with `src`;
+   callers may safely pass `nodes` and `decls` to concurrent downstream stages:
+   ```go
+   //@ ensures forall i int :: 0 <= i && i < len(nodes) ==> acc(nodes[i])
+   //@ ensures forall i int :: 0 <= i && i < len(decls) ==> acc(decls[i])
+   ```
+
 ## Resolved Questions
 
 **Separate AST vs. direct frontend AST production (resolved):** The annotation parser produces
-frontend AST specification nodes directly (the types defined in plan 03 — `PFunctionSpec`,
-`PAssertion`, `PGhostStatement`, etc.). There is no intermediate annotation-specific AST that
-is merged in a later pass. Direct production is simpler: fewer types to define, no merge step,
-and error positions are attached to nodes at the point of construction.
+frontend AST specification nodes directly (the types defined in plans 03 and 05 —
+`PFunctionSpec`, `PExpression`, ghost statement/expression types, etc.). There is no
+intermediate annotation-specific AST that is merged in a later pass. Direct production is
+simpler: fewer types to define, no merge step, and error positions are attached to nodes at
+the point of construction.
 
 **Annotations spanning constructs (resolved):** The parser does not attempt to resolve which
-construct an annotation belongs to. It produces nodes and attaches them to the enclosing AST
-scope by source position. The type checker (plan 09) is responsible for validating structural
+construct an annotation belongs to. It returns nodes; plan 07 routes them to the correct AST
+node by source position. The type checker (plan 09) is responsible for validating structural
 constraints — e.g., that `requires` appears only on function/method declarations, that
 `invariant` appears only in loop bodies, and that `old(e)` appears only in postconditions.

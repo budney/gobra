@@ -62,7 +62,7 @@ Examples: separate `.spec` files, Go build tag blocks, structured comment direct
 
 **Option A: keep `//@ ...` unchanged.**
 
-This unblocks 03-frontend-ast.md and 05-annotation-parser.md.
+This unblocks 03-frontend-ast.md. Plan 05 (annotation-parser.md) is also blocked by 03; resolving this plan removes 02's blocker from plan 05 but plan 05 cannot start until plan 03 is also complete.
 
 Rationale: The regression test suite is the primary validation mechanism throughout this
 project; breaking it at the start adds unnecessary risk with no clear benefit for a solo
@@ -80,11 +80,15 @@ file (02) upon completing the parser implementation. This file owns the section 
 home for the grammar; plan 05 owns the task of writing it. The grammar must cover:
   - `requires`, `ensures`, `preserves`, `invariant`
   - `acc()`, `unfolding`, `fold`/`unfold`
-  - `pure`, `ghost`, `trusted`
+  - `pure`, `ghost`, `trusted`, `opaque`
+  - `decreases [expr | _]` — termination measure (function and loop)
+  - `assert`, `assume`, `inhale`, `exhale` — proof manipulation statements
   - Quantifiers (`forall`, `exists`)
   - Permission amounts (`1/2`, `wildcard`)
   - Assertion operators (`&&`, `||`, `==>`, `!`)
+  - Magic wands (`A --* B`, `package`, `apply`)
   - Gobra-specific: `seq`, `set`, `mset`, `dict`, `option`, ADT constructors
+  - Ghost fields, ghost methods, ghost return values
 
 Plan 05 references `src/main/antlr4/GobraParser.g4` and `GobraLexer.g4` as the authoritative
 source while writing the grammar. Those files reside in the Scala source tree scheduled for
@@ -124,7 +128,9 @@ f(x) //@ unfolding P(x)             // unfolding access inline
 The annotation parser (05) must handle these in addition to standalone `//@ ...` lines.
 The Gobrafier (06) strips the Go-side syntax; the annotation parser sees the `//@ ...`
 portion. These are not arbitrary mid-expression placement — they are specific positional
-patterns that the Gobrafier recognizes by regex. Document the full list in plan 05.
+patterns that the Gobrafier recognizes by regex. Document the full list in plan 06 (the
+Gobrafier owns the regex-based stripping logic; plan 05 only sees the already-reduced
+`//@ ...` fragment).
 
 **Multi-line annotations**: Consecutive `//@ ` lines in the same comment block are
 concatenated (with synthetic newlines for position tracking) before lexing. A single
@@ -135,3 +141,16 @@ logical annotation can span multiple `//@ ` lines:
 //@          acc(y)
 func f(x, y *int) { ... }
 ```
+
+Position mapping: the byte offset within the concatenated string maps back to the original
+comment line's `token.Pos` plus the character offset within that line. Plan 05 must implement
+this mapping and must not invent an incompatible position scheme.
+
+## Annotation Grammar
+
+*This section is owned and written by plan 05 upon completing the annotation parser
+implementation. It must be filled in before the cut-over commit (plan 37 hard gate). See
+Deliverables above for the coverage requirements and validation procedure.*
+
+<!-- plan 05: write the full BNF/EBNF grammar here -->
+

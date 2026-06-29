@@ -53,3 +53,31 @@ the full stdlib source to be verified.
 unchanged. The existing stub files in `src/main/resources/` use `//@ ...` syntax exclusively.
 No stub updates are needed for syntax reasons. The stubs can be copied as-is into
 `internal/frontend/stubs/`.
+
+## Verification Specifications (C9)
+
+Plan 31's primary deliverable is a static file-copy operation (stub files embedded at compile time) rather than runtime pipeline logic. C9 applies to the embed roundtrip and integration contract.
+
+**Embed roundtrip contract**: The embedded bytes for every stub file decode to valid UTF-8 Go source. No file is truncated or corrupted during the `//go:embed` operation.
+
+```go
+// At init time, for every embedded stub file f:
+//@ invariant len(stubFS[f]) > 0
+//@ invariant utf8.Valid(stubFS[f])
+//@ invariant !bytes.Contains(stubFS[f], []byte{0x00})  // no null bytes in Go source
+```
+
+**Stub-resolution contract**: When the custom importer (plan 10) resolves an import path that matches an embedded stub, it must return the stub package, not the real stdlib package. This is a correctness invariant — serving a wrong package silently unsounds all proofs that rely on stub contracts.
+
+```go
+// Importer.Import postcondition for stub paths:
+//@ requires isStubPath(path)   // path has a matching file in internal/frontend/stubs/
+//@ ensures  pkg != nil && isFromStub(pkg, path)
+//@ ensures  err == nil
+```
+
+**No-new-stub contract**: Plan 31 does not write new stub content — it only ports existing files from `src/main/resources/`. If a stub file is absent from `internal/frontend/stubs/` that was present in `src/main/resources/`, that is a gap requiring a new stub (out of scope for plan 31). Termination: the porting loop iterates over a finite, known file set.
+
+```go
+//@ decreases len(remainingFiles)
+```
