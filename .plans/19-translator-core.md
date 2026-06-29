@@ -46,6 +46,7 @@ plug.
 
 ## Dependencies
 
+- [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Translate`
 - [11-internal-ast.md](11-internal-ast.md) — input to translation
 - [14-silver-ast.md](14-silver-ast.md) — output of translation
 
@@ -86,7 +87,7 @@ from the desugarer.
 
 - `internal/translator/context.go` — `Context` interface and implementation
 - `internal/translator/encoding.go` — `Encoding` interface and `TypeEncoding` interface (see below)
-- `internal/translator/translator.go` — `Translate(prog *internal.Program, info *TypeInfo) (*silver.Program, error)`
+- `internal/translator/translator.go` — `Translate(prog *internal.Program, info *TypeInfo) (result *silver.Program, diags []diagnostic.Diagnostic)`
 - `internal/translator/mangle.go` — name mangling utilities (see spec below)
 - `TupleDomain(n int) *silver.Domain` helper on `Context`: lazily emits (and caches) a Silver
   tuple domain for arity `n`. Used by the struct encoding (plan 21) for exclusive structs and

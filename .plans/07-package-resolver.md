@@ -95,9 +95,10 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   // Resolve loads, preprocesses, and parses all packages transitively imported
   // by the given entry-point paths (file paths or import paths). Returns packages
   // in topological order (dependencies before dependents) and all accumulated
-  // diagnostics. A non-empty []Diagnostic does not prevent returning a partial
-  // result; callers (plan 33 pipeline) abort if any diagnostics are present.
-  func Resolve(inputs []string, cfg *ResolverConfig) ([]*PackageInfo, []Diagnostic)
+  // diagnostics. On any error, result is nil and diags is non-empty; a non-nil
+  // result guarantees diags is empty. Callers (plan 33 pipeline) check len(diags) > 0
+  // and abort before proceeding to type checking.
+  func Resolve(inputs []string, cfg *ResolverConfig) (result []*PackageInfo, diags []Diagnostic)
   ```
   `ResolverConfig` includes: stub directory (embedded), Go module root, any `--include`/
   `--exclude` patterns, and a reference to the type-checked package cache for plan 10.

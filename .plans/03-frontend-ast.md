@@ -238,9 +238,18 @@ the body's `PBlockStmt`:
 
 ```go
 type PLoopSpec struct {
-    Invariants        []PExpression      // from //@ invariant P lines
-    TerminationMeasure *PTerminationMeasure // from //@ decreases e (nil if absent)
+    Invariants         []PInvariant  // from //@ invariant P lines; each carries source pos
+    TerminationMeasure *PDecreases   // from //@ decreases e (nil if absent)
 }
+
+// PInvariant wraps a loop invariant expression with its own source position so that
+// error reporting can cite the specific invariant that failed, not just the loop header.
+type PInvariant struct {
+    Expr     PExpression
+    StartPos token.Pos
+}
+func (p *PInvariant) Pos() token.Pos { return p.StartPos }
+func (p *PInvariant) End() token.Pos { return p.Expr.End() }
 
 type PForStmt struct {
     GoFor *ast.ForStmt
@@ -252,8 +261,9 @@ type PForStmt struct {
 `PRangeStmt` follows the same pattern (`GoRange *ast.RangeStmt`, `Spec PLoopSpec`,
 `Body *PBlockStmt`). The body's `PBlockStmt` contains only statements inside the braces.
 
-`PLoopSpec` matches the Scala `PLoopSpec` exactly. `PExpression` is used for invariants
-(Gobra has no separate `PAssertion` trait — assertions are expressions).
+`PLoopSpec` uses `PInvariant` (a wrapper around `PExpression` carrying source position)
+so that error reporting can cite which specific invariant failed. `PDecreases` is the
+renamed form of the termination-measure node, matching the `decreases` keyword the user writes.
 
 ### Verification Specifications (C9)
 
@@ -401,13 +411,16 @@ flat slices; they are derived from the clause list (same as Scala's `pres`/`post
 ```go
 type PFunctionSpec struct {
     Clauses             []PFunctionSpecClause
-    TerminationMeasures []PTerminationMeasure
+    TerminationMeasures []PDecreases
     BackendAnnotations  []PBackendAnnotation
-    IsPure              bool
-    IsTrusted           bool
-    IsOpaque            bool
-    MayBeUsedInInit     bool
+    Modifiers           []PModifier  // PPure, PTrusted, POpaque, PMayBeUsedInInit
 }
+
+// Convenience helpers so callers can check modifiers without a type switch.
+func (s *PFunctionSpec) IsPure()          bool { return hasModifier[*PPure](s) }
+func (s *PFunctionSpec) IsTrusted()       bool { return hasModifier[*PTrusted](s) }
+func (s *PFunctionSpec) IsOpaque()        bool { return hasModifier[*POpaque](s) }
+func (s *PFunctionSpec) MayBeUsedInInit() bool { return hasModifier[*PMayBeUsedInInit](s) }
 
 // Pres returns all precondition expressions (requires + preserves clauses).
 func (s *PFunctionSpec) Pres() []PExpression { ... }
@@ -429,26 +442,174 @@ func (*PRequires)  pClause() {}; func (c *PRequires)  ClauseExp() PExpression { 
 func (*PEnsures)   pClause() {}; func (c *PEnsures)   ClauseExp() PExpression { return c.Exp }
 func (*PPreserves) pClause() {}; func (c *PPreserves) ClauseExp() PExpression { return c.Exp }
 
-// PTerminationMeasure is either a wildcard (decreases _) or a tuple of expressions.
-type PTerminationMeasure interface {
+// PDecreases is a termination measure node, named after the decreases keyword the user writes.
+// Either a wildcard (decreases _) or a tuple of expressions (decreases e1, e2, ...).
+type PDecreases interface {
     PNode
-    pTerminationMeasure()
+    pDecreases()
 }
 
 type PWildcardMeasure struct {
-    Cond *PExpression // optional condition; nil means unconditional
+    Cond     *PExpression // optional condition; nil means unconditional
+    StartPos token.Pos
 }
-func (*PWildcardMeasure) pTerminationMeasure() {}
+func (*PWildcardMeasure) pDecreases() {}
+func (m *PWildcardMeasure) Pos() token.Pos { return m.StartPos }
 
 type PTupleTerminationMeasure struct {
-    Tuple []PExpression
-    Cond  *PExpression // optional condition; nil means unconditional
+    Tuple    []PExpression
+    Cond     *PExpression // optional condition; nil means unconditional
+    StartPos token.Pos
 }
-func (*PTupleTerminationMeasure) pTerminationMeasure() {}
+func (*PTupleTerminationMeasure) pDecreases() {}
+func (m *PTupleTerminationMeasure) Pos() token.Pos { return m.StartPos }
 
 type PBackendAnnotation struct {
     Key    string
     Values []string
+}
+```
+
+### PExpression
+
+```go
+// PExpression is implemented by all expression nodes in the frontend AST —
+// both standard Go expressions (reachable via go/ast wrappers) and Gobra ghost
+// expressions. It is the element type of spec clauses, invariants, quantifier
+// bodies, and all other annotation-layer expression positions.
+type PExpression interface {
+    PNode
+    pExpression()
+}
+```
+
+Leaf Go expressions that Gobra does not annotate (e.g., `*ast.BasicLit`, `*ast.Ident`,
+`*ast.BinaryExpr`) satisfy `PExpression` only if explicitly wrapped. Ghost-only expression
+types defined below all implement `pExpression()` via pointer receivers.
+
+### PModifier
+
+Function modifiers are node types (not boolean fields) so the spec visitor can dispatch on
+them uniformly, carry their source position, and produce accurate diagnostics.
+
+```go
+// PModifier is implemented by all function-level modifier nodes.
+type PModifier interface {
+    PNode
+    pModifier()
+}
+
+// PPure marks a function as pure (no side effects; may appear in specs).
+type PPure struct{ StartPos token.Pos }
+func (*PPure) pModifier() {}
+func (m *PPure) Pos() token.Pos { return m.StartPos }
+
+// PTrusted marks a function as trusted (body not verified; spec is assumed correct).
+type PTrusted struct{ StartPos token.Pos }
+func (*PTrusted) pModifier() {}
+func (m *PTrusted) Pos() token.Pos { return m.StartPos }
+
+// POpaque marks a pure function as opaque (body hidden from callers without reveal).
+type POpaque struct{ StartPos token.Pos }
+func (*POpaque) pModifier() {}
+func (m *POpaque) Pos() token.Pos { return m.StartPos }
+
+// PMayBeUsedInInit marks a function as safe to call during package initialisation.
+type PMayBeUsedInInit struct{ StartPos token.Pos }
+func (*PMayBeUsedInInit) pModifier() {}
+func (m *PMayBeUsedInInit) Pos() token.Pos { return m.StartPos }
+
+// hasModifier is the generic helper used by PFunctionSpec convenience methods.
+// Go generics are acceptable here; this is a trivial predicate over []PModifier.
+func hasModifier[M PModifier](s *PFunctionSpec) bool {
+    for _, m := range s.Modifiers {
+        if _, ok := m.(M); ok {
+            return true
+        }
+    }
+    return false
+}
+```
+
+### PTypeDecl / PInterfaceType / PRangeStmt
+
+These wrapper types appear in the Visitor interface and must have concrete definitions.
+
+```go
+// PTypeDecl wraps *ast.TypeSpec with an optional Gobra type extension (e.g., ADT tagging).
+// Implements PDecl so it can appear in PFile.GhostDecls when a ghost type is declared.
+type PTypeDecl struct {
+    GoSpec   *ast.TypeSpec
+    GhostExt PNode  // non-nil only for Gobra-extended type forms; nil for plain Go types
+}
+func (*PTypeDecl) pDecl() {}
+func (d *PTypeDecl) Pos() token.Pos { return d.GoSpec.Pos() }
+func (d *PTypeDecl) End() token.Pos { return d.GoSpec.End() }
+
+// PInterfaceType wraps *ast.InterfaceType with ghost method specs (pure predicates, etc.)
+// that have no representation in go/ast.
+type PInterfaceType struct {
+    GoIface      *ast.InterfaceType
+    GhostMethods []*PMethodDecl  // additional ghost method specs; empty for plain interfaces
+}
+func (t *PInterfaceType) Pos() token.Pos { return t.GoIface.Pos() }
+func (t *PInterfaceType) End() token.Pos { return t.GoIface.End() }
+
+// PRangeStmt wraps *ast.RangeStmt with a loop spec (invariants, termination measure).
+type PRangeStmt struct {
+    GoRange *ast.RangeStmt
+    Spec    PLoopSpec
+    Body    *PBlockStmt
+}
+func (s *PRangeStmt) Pos() token.Pos { return s.GoRange.Pos() }
+func (s *PRangeStmt) End() token.Pos { return s.GoRange.End() }
+```
+
+### Ghost Expression Types
+
+Ghost expression types produced by the annotation parser (plan 05). Defined here because
+they are AST node types owned by this package; plan 05 constructs instances but does not
+define the types.
+
+```go
+// PMagicWand is the magic wand assertion A --* B.
+type PMagicWand struct {
+    Left     PExpression
+    Right    PExpression
+    StartPos token.Pos
+}
+func (*PMagicWand) pExpression() {}
+func (e *PMagicWand) Pos() token.Pos { return e.StartPos }
+func (e *PMagicWand) End() token.Pos { return e.Right.End() }
+
+// PGhostCall is a call to a ghost function or pure method in a spec context.
+type PGhostCall struct {
+    Recv     PExpression  // nil for plain function calls
+    Fun      *ast.Ident
+    Args     []PExpression
+    StartPos token.Pos
+    EndPos   token.Pos
+}
+func (*PGhostCall) pExpression() {}
+func (e *PGhostCall) Pos() token.Pos { return e.StartPos }
+func (e *PGhostCall) End() token.Pos { return e.EndPos }
+
+// PMatch is a pattern-match expression (match e { case P: body ... }).
+// Used for ADT pattern matching in spec and ghost contexts.
+type PMatch struct {
+    Scrutinee PExpression
+    Cases     []*PMatchCase
+    StartPos  token.Pos
+    EndPos    token.Pos
+}
+func (*PMatch) pExpression() {}
+func (e *PMatch) Pos() token.Pos { return e.StartPos }
+func (e *PMatch) End() token.Pos { return e.EndPos }
+
+// PMatchCase is one arm of a PMatch expression.
+type PMatchCase struct {
+    Pattern  PExpression  // the constructor pattern
+    Body     PExpression  // match expression result for this arm
 }
 ```
 
@@ -460,6 +621,7 @@ expression and statement types added by plan 05 extend the same interface in the
 
 ```go
 type Visitor interface {
+    // Wrapper nodes (Go constructs extended by Gobra)
     VisitPFunctionDecl(n *PFunctionDecl)
     VisitPMethodDecl(n *PMethodDecl)
     VisitPTypeDecl(n *PTypeDecl)
@@ -468,7 +630,21 @@ type Visitor interface {
     VisitPGoStmt(n *PGoStmt)
     VisitPForStmt(n *PForStmt)
     VisitPRangeStmt(n *PRangeStmt)
-    // Ghost expression / statement visitors added by plan 05:
+    // Loop spec nodes
+    VisitPInvariant(n *PInvariant)
+    VisitPWildcardMeasure(n *PWildcardMeasure)
+    VisitPTupleTerminationMeasure(n *PTupleTerminationMeasure)
+    // Function modifier nodes
+    VisitPPure(n *PPure)
+    VisitPTrusted(n *PTrusted)
+    VisitPOpaque(n *POpaque)
+    VisitPMayBeUsedInInit(n *PMayBeUsedInInit)
+    // Ghost expression nodes (defined in this plan; constructed by plan 05)
+    VisitPMagicWand(n *PMagicWand)
+    VisitPGhostCall(n *PGhostCall)
+    VisitPMatch(n *PMatch)
+    // Additional ghost expression / statement visitors contributed by plan 05
+    // in the same package (internal/ast/frontend/):
     // VisitPFold, VisitPUnfold, VisitPAssert, VisitPAssume, VisitPExhale,
     // VisitPInhale, VisitPPackageWand, VisitPApplyWand,
     // VisitPForall, VisitPExists, VisitPAccess, VisitPOld, VisitPUnfolding, ...

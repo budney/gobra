@@ -154,8 +154,8 @@ so Gobra can statically enforce the threading precondition and result validity c
 1. **`Verify` threading precondition**: `Verify` makes JNI calls and may only be called from
    a goroutine that holds the OS-thread lock and JVM attachment:
    ```go
-   //@ requires acc(backend.ThreadAttached(jvm), 1)
-   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1)
    //@ ensures  err == nil ==> result != nil
    func Verify(prog jobject, cfg backend.SiliconConfig) (result *backend.VerificationResult, err error)
    ```

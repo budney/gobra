@@ -48,20 +48,25 @@ constructs. These have their own typing rules that differ from standard Go.
 - `internal/info/specchecker.go` — `CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic`
   Entry point for the spec type-checking pass. Mutates `info.Ghost` in place.
 - `internal/info/specvisitor.go` — the spec expression visitor; one visitor method per spec
-  AST node type handled. The following spec-AST node types are handled by `CheckSpecs`:
+  AST node type handled. All types below are defined in plan 03 (`internal/ast/frontend/`);
+  plan 09 imports and dispatches on them but does not define them.
+  The following spec-AST node types are handled by `CheckSpecs`:
   - `PRequires`, `PEnsures`, `PPreserves` — precondition/postcondition/preservation clauses
-  - `PInvariant` — loop invariant expression
-  - `PDecreases` — termination measure; element type must be well-ordered
+  - `PInvariant` — loop invariant wrapper node (carries `Expr PExpression` + source pos)
+  - `PDecreases` — termination measure interface; dispatch on concrete subtypes
+    `PWildcardMeasure` and `PTupleTerminationMeasure`; element types must be well-ordered
   - `PAccess` (`acc(e)`, `acc(e, p)`) — `e` must be a field access or predicate call
   - `PForall`, `PExists` — quantifier; bound variable scoping; body must be `bool`
   - `POld` — `old(e)`; only valid inside postconditions
   - `PBefore` — `before(e)`; only valid inside `preserves` clauses
   - `PMagicWand` — `A --* B`; A and B must be permission expressions
   - `PSeq`, `PSet`, `PMSet`, `PDict`, `POption` — ghost collection expressions
-  - `PMatch` — pattern match; exhaustiveness check
+  - `PMatch` — pattern match; exhaustiveness check against all ADT constructors
   - `PGhostCall` — ghost function/method call
   - `PUnfolding` — `unfolding P in e`
-  - `PPure`, `PTrusted`, `POpaque`, `PMayBeUsedInInit` — function modifier constraints
+  - `PPure`, `PTrusted`, `POpaque`, `PMayBeUsedInInit` — function modifier node types;
+    the visitor checks structural constraints (e.g., `POpaque` only valid on `PPure` functions;
+    `PTrusted` cannot be combined with a body) by examining `PFunctionSpec.Modifiers`
 - `internal/info/ghosttypes.go` — `GhostTypeInfo`, `GhostType`, and all concrete implementations
   (already defined in plan 08; plan 09 populates the `GhostTypeInfo.Types` map)
 - Structural constraint checks integrated into the checker pass (see Scope above)

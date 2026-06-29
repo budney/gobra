@@ -67,6 +67,6 @@ plans (04 through 13) can use `Diagnostic` without incurring a dependency on the
 reporting package.
 
 Every plan that produces `[]Diagnostic` must list plan 32a as a dependency in its Dependencies
-section. The following plans are affected: 04, 05, 06, 07, 08, 09, 10, 12, 13, 32.
-(Plan 19's `Translate` returns `(*silver.Program, error)` — translation panics on internal bugs
-rather than accumulating diagnostics — so plan 19 does not need this dependency.)
+section. The following plans are affected: 04, 05, 06, 07, 08, 09, 10, 12, 13, 19, 32.
+(Plan 19's `Translate` returns `(result *silver.Program, diags []diagnostic.Diagnostic)` —
+consistent with all other pipeline stages — so plan 19 lists plan 32a as a dependency.)

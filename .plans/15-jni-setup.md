@@ -232,22 +232,25 @@ The JNI bridge package must formally specify thread-state safety using Gobra per
    that holds the OS-thread lock and has an attached JVM thread. This is expressed as a
    thread-ownership ghost predicate:
    ```go
-   //@ pred ThreadAttached(jvm *JVM)
+   //@ pred ThreadAttached()
    //
-   //@ requires acc(ThreadAttached(jvm), 1)
-   //@ ensures  acc(ThreadAttached(jvm), 1)
+   //@ requires acc(ThreadAttached(), 1)
+   //@ ensures  acc(ThreadAttached(), 1)
    func (jvm *JVM) callJVM(method string) error
    ```
-   An un-attached goroutine has no `ThreadAttached` token, so calling `callJVM` without it
-   is a static verification error.
+   `ThreadAttached` takes no argument because the JVM is a process-wide singleton (plan 15
+   `sync.Once`); there is never ambiguity about which JVM's attachment is meant. The predicate
+   models OS-thread state: each goroutine that holds `acc(ThreadAttached(), 1)` has its
+   underlying OS thread attached. An un-attached goroutine has no token, so calling `callJVM`
+   without it is a static verification error.
 
 2. **Attach/detach lifecycle**: `AttachCurrentThread` produces the token; `DetachCurrentThread`
    consumes it. The `defer` pattern in `runWorkerSkeleton` must be annotated:
    ```go
-   //@ ensures acc(ThreadAttached(jvm), 1)
+   //@ ensures acc(ThreadAttached(), 1)
    func (jvm *JVM) AttachCurrentThread()
 
-   //@ requires acc(ThreadAttached(jvm), 1)
+   //@ requires acc(ThreadAttached(), 1)
    func (jvm *JVM) DetachCurrentThread()
    ```
 

@@ -102,8 +102,8 @@ and verified before this plan is considered complete.
 
 2. **`Verify` threading precondition** — JNI calls require OS-thread lock and JVM attachment:
    ```go
-   //@ requires acc(backend.ThreadAttached(jvm), 1)
-   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1)
    //@ ensures  result != nil   // never returns nil; JNI errors encoded in result.Err
    func (c *CarbonFrontendAPI) Verify(prog jobject) (result *backend.VerificationResult)
    ```

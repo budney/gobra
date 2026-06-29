@@ -90,7 +90,18 @@ status code.
   by the semaphore in `DispatchChopped` — excess workers simply idle. `numSubPrograms` is
   only known after the translator and chopper run and cannot be used to set the pool size
   at flag-parse time.
-- `internal/pipeline/pipeline.go` — `Run(cfg *Config) error` orchestrating all stages
+- `internal/pipeline/pipeline.go` — `Run(cfg *Config) error` orchestrating all stages.
+  Two sentinel errors are defined in this package:
+  ```go
+  // ErrVerificationFailed is returned when Silicon reports one or more verification
+  // errors. The tool ran correctly; the program under verification has a proof failure.
+  // Distinct from infrastructure errors so callers (tests, CI) can distinguish the two.
+  var ErrVerificationFailed = errors.New("verification failed")
+  ```
+  `Run` returns `ErrVerificationFailed` when verification finds errors (exit code 1),
+  a wrapped infrastructure error when the JVM, JAR, or file system fails (exit code 1),
+  and `nil` when verification succeeds (exit code 0). The reporter is called inside `Run`
+  before returning; all diagnostic output is written to stdout/stderr by `Run` itself.
 - Tests: integration tests running the full pipeline on small `.gobra` files
 
 ## Resolved Questions
@@ -135,18 +146,19 @@ sequential verification even when --workers N > 1."
 The following Gobra annotations will be written into `internal/pipeline/pipeline.go` and
 `internal/config/config.go` and verified before this plan is considered complete.
 
-1. **`Run` error postcondition**: a non-nil error is returned iff at least one pipeline stage
-   produced diagnostics or the infrastructure itself failed; a nil error guarantees all stages
-   completed without diagnostics:
+1. **`Run` error postcondition**: `nil` on clean verification; `ErrVerificationFailed` when
+   Silicon reports proof failures; a wrapped infrastructure error on tool failure. The reporter
+   is called inside `Run`; all output is written before `Run` returns. Callers need only check
+   `err != nil` for the exit code — they do not receive or re-print diagnostics.
    ```go
    //@ requires cfg != nil
-   //@ ensures  err != nil || len(diags) == 0
+   //@ ensures  err == nil || err == ErrVerificationFailed || isInfrastructureError(err)
    //@ decreases // terminates when the verification backend terminates
-   func Run(cfg *Config) (diags []diagnostic.Diagnostic, err error)
+   func Run(cfg *Config) (err error)
    ```
-   Note: `Run` returns accumulated `[]Diagnostic` alongside `error` so the reporter can emit
-   partial results even on infrastructure failure. The exit-code mapping in `main.go` is:
-   `len(diags) > 0 || err != nil` → non-zero exit code.
+   Exit-code mapping in `main.go`: `err != nil` → exit 1, `err == nil` → exit 0.
+   Tests distinguish verification failure from infrastructure failure via
+   `errors.Is(err, ErrVerificationFailed)`.
 
 2. **`parseFlags` nil-safety**: flag parsing either succeeds with a non-nil `Config` or fails
    with a non-nil error; never returns `(nil, nil)`:

@@ -131,8 +131,8 @@ thread ownership and result validity using Gobra permissions.
    plans contribute to the same `jvm` package and Gobra rejects duplicate predicate declarations.
    ```go
    // ThreadAttached is declared in plan 15 (jvm.go) — reference only, not redeclared.
-   //@ requires acc(ThreadAttached(jvm), 1)
-   //@ ensures  acc(ThreadAttached(jvm), 1) && acc(result) && result != nil
+   //@ requires acc(ThreadAttached(), 1)
+   //@ ensures  acc(ThreadAttached(), 1) && acc(result) && result != nil
    func (instance *SiliconFrontendAPI) Verify(prog jobject) *backend.VerificationResult
    ```
 

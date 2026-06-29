@@ -84,3 +84,58 @@ characters including `.` and `/` are hex-encoded as `_u{HEX}_`, not replaced wit
 underscores). This preserves injectivity across package paths and avoids Silver's global field
 namespace collisions. Do NOT replace dots with bare underscores before mangling — use the
 full hex-encoding rule from plan 19.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/structs.go`
+and verified before this plan is considered complete.
+
+**`EncodeStruct` non-nil result** — the encoding of any well-typed struct type produces a
+non-nil Silver member:
+```go
+//@ requires ctx != nil && s != nil
+//@ ensures  result != nil
+//@ decreases
+func (e *StructEncoding) EncodeStruct(ctx *Context, s *internal.StructType) (result silver.Member)
+```
+
+**`EncodeFieldAccess` correct Silver field name** — the emitted `FieldAccess` node uses the
+mangled field name and refers to the correct receiver:
+```go
+//@ requires ctx != nil && recv != nil && field != nil
+//@ ensures  result != nil
+//@ ensures  result.ReceiverType() == silver.RefType()
+//@ decreases
+func (e *StructEncoding) EncodeFieldAccess(
+    ctx *Context, recv silver.Expr, field *internal.FieldDecl,
+) (result *silver.FieldAccess)
+```
+
+**Field name injectivity** — the mangling function produces distinct Silver field names for
+distinct (package, struct, field) triples. This is a pure compile-time property expressed via
+a ghost function:
+```go
+//@ pure func fieldNamesDistinct(a, b *internal.FieldDecl) bool
+//@ requires a != nil && b != nil && a != b
+//@ ensures  fieldNamesDistinct(a, b) ==> MangleFieldName(a) != MangleFieldName(b)
+//@ decreases
+func MangleFieldName(f *internal.FieldDecl) string
+```
+
+**`sharedStructConversion` permission precondition** — the bodyless Silver function requires
+at least wildcard permission on every field of the shared struct. The Go code that emits it
+must include the wildcard-permission preconditions verbatim, one per field:
+```go
+// Emitting sharedStructConversion_{S}; preconditions must exactly match the Bodyless Functions table.
+//@ requires forall i int :: 0 <= i && i < len(fields) ==> acc(x.fields[i], wildcard)
+//@ ensures  result == tuple(x.fields[0], x.fields[1], ...)
+```
+This is verified by the Scala oracle test (plan 34 differential mode).
+
+**Termination** — `EncodeStruct` terminates because the struct's field list is finite and
+each field type is encoded by a separate encoding module (no recursive call back into
+`EncodeStruct` for field types):
+```go
+//@ decreases len(s.Fields)
+func (e *StructEncoding) EncodeStruct(ctx *Context, s *internal.StructType) (result silver.Member)
+```
