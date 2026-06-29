@@ -305,8 +305,8 @@ close and double-close bugs.
 3. **Thread precondition on `Build`**: `Build` makes JNI calls and requires the caller to
    already hold the OS-thread lock and JVM attachment (plan 15's `ThreadAttached` predicate):
    ```go
-   //@ requires acc(backend.ThreadAttached(jvm), 1)
-   //@ ensures  acc(backend.ThreadAttached(jvm), 1)
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1)
    func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
    ```
 

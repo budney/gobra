@@ -104,6 +104,11 @@ Fields (tab- or space-separated):
    - `known-false-negative` (Go-Gobra accepts what Scala Gobra rejects — investigate separately)
    - `known-false-positive` (Go-Gobra rejects what Scala Gobra accepts — investigate separately)
 
+   The skip list parser **must reject any unrecognised reason slug as a parse error at startup**,
+   failing the test run before any tests execute. This enforces the fixed set of slugs at the
+   tool level rather than relying on convention — a typo like `SKIP:generics-unimplemented`
+   is caught immediately rather than silently skipping the test with a wrong label.
+
 The CI job that runs the suite must fail if a test in the skip list now passes (i.e., skip
 entries must be pruned as features are implemented). This prevents the skip list from silently
 accumulating stale entries.

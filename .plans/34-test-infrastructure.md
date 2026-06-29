@@ -9,8 +9,7 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 ## Scope
 
 **In scope:**
-- Test file discovery: walk `src/test/resources/regressions/` (or a Go-Gobra equivalent)
-  and collect `.gobra` test files
+- Test file discovery: walk `tests/testdata/regressions/` and collect `.gobra` test files
 - Parse test metadata from each file:
   - `//@ expectedError <errorId>` — expect a specific error at this line
   - `//@ unexpectedError` — expect no error at this line (regression guard)

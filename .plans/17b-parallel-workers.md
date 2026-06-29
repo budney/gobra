@@ -155,6 +155,46 @@ Document this constraint in `--help` for both flags.
     forced fallback does not break verification. Use a trivially correct Silver program for
     the result check so the test is fast and deterministic.
 
+## Verification Specifications (C9)
+
+Plan 17b's dispatch and merge functions are pipeline-critical and must carry Gobra annotations
+that will be written into `internal/backend/jvm/dispatch.go` and `internal/backend/dedup.go`.
+
+1. **`DispatchChopped` postcondition** — result is always non-nil; `Success` iff all
+   sub-results succeed:
+   ```go
+   //@ requires p != nil && len(progs) > 0
+   //@ ensures  result != nil
+   func (p *WorkerPool) DispatchChopped(progs []*silver.Program) (result *backend.VerificationResult)
+   ```
+   The success-iff-all contract is enforced by `mergeResults`; `DispatchChopped` delegates
+   the merge entirely to that helper.
+
+2. **`mergeResults` composite Close contract** — the returned result's `Close` is always
+   non-nil and transitively calls every sub-result's `Close()` to release JNI global references:
+   ```go
+   //@ requires len(results) > 0
+   //@ requires forall i int :: { results[i] } 0 <= i < len(results) ==> results[i] != nil
+   //@ ensures  result != nil
+   //@ ensures  result.Close != nil
+   func mergeResults(results []*backend.VerificationResult) (result *backend.VerificationResult)
+   ```
+   Without this contract, a caller that skips `defer result.Close()` would leak JNI global
+   references; the non-nil postcondition makes the leak statically detectable.
+
+3. **`Deduplicate` purity contract** — result is a sub-multiset of the input with no two
+   entries sharing the same `(File, Line, Col, FullID)` key:
+   ```go
+   //@ ensures len(result) <= len(errs)
+   //@ ensures forall i, j int :: { result[i], result[j] }
+   //@     0 <= i < j < len(result) ==>
+   //@     !(result[i].Pos.File  == result[j].Pos.File  &&
+   //@       result[i].Pos.Line  == result[j].Pos.Line  &&
+   //@       result[i].Pos.Col   == result[j].Pos.Col   &&
+   //@       result[i].FullID    == result[j].FullID)
+   func Deduplicate(errs []backend.VerificationError) (result []backend.VerificationError)
+   ```
+
 ## Scaling Note
 
 Diminishing returns begin at `runtime.NumCPU()` workers: each worker holds a Silicon + Z3

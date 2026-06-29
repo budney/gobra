@@ -66,6 +66,32 @@ plug.
   this is resolved by making `Context` hold references to all encodings (initialized together)
 - Silver name generation must be deterministic (same input → same Silver name) for caching
   and debugging
+- **Encoding Init ordering**: `MainTranslator` must call each encoding's `Init` in a fixed
+  order. `InterfaceEncoding` (plan 25) **must run first** — it registers `none_InterfaceDomain()`
+  as the dflt for `DomainType("InterfaceDomain")` and emits the `Type` domain. Three other
+  encodings depend on this at Init time or during translation: `PointerEncoding` (plan 22,
+  calls `ctx.Dflt(DomainType("InterfaceDomain"))` for nil `*I`), `MapEncoding` (plan 24, calls
+  `EnsureTypeDomain`), and `ChannelEncoding` (plan 28, uses `chan_Type` from the Type domain).
+  All remaining encodings are order-independent after `InterfaceEncoding`. The recommended
+  startup sequence in `MainTranslator.init()`:
+  ```go
+  encodings := []Encoding{
+      &InterfaceEncoding{}, // must be first
+      &PrimitiveEncoding{},
+      &StructEncoding{},
+      &PointerEncoding{},
+      &SliceEncoding{},
+      &MapEncoding{},
+      &PermissionEncoding{},
+      &MethodEncoding{},
+      &ChannelEncoding{},
+      &ADTEncoding{},
+      &BuiltinEncoding{},
+  }
+  for _, e := range encodings {
+      e.Init(ctx)
+  }
+  ```
 
 ## The Exclusive / Shared Duality (Critical Architecture Concept)
 

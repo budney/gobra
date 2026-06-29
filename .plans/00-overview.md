@@ -143,10 +143,11 @@ errors exist before moving to the next stage. Panics (not errors) are reserved f
 consistency violations that cannot be recovered from.
 
 **Bodyless Viper functions**: See the critical warning in plan 19 — missing postconditions
-on bodyless Viper functions silently weaken verification. This affects plans 20, 23, 25, 27, 29.
-(Plan 24 uses Silver built-in `Map` type operations with no bodyless functions. Plan 21
-generates `sharedStructConversion` and `sharedStructDefault` — also subject to this invariant;
-see plan 19 for the full list.)
+on bodyless Viper functions silently weaken verification. This affects plans 21, 23, 25, 27.
+(Plan 20's `goIntDiv`/`goIntMod` carry explicit bodies extracted from `IntegerEncoding.scala`
+and are not bodyless. Plan 24 uses Silver built-in `Map` operations with no bodyless functions.
+Plan 29's ADT constructors are Silver domain functions governed by axioms, not bodyless Silver
+functions — different failure mode, covered separately in plan 25's domain-axioms note below.)
 
 **Domain axioms vs. bodyless Silver functions (plan 25)**: Plan 25's `Poly[T]` domain
 uses Silver *domain functions* governed by axioms, not Silver *functions* with postconditions.

@@ -91,14 +91,15 @@ The `gobra-self-verify` CI job has two tiers:
 
 **Blocking tier** (fails the build if it regresses): verification of the following modules,
 which are pure functional code with no CGo or concurrency:
+- `internal/diagnostic/` — zero-dependency data types (added first; trivial to verify, establishes the CI gate)
 - `internal/silver/` — Silver printer (pure function, no heap mutation)
 - `internal/ast/internal/` — internal AST traversal
 - `internal/desugar/` — desugarer (pure tree transformation)
 - `internal/translator/mangle.go` — name mangler (pure function)
 
 These are the recommended starting points from plan 37's "Approach" section. Once each module
-verifies successfully, it is added to the blocking tier. The blocking tier starts empty and
-grows as modules are verified; it never shrinks.
+verifies successfully, it is added to the blocking tier. The blocking tier starts with
+`internal/diagnostic/` and grows as modules are verified; it never shrinks.
 
 **Advisory tier** (runs on every push, reports results, does not block merges): everything
 outside the blocking tier, including the type checker, the full translator, and any module

@@ -171,8 +171,12 @@ An optional `gobra-chopper.json` file in the working directory overrides individ
 Keys are the Scala field names from the table above. Unknown keys are ignored.
 
 **Default bound**: The Scala default is `bound = Some(1)` — a single merged program.
-Go-Gobra follows this: without `--chop`, `bound=1`; with `--chop`, `bound=nil` (unlimited)
-or `--chop-bound N` overrides it.
+Go-Gobra follows this: without `--chop`, `bound=1`. With `--chop` and no explicit
+`--chop-bound`, the pipeline (plan 33) defaults the bound to `--workers`, capping sub-program
+count to the worker count to prevent memory pile-up in `DispatchChopped`. If `--chop-bound N`
+is set with `N > --workers`, the pipeline clamps it to `--workers` and logs a warning. The
+chopper itself accepts whatever bound it receives; the clamping and defaulting are enforced
+by pipeline.go, not by the chopper.
 
 **PluginAwareChopper**: Gobra uses `PluginAwareChopper`, not the base `Chopper`. This
 variant adds artificial edges from `Always` to any domain whose name ends in

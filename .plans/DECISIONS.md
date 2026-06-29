@@ -260,6 +260,37 @@ independent and can be parallelized if the project gains contributors.
 
 ---
 
+## D12 — Carbon backend deferred indefinitely (post-self-hosting scope)
+
+**Decision:** Plan 18 (Carbon backend) is removed from the active WBS and deferred until after
+the self-hosting milestone. Silicon is the only active verification backend.
+
+**Rationale:**
+- Carbon requires Boogie, which requires Mono on Linux — a heavy transitive dependency that
+  most users will not have and that adds no value to the self-hosting milestone.
+- Silicon is the default backend in practice; Carbon usage is negligible among real Gobra users.
+- The self-hosting CI job (plan 37) runs Silicon exclusively; Carbon has zero contribution to
+  the completion milestone.
+- The JNI pattern established by Silicon (plan 17) fully documents how a second backend would
+  be added; Plan 18 remains as a reference design if Carbon is ever needed post-parity.
+
+**Consequence:**
+- The `Backend` interface (previously planned for `internal/backend/types.go` in plan 18) is
+  not added. `SiliconInstance` (plan 15) remains the only active backend interface.
+- Plan 33 (CLI) does not wire a `--backend carbon` flag; `--backend` flag is omitted entirely
+  or reserved for future use.
+- The two-interface confusion identified in item 100 (scratchpad round 8) is resolved: there
+  is only one interface (`SiliconInstance`), not two.
+- If Carbon support is added post-self-hosting, Plan 18's design remains valid; the only change
+  needed is adding the `Backend` interface and the `CarbonFrontendAPI` implementation.
+
+**Alternatives considered:**
+1. **Keep Carbon in scope** — provides complementary coverage for edge cases where Silicon
+   times out. Rejected: the Boogie/Mono dependency burden outweighs the niche benefit for a
+   solo self-hosting project.
+
+---
+
 ## D11 — Self-hosting may require extending the annotation language and refactoring Go-Gobra
 
 **Decision:** If Gobra's current annotation language cannot express a key invariant of
