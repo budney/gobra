@@ -76,6 +76,40 @@ Plan 31's primary deliverable is a static file-copy operation (stub files embedd
 //@ ensures  err == nil
 ```
 
+**Ghost predicate ownership**: `isStubPath` and `isFromStub` are ghost predicates defined
+in `internal/frontend/stubs/stubs.go` (owned by this plan, plan 31). They must be pure and
+side-effect-free so Gobra can use them in preconditions and postconditions.
+
+```go
+// isStubPath reports whether the given import path has a corresponding embedded stub file.
+// Defined in internal/frontend/stubs/stubs.go.
+//
+//@ pure
+//@ decreases
+//@ func isStubPath(path string) bool {
+//@     return stubFS.Exists(path + ".gobra") || stubFS.Exists(path + "/stub.gobra")
+//@ }
+
+// isFromStub reports whether pkg was loaded from the embedded stub for the given path,
+// rather than from the real filesystem or go/packages. Used to enforce that stub-directory-
+// first resolution (plan 10) does not silently fall back to the real stdlib package.
+//
+//@ pure
+//@ decreases
+//@ func isFromStub(pkg *types.Package, path string) bool {
+//@     return pkg != nil && pkg.Path() == path && stubSourceTag(pkg)
+//@ }
+// stubSourceTag is a ghost field set on *types.Package by the importer when a package
+// is loaded from the embedded stubs. It is never set for real-stdlib packages.
+//@ ghost field stubSourceTag bool  // on *types.Package; set only by stub-loading path
+```
+
+The importer (plan 10) sets `stubSourceTag` on each `*types.Package` it creates from
+embedded stub bytes, and never sets it for packages loaded from disk. This makes
+`isFromStub` decidable and falsifiable: a `*types.Package` built from disk for a stub path
+(e.g., by accidentally falling through to the real stdlib resolver) will have
+`stubSourceTag == false` and the postcondition will fail.
+
 **No-new-stub contract**: Plan 31 does not write new stub content — it only ports existing files from `src/main/resources/`. If a stub file is absent from `internal/frontend/stubs/` that was present in `src/main/resources/`, that is a gap requiring a new stub (out of scope for plan 31). Termination: the porting loop iterates over a finite, known file set.
 
 ```go

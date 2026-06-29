@@ -135,10 +135,10 @@ required. Plan 16's builder may prepend `gobra_node_id` / `gobra_node_*` entries
 
 - `internal/translator/encodings/methods.go`
 - `internal/translator/encodings/functions.go`
-- `KNOWN_LIMITATIONS.md` at the repo root (created by this plan; other plans append to it):
-  document the defer-in-loop limitation and the closure captured-mutable-variable encoding
-  restriction. Plans 20 (bitwise ops), 28 (channel semantics), and any other plan that
-  references `KNOWN_LIMITATIONS.md` should append to this file rather than creating it.
+- `KNOWN_LIMITATIONS.md` at the repo root (created as an empty file by plan 01; appended to
+  by this plan): document the defer-in-loop limitation and the closure captured-mutable-variable
+  encoding restriction. Plans 20 (bitwise ops), 28 (channel semantics), and any other plan
+  that references `KNOWN_LIMITATIONS.md` should also append to the file created by plan 01.
 - End-to-end test: translate a small but non-trivial annotated Go program (e.g., the swap
   example from `src/test/resources/regressions/examples/`) and verify it passes Silicon
 

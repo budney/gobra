@@ -15,7 +15,7 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 - Overflow handling: when overflow checks are enabled (transform 13 inserts assertions;
   the encoding must produce Silver that checks them)
 - Built-in conversions between numeric types
-- `unsafe.Sizeof`, `unsafe.Alignof` (if in scope for full parity)
+- `unsafe.Sizeof`, `unsafe.Alignof` — **not in scope** (see note below)
 
 **Out of scope:**
 - Composite types (21–25)
@@ -167,7 +167,10 @@ and verified before this plan is considered complete.
    func (e *StringEncoding) ensureStringsDomain(ctx Context)
    ```
 
-## Open Questions
+## Resolved Questions
 
-- `unsafe.Sizeof` / `unsafe.Alignof`: treat as opaque integer constants for the initial
-  implementation; mark with `// TODO: unsafe` comments.
+**`unsafe.Sizeof` / `unsafe.Alignof` (resolved — not an encoder concern):** The `unsafe`
+package is rejected at import time by plan 07 (package resolver) and plan 08 (type checker
+core), both of which emit an explicit diagnostic for `import "unsafe"`. No file containing
+`unsafe.*` references will reach the encoding stage. This encoding plan has no work to do for
+`unsafe`: do not add encoder-level handling, dead code paths, or `// TODO` markers for it.

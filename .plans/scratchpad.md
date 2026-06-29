@@ -142,9 +142,10 @@
 | 8 | Full /review-plan ALL (all 41 plans + foundation docs) | 97–104 | All DONE |
 | — | D12 decision: defer Carbon backend (Plan 18) | — | RESOLVED |
 | 9 | Full /review-plan ALL second pass (verified 34–37, COVERAGE, CRITERIA) | 105–109 | All DONE |
+| 10 | Full /review-plan ALL third pass (all 41 plans + foundation docs) | 110–113 | All DONE |
 | — | D13 decision: AST-based generic detection replaces grep | — | RESOLVED |
 
-**Total: 109 items resolved. All rounds complete. No open items.**
+**Total: 113 items resolved. All rounds complete. No open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -448,3 +449,69 @@ mode. Slug set definition stays in Plan 35, avoiding circular content duplicatio
 
 **Status**: RESOLVED — `CRITERIA.md` C1 updated to include `scratchpad.md` in the reference
 documents enumeration.
+
+---
+
+## ROUND 10 — Full /review-plan ALL (all 41 plans + foundation docs, third pass)
+
+### Item 110 — Minor Contradiction: Plan 27 claims to "create" KNOWN_LIMITATIONS.md, but Plan 01 already creates it
+
+**Criterion**: C1 — Contradictions between plan documents.
+
+**Finding**: `27-encoding-methods.md` contains the note: "KNOWN_LIMITATIONS.md: created by this plan." Plan 01's Deliverables section creates `gobra-go/KNOWN_LIMITATIONS.md` as an empty file in the initial project skeleton. Plans 20 and 28 also append to it. Plan 27 cannot create a file that plan 01 already creates.
+
+**Required fix**: Update Plan 27's KNOWN_LIMITATIONS.md note from "created by this plan" to "appended to by this plan." Match the language used in `00-overview.md`'s cross-cutting note which says "plans 20, 27, 28 append to it (plan 01 creates it)."
+
+**Status**: RESOLVED — `27-encoding-methods.md` Deliverables updated: "created by this plan" → "created as an empty file by plan 01; appended to by this plan."
+
+---
+
+### Item 111 — Logic Error: Plan 29 ADT rank-decrease axiom assumes rank function exists for non-ADT field types
+
+**Criterion**: C3 — Encoding correctness.
+
+**Finding**: Plan 29's rank-decrease axiom template is:
+```
+forall f: F :: {rank$X(X_C1(f))} rank$F(f) < rank$X(X_C1(f))
+```
+This assumes a `rank$F` Silver function exists for every field type `F`. For ADT-typed fields, `rank$F` is defined in the field type's own domain. For primitive Silver types (Int, Bool, Ref, Seq[T], etc.), no `rank$` function exists — Silver domains are nominal and only ADT-typed nodes generate rank functions. As written, the axiom template would be emitted for all constructor fields regardless of type, producing ill-formed Silver (referencing undefined functions) for any ADT that has a non-ADT-typed field.
+
+**Required fix**: Plan 29 must clarify that rank-decrease axioms are only emitted for constructor fields whose type is itself a Gobra ADT (i.e., whose type has a corresponding `rank$` Silver function). Fields of primitive type, Silver Seq, Silver Map, Silver Ref, etc. get no rank-decrease axiom.
+
+**Status**: RESOLVED — `29-encoding-adts.md` rank-decrease axiom block updated with an explicit comment stating the axiom is only emitted for fields whose type is a Gobra ADT with its own `rank$` function; primitive Silver types are explicitly excluded.
+
+---
+
+### Item 112 — Gap: Plan 19 TupleDomain dflt registration is underspecified
+
+**Criterion**: C2 — Gaps.
+
+**Finding**: Plan 19 specifies a `Dflt` formula for TupleDomain:
+```
+gobra__Tuple{N} → gobra__tuple{N}(dflt(T0), ..., dflt(T{N-1}))
+```
+This formula is type-parameterized: it depends on the concrete type arguments T0..T{N-1} of each tuple instance. Plan 19 uses `RegisterDomainDefault` for domain defaults, but that mechanism takes a static Silver expression at registration time. The tuple dflt formula is not a static expression — it depends on the concrete type instantiation. Plan 19 does not explain who calls `RegisterDomainDefault` for TupleDomain, what expression is registered, or how the type-dependent formula is resolved at runtime. This is a genuine gap: without this, the translator will either panic (no registered default) or emit incorrect dflt values for tuple types.
+
+**Required fix**: Plan 19 must specify the dflt mechanism for TupleDomain. Options: (a) register a dflt lazily per concrete tuple type when first instantiated; (b) emit an explicit Silver domain axiom `axiom { gobra__Tuple{N}_default == gobra__tuple{N}(dflt(T0), ...) }` instead of using RegisterDomainDefault; (c) treat TupleDomain dflt as a domain axiom, not a Go-side registration. The plan must pick one and be explicit.
+
+**Status**: RESOLVED — `ctx.Dflt` signature changed from `silver.Type` to `internal.Type` in
+plan 19, matching Scala Gobra's `in.DfltVal` dispatch approach. The `RegisterDomainDefault`
+mechanism is removed from plans 19 and 25; each encoding handles `DfltVal` for its own types
+via the expression encoding dispatch. Plans 22, 23, 24, and 25 updated accordingly: plan 22
+C9 now uses `ctx.Dflt(ptr.Elem)` (passing internal type directly), plan 23 C9 uses
+`ctx.Dflt(internal.SliceType{Elem: elemType})`, plan 24 C9 uses `ctx.Dflt(t)`, and plan 25
+replaces the `RegisterDomainDefault` call with a description of expression-encoder dispatch
+for `DfltVal(InterfaceT)`. The dflt table in plan 19 now maps internal Go types (not Silver
+domain names) to their zero-value Silver expressions.
+
+---
+
+### Item 113 — Misleading Note: Plan 20 defers `unsafe.Sizeof`/`unsafe.Alignof` to encoding stage, but `unsafe` is rejected upstream
+
+**Criterion**: C2 — Gaps / misleading documentation.
+
+**Finding**: Plan 20 contains a note deferring `unsafe.Sizeof` and `unsafe.Alignof` to a future encoding. However, plan 07 (package resolver) and plan 08 (type checker core) both explicitly reject `import "unsafe"` with a diagnostic. COVERAGE.md's open-questions table also lists `unsafe` as requiring an explicit rejection diagnostic at the resolver or type-checker level. If `unsafe` is rejected before reaching the encoding stage, no encoder will ever see `unsafe.Sizeof`/`unsafe.Alignof` — the "deferred" note in plan 20 implies there is future encoding work to do, but there is none: the rejection happens entirely upstream.
+
+**Required fix**: Update Plan 20's note to clarify that `unsafe` is rejected at the import level (plan 07/08), so no encoding-stage handling is needed or expected. The "deferred" framing should be removed to avoid future implementers adding dead encoder code.
+
+**Status**: RESOLVED — `20-encoding-primitives.md` updated: Scope bullet changed to "not in scope"; Open Questions section replaced with a Resolved Questions entry explaining that `unsafe` is rejected by plan 07/08 and no encoder-level handling is needed or should be added.

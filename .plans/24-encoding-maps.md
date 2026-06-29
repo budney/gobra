@@ -83,7 +83,7 @@ func (e *MapEncoding) EncodeMap(ctx Context, t *internal.MapType) (result silver
 ```go
 //@ requires ctx != nil
 //@ ensures  result != nil
-//@ ensures  result == ctx.Dflt(e.EncodeMap(ctx, t))
+//@ ensures  result == ctx.Dflt(t)
 func (e *MapEncoding) EmptyMap(ctx Context, t *internal.MapType) (result silver.Expr)
 ```
 

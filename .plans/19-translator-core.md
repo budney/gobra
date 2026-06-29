@@ -67,10 +67,10 @@ plug.
 - Silver name generation must be deterministic (same input → same Silver name) for caching
   and debugging
 - **Encoding Init ordering**: `MainTranslator` must call each encoding's `Init` in a fixed
-  order. `InterfaceEncoding` (plan 25) **must run first** — it registers `none_InterfaceDomain()`
-  as the dflt for `DomainType("InterfaceDomain")` and emits the `Type` domain. Three other
+  order. `InterfaceEncoding` (plan 25) **must run first** — it emits the `Type` domain and
+  registers the `InterfaceDomain` Silver domain (including `none_InterfaceDomain()`). Three other
   encodings depend on this at Init time or during translation: `PointerEncoding` (plan 22,
-  calls `ctx.Dflt(DomainType("InterfaceDomain"))` for nil `*I`), `MapEncoding` (plan 24, calls
+  calls `ctx.Dflt(internal.InterfaceType{})` for nil `*I`), `MapEncoding` (plan 24, calls
   `EnsureTypeDomain`), and `ChannelEncoding` (plan 28, uses `chan_Type` from the Type domain).
   All remaining encodings are order-independent after `InterfaceEncoding`. The recommended
   startup sequence in `MainTranslator.init()`:
@@ -363,46 +363,45 @@ verified before this plan is considered complete.
 
 ## `dflt` Zero-Value Convention
 
-Plans 22, 23, and 25 reference `dflt(T°)` to obtain the Silver zero/nil expression for an
+Plans 22, 23, and 25 reference `ctx.Dflt(t)` to obtain the Silver zero/nil expression for an
 exclusive encoding of Go type T. **`dflt` is a Go helper method on `Context`**, not a Silver
 function — it is resolved at translation time and never appears in the generated Silver AST.
 
 ```go
-// Dflt returns the Silver expression that represents the Go zero value for the given Silver
-// type in exclusive (°) encoding. Never returns nil.
+// Dflt returns the Silver expression for the Go zero value of internal Go type t,
+// in exclusive (°) encoding. Never returns nil.
 //
-//   silver.IntType   → silver.IntLit(0)
-//   silver.BoolType  → silver.BoolLit(false)
-//   *silver.Domain   → ctx.dfltDomain(d)   // see table below
-//   silver.RefType   → silver.NullLit
-//   silver.SeqType   → silver.EmptySeq(elemType)
+// Implementation: constructs internal.DfltVal{Typ: t.WithAddressability(Exclusive)} and
+// routes it through the expression encoding dispatch — exactly as Scala Gobra routes
+// in.DfltVal nodes. Each encoding handles DfltVal for its own types:
 //
-// For domain types, dfltDomain looks up the domain's designated nil/default constructor:
+//   internal.IntType{...}       → silver.IntLit(0)
+//   internal.BoolType{}         → silver.BoolLit(false)
+//   internal.StringType{}       → stringLit_{empty}()       (plan 20)
+//   internal.PointerType{Elem}  → ctx.Dflt(Elem)            (plan 22, recursive)
+//   internal.SliceType{Elem}    → nilSlice_{Elem}()         (plan 23)
+//   internal.MapType{K,V}       → silver.NullLit            (plan 24; map is Ref)
+//   internal.InterfaceType{...} → none_InterfaceDomain()   (plan 25)
+//   internal.StructType{fields} → gobra__tuple{N}(ctx.Dflt(T0), ..., ctx.Dflt(T{N-1}))  (plan 21)
+//   internal.ChannelType{T}     → silver.IntLit(0)          (plan 28; channel is Int)
 //
-//   gobra__Tuple{N}  → gobra__tuple{N}(dflt(T0), ..., dflt(T{N-1}))  (plan 19 TupleDomain)
-//   Slice[T]         → nilSlice_{T}()                                  (plan 23)
-//   InterfaceDomain  → none_InterfaceDomain()                          (plan 25)
-//
-// The dfltDomain table is populated at translator startup by each encoding that registers its
-// domain together with its designated nil/zero constructor expression.
-func (c *contextImpl) Dflt(t silver.Type) silver.Expr
+// Callers must pass the internal Go type (not the Silver type). The encoding dispatch
+// resolves the correct Silver expression for the addressability and concrete type.
+// A catch-all panic fires for any internal type with no DfltVal handler (internal bug).
+func (c *contextImpl) Dflt(t internal.Type) silver.Expr
 ```
-
-**Registration pattern:** Each encoding that introduces a domain `D` with a nil/zero element
-calls `ctx.RegisterDomainDefault(domainName, nilExpr)` during its `Init` phase. `Dflt` then
-dispatches on the domain name. This keeps `context.go` independent of individual encoding plans.
 
 **Contract (for C9 purposes):**
 ```go
 //@ ensures result != nil
-//@ ensures t == silver.IntType  ==> result == silver.IntLit(0)
-//@ ensures t == silver.BoolType ==> result == silver.BoolLit(false)
-//@ ensures t == silver.RefType  ==> result == silver.NullLit
-func (c *contextImpl) Dflt(t silver.Type) (result silver.Expr)
+//@ ensures isIntType(t)   ==> result == silver.IntLit(0)
+//@ ensures isBoolType(t)  ==> result == silver.BoolLit(false)
+//@ ensures isMapType(t)   ==> result == silver.NullLit
+func (c *contextImpl) Dflt(t internal.Type) (result silver.Expr)
 ```
 
-For domain types, `Dflt` consults the registered default table; a panic fires on any domain
-with no registered default (internal bug — encoding author forgot to call `RegisterDomainDefault`).
+For composite types, `Dflt` routes through the expression encoding dispatch and each
+encoding module handles `DfltVal` for the types it owns.
 
 ## Resolved Questions
 

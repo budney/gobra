@@ -49,17 +49,18 @@ value it points to — it is a pure mathematical value, not a heap location.
 **`nil` pointer:**
 - Exclusive: `dflt(T°)` — the default value of the **exclusive** encoding of the pointed-to
   type `T`. This is the zero value of whatever Silver type `T°` maps to:
-  - `*int`: `dflt(Int)` = 0
-  - `*bool`: `dflt(Bool)` = false
-  - `*S` (struct): `dflt(Tuple[...])` = default tuple (via `TupleDomain`)
-  - `*[]int`: `dflt(Slice[Int])` = `nilSlice_{Int}()`
-  - `*I` where `I` is a Go interface: `T°` is `InterfaceDomain`; `dflt(InterfaceDomain)` is
-    `none_InterfaceDomain()` — the designated nil constructor defined in plan 25's
-    `InterfaceDomain` Silver domain, satisfying `iPolyVal == null && iDynType == nilType()`.
-    Do NOT emit `iface(null, nilType())` directly; use
-    `ctx.Dflt(silver.DomainType("InterfaceDomain"))` which resolves to `none_InterfaceDomain()`
-    via plan 25's `RegisterDomainDefault` call (see plan 19 `dflt` convention).
-  - `*P` where `P` is itself a pointer type: apply the rule recursively — `dflt((P)°)`.
+  - `*int`: `ctx.Dflt(internal.IntType{})` = `silver.IntLit(0)`
+  - `*bool`: `ctx.Dflt(internal.BoolType{})` = `silver.BoolLit(false)`
+  - `*S` (struct): `ctx.Dflt(structType)` — StructEncoding handles `DfltVal(StructT)` by
+    computing field defaults recursively and calling `ctx.tuple.create` (plan 21).
+  - `*[]int`: `ctx.Dflt(internal.SliceType{Elem: intType})` — SliceEncoding handles
+    `DfltVal(SliceT)` and returns `nilSlice_{Int}()` (plan 23).
+  - `*I` where `I` is a Go interface: `ctx.Dflt(internal.InterfaceType{...})` — InterfaceEncoding
+    handles `DfltVal(InterfaceT)` and returns `none_InterfaceDomain()`, the designated nil
+    constructor satisfying `iPolyVal == null && iDynType == nilType()`. Do NOT emit
+    `iface(null, nilType())` directly; route through `ctx.Dflt` to let plan 25 construct it.
+  - `*P` where `P` is itself a pointer type: `ctx.Dflt(pointerType)` — apply the rule
+    recursively through PointerEncoding's `DfltVal` handler.
 
   **Note on `null`:** Silver's `null` literal is the default `Ref` value and equals `dflt(Ref)`
   by Silver's built-in semantics. When `T°` happens to be `Ref` (i.e., `T` encodes exclusively
@@ -123,8 +124,8 @@ and verified before this plan is considered complete.
 
 2. **Nil pointer encoding correctness** — exclusive nil pointer equals `dflt(T°)`:
    ```go
-   //@ ensures isNilPointer(ptr) ==> result == ctx.Dflt(ctx.ExclusiveType(ptr.Elem))
-   //@ ensures !isNilPointer(ptr) ==> result != ctx.Dflt(ctx.ExclusiveType(ptr.Elem))
+   //@ ensures isNilPointer(ptr) ==> result == ctx.Dflt(ptr.Elem)
+   //@ ensures !isNilPointer(ptr) ==> result != ctx.Dflt(ptr.Elem)
    ```
 
 3. **`new(T)` permission postcondition** — `new` inhales full write permission on the

@@ -63,8 +63,9 @@ domain InterfaceDomain {
   function iPolyVal(i: InterfaceDomain): Ref
   function iDynType(i: InterfaceDomain): Type
   // none_InterfaceDomain is the designated zero/nil value for InterfaceDomain.
-  // It satisfies iPolyVal == null and iDynType == nilType(). Used by ctx.Dflt(InterfaceDomain)
-  // (plan 19) and by pointer encoding (plan 22) as the nil encoding for *I.
+  // It satisfies iPolyVal == null and iDynType == nilType(). Returned by plan 25's
+  // expression encoding when ctx.Dflt(internal.InterfaceType{...}) is called; used
+  // by pointer encoding (plan 22) for nil *I values.
   unique function none_InterfaceDomain(): InterfaceDomain
   axiom { forall v: Ref, t: Type :: {iface(v, t)} iPolyVal(iface(v, t)) == v && iDynType(iface(v, t)) == t }
   axiom gobra__none_iface {
@@ -73,12 +74,11 @@ domain InterfaceDomain {
 }
 ```
 
-**Registration with `dflt` (plan 19):** During the interface encoding `Init` phase, plan 25 calls:
-```go
-ctx.RegisterDomainDefault("InterfaceDomain", silver.DomainFuncApp("none_InterfaceDomain", nil))
-```
-This makes `ctx.Dflt(silver.DomainType("InterfaceDomain"))` return `none_InterfaceDomain()` for use
-by any encoding that needs the zero interface value (pointer encoding plan 22, slice encoding plan 23).
+**Default value (`ctx.Dflt` convention, plan 19):** `none_InterfaceDomain()` is the zero value
+for all Go interface types. Plan 25's expression encoding handles `DfltVal(InterfaceT)` nodes
+directly and returns `none_InterfaceDomain()`. No `RegisterDomainDefault` call is needed — the
+dispatch routes through the expression encoder like all other `DfltVal` cases. Callers use
+`ctx.Dflt(internal.InterfaceType{...})` (e.g., pointer encoding plan 22 for nil `*I` values).
 
 `InterfaceDomain` is emitted lazily (on first use) and cached as a global singleton. Do NOT use
 `TupleDomain(2)` for interface values — the Silver types would be indistinguishable from

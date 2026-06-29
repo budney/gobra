@@ -134,7 +134,7 @@ func (e *SliceEncoding) EncodeSlice(ctx Context, t internal.Type) (result silver
 ```go
 //@ requires ctx != nil
 //@ ensures  result != nil
-//@ ensures  result == ctx.Dflt(e.EncodeSlice(ctx, elemType))
+//@ ensures  result == ctx.Dflt(internal.SliceType{Elem: elemType})
 func (e *SliceEncoding) NilSlice(ctx Context, elemType internal.Type) (result silver.Expr)
 ```
 
