@@ -603,3 +603,92 @@ func EncodeInterface(ctx *Context, iface *types.Interface) *silver.Domain
 **Required fix**: Plan 35 (or the pre-population script in plan 34) should specify: call `Gobrafy(src, filename)` (plan 06) on each `.gobra` file before passing to `go/parser`, so the file is valid Go before AST inspection. The error mode for `go/parser` should be `parser.AllErrors` to obtain a maximally-complete partial AST even when the gobrafied content contains residual issues. Alternatively, document the known failure mode: for files that `go/parser` cannot parse even after gobrafication, conservatively treat `HasGenericDecl` as `false` (may produce false negatives in pre-population, caught by the actual test run).
 
 **Status**: RESOLVED — `35-regression-suite.md` updated: added a "Caller requirement" note inside `HasGenericDecl`'s doc comment explaining why gobrafication is required; replaced the single-sentence pre-population description with a full code sequence (`Gobrafy` → `parser.ParseFile` → `HasGenericDecl`) including nil-check and conservative fallback on gobrafication failure.
+
+---
+
+## ROUND 12 — Full /check-plan (all 41 plans + foundation docs, fifth pass)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 12 | Full /check-plan (all 41 plans + foundation docs) | 119–123 | In progress |
+
+### Item 119 — C5 FAIL: Plan 32 missing plan 15 dependency for `VerificationError` type
+
+**Criterion**: C5 — Every artifact a plan consumes must be produced by one of its listed dependencies.
+
+**Finding**: Plan 32 (`internal/reporting/reporter.go`) directly uses `VerificationError`, `VerificationResult.Errors`, `VerificationError.Node`, and `VerificationError.Pos` — all types/fields defined in plan 15's deliverable `internal/backend/types.go`. Plan 32's Dependencies section lists: `32a`, `14`, `16`, `17`. Plan 15 is not listed. The comment on the plan 17 dependency says "source of VerificationError objects," but plan 17's deliverable is the `Verify()` function; the `VerificationError` *type* is plan 15's artifact. Per C5: "Every artifact a plan consumes must be produced by one of its listed dependencies — not by an unlisted plan."
+
+**Required fix**: Add `[15-jni-setup.md](15-jni-setup.md) — defines `VerificationResult`, `VerificationError`, `VerificationError.Node`, `VerificationError.Pos` in `internal/backend/types.go`; reporter accesses these fields directly` to plan 32's Dependencies section.
+
+**Status**: RESOLVED — `32-reporter.md` Dependencies updated: plan 15 added between plan 14 and plan 16; plan 17's description updated to clarify it delivers `Verify()` while plan 15 owns the types.
+
+---
+
+### Item 120 — C5 FAIL: Plan 35 missing plan 06 dependency for `frontend.Gobrafy`
+
+**Criterion**: C5 — Every artifact a plan consumes must be produced by one of its listed dependencies.
+
+**Finding**: Plan 35's pre-population sequence (added in Item 118 fix) directly calls `frontend.Gobrafy(src, path)`. `Gobrafy` is plan 06's deliverable (`internal/frontend/gobrafier.go`). Plan 35's Dependencies section lists only plan 34. Plan 06 is not listed. Plan 34→33→(various) does not transitively surface plan 06 in plan 35's listed dependencies. Per C5, plan 35 must list plan 06 because it directly consumes `Gobrafy`.
+
+**Required fix**: Add `[06-gobrafier.md](06-gobrafier.md) — `Gobrafy(src []byte, filename string) ([]byte, []Diagnostic)` called by the pre-population sequence` to plan 35's Dependencies section.
+
+**Status**: RESOLVED — `35-regression-suite.md` Dependencies updated: plan 06 added before plan 34 with a note explaining it is called by the pre-population sequence.
+
+---
+
+### Item 121 — C9 FAIL: Plan 32a missing C9 section
+
+**Criterion**: C9 — Silence is an automatic failure.
+
+**Finding**: Plan 32a defines the `Diagnostic` struct and `Category` type in `internal/diagnostic/`. It has no `## Verification Specifications (C9)` section and no explicit "C9: N/A" statement. The criterion requires either formal specs or an explicit N/A rationale. Every other data-type plan (11, 14) has a C9 section. Plan 32a is silent.
+
+**Required fix**: Add a `## Verification Specifications (C9)` section to `32a-diagnostics.md`. Since plan 32a defines only data types with no behavioral functions, the appropriate content is an explicit N/A statement:
+
+> **C9: N/A** — This plan defines only data type declarations (`Diagnostic` struct, `Category` int). There are no functions with pre/postconditions to specify. The struct fields have no invariants beyond Go type-system guarantees. The unit test ("construct a Diagnostic, verify the fields are accessible") is the validation method per C8.
+
+**Status**: OPEN
+
+---
+
+### Item 122 — C9 FAIL: Plan 34 C9 deferred to plan 35; skip-list loader has no spec
+
+**Criterion**: C9 — Silence or deferring verification to a later stage is an automatic failure.
+
+**Finding**: Plan 34 defines two functions with verifiable behavioral logic:
+1. `HasGenericDecl(*ast.File) bool` — its Gobra postcondition is "specified in plan 35" (plan 34's text references plan 35 for the spec rather than stating it).
+2. The skip-list loader/validator (startup behavior: load `tests/testdata/skip.txt`, validate slugs against `ValidSlugs`, fail on unknown slug) — no spec stated anywhere.
+
+Plan 34 has no `## Verification Specifications (C9)` section. The spec for `HasGenericDecl` is physically located in plan 35, not plan 34 (the owning plan). C9 requires the owning plan to "describe what safety properties the component will prove about itself."
+
+**Required fix**: Add a `## Verification Specifications (C9)` section to `34-test-infrastructure.md` with:
+1. The `HasGenericDecl` spec (copy from plan 35 into plan 34's C9 section; plan 35 may retain it as the specification driver).
+2. A spec for the skip-list loader: e.g.,
+   ```go
+   //@ requires cfg.File == "" || fileExists(cfg.File)
+   //@ ensures  err == nil ==> list != nil
+   //@ ensures  err != nil ==> list == nil  // fail-fast on unknown slug
+   //@ decreases
+   func loadSkipList(cfg SkipConfig) (list *SkipList, err error)
+   ```
+3. A termination annotation for the test runner loop (iterates over a finite set of discovered test files):
+   ```go
+   //@ decreases len(pending)
+   ```
+
+**Status**: OPEN
+
+---
+
+### Item 123 — C9 FAIL: Plans 35, 36, 37 missing explicit C9 N/A statements
+
+**Criterion**: C9 — Silence is an automatic failure.
+
+**Finding**: Plans 35, 36, and 37 have no `## Verification Specifications (C9)` section and no explicit N/A statement. Each is a reasonable C9 N/A candidate (plan 35 = test corpus copy + CI job; plan 36 = annotation authoring, IS the C9 work; plan 37 = verification run + CI job), but the criterion requires explicit acknowledgment.
+
+**Required fix**: Add a `## Verification Specifications (C9)` section to each plan with a brief N/A justification:
+
+- **Plan 35**: "C9: N/A — This plan's deliverables are test files, `skip.txt`, CI configuration, and a Makefile target (`prune-skips`). These are not Go functions with verifiable pre/postconditions. The Gobra spec for `HasGenericDecl` (used during pre-population) is owned by plan 34 and specified in this plan for reference; plan 37's blocking tier verifies it."
+- **Plan 36**: "C9: N/A — This plan IS the annotation work. Its deliverables are Gobra annotations (`//@ requires`, `//@ ensures`, invariants) added to all other plans' deliverable files. The C9 requirement is satisfied transitively: each annotated module gains a C9 section as part of plan 36's work."
+- **Plan 37**: "C9: N/A — This plan delivers a CI job and `SELF_HOSTING.md` documentation. No new Go functions with verifiable logic are implemented. The self-hosting verification run (Go-Gobra verifying itself) is the C9 validation for all other plans collectively, not a C9 target for plan 37 itself."
+
+**Status**: OPEN

@@ -37,8 +37,9 @@ diagnostic output.
 
 - [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Report()`
 - [14-silver-ast.md](14-silver-ast.md) — `NodeInfo` on every Silver node
+- [15-jni-setup.md](15-jni-setup.md) — defines `VerificationResult`, `VerificationError`, `VerificationError.Node`, `VerificationError.Pos` in `internal/backend/types.go`; reporter accesses these fields directly
 - [16-silver-jni-builder.md](16-silver-jni-builder.md) — JNI object-to-Go-node identity map
-- [17-silicon-backend.md](17-silicon-backend.md) — source of `VerificationError` objects (carries `Node` field for searchInfo)
+- [17-silicon-backend.md](17-silicon-backend.md) — `Verify()` returns `*backend.VerificationResult`; `VerificationError.Node` populated by the worker before `Report()` is called
 
 ## Reference: Current Gobra
 

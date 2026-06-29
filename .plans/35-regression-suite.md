@@ -31,6 +31,7 @@ and achieve full pass rate parity with the Scala implementation.
 
 ## Dependencies
 
+- [06-gobrafier.md](06-gobrafier.md) — `Gobrafy(src []byte, filename string) ([]byte, []Diagnostic)` called by the pre-population sequence before parsing `.gobra` files
 - [34-test-infrastructure.md](34-test-infrastructure.md) — test runner
 
 ## Key Test Categories in Current Gobra
