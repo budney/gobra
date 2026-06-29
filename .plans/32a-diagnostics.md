@@ -38,10 +38,12 @@ that produce or consume diagnostics.
   type Category int
 
   const (
-      Error   Category = iota // verification or type error; blocks subsequent pipeline stages
-      Warning                 // non-fatal; pipeline continues
-      Info                    // informational; e.g. parse-only output
+      DiagError   Category = iota // verification or type error; blocks subsequent pipeline stages
+      DiagWarning                 // non-fatal; pipeline continues
+      DiagInfo                    // informational; e.g. parse-only output
   )
+  // DiagError/DiagWarning/DiagInfo names avoid shadowing the built-in `error` type
+  // and the `errors` package sentinel in files that import both.
 
   // Diagnostic is a structured error or warning produced by any pipeline stage.
   // Every stage returns []Diagnostic; the pipeline aborts if any Error-category

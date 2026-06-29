@@ -24,7 +24,20 @@ plug.
 - `MainTranslator`: instantiates all encodings, wires them together via `Context`, drives
   the translation of each internal AST member
 - Name mangling: Go identifiers → valid Silver identifiers (handle dots, unicode, length limits)
-- `FunctionTable`: track which Go functions have been translated (for cross-function references)
+- `FunctionTable`: track which Go functions have been translated (for cross-function references).
+  Interface definition (in `internal/translator/context.go`):
+  ```go
+  // FunctionTable tracks translated Go functions to enable cross-function Silver references.
+  // Encoding modules register a function when they translate it; other modules call Has
+  // to check before emitting a Silver FuncApp that references it.
+  type FunctionTable interface {
+      Register(fn *internal.Function)
+      Has(fn *internal.Function) bool
+      All() []*internal.Function // returns all registered functions in registration order
+  }
+  ```
+  Accessed via `ctx.FunctionTable()` on `Context`. A single `FunctionTable` instance is
+  created per `Translate` call and shared across all encoding modules via `Context`.
 
 **Out of scope:**
 - Individual encoding implementations (20–31)
@@ -313,7 +326,8 @@ verified before this plan is considered complete.
 3. **`TupleDomain` idempotency** — emitting the same arity twice returns the identical
    (pointer-equal) domain object; the Silver program accumulator sees each domain at most once:
    ```go
-   //@ invariant forall n int :: n in c.tupleDomainCache ==> c.tupleDomainCache[n] != nil
+   // Cache coherence is enforced by the postcondition below; Gobra's map reasoning
+   // does not support universal "forall keys in map" quantification without `in`.
    //@ ensures   result != nil && result == c.tupleDomainCache[n]
    func (c *contextImpl) TupleDomain(n int) (result *silver.Domain)
    ```

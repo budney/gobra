@@ -36,9 +36,9 @@ grep -rE '^\s*(func|type)\s+\w+\s*\[' gobra-go/internal/ gobra-go/cmd/
 without blocking plan 36 or 37.
 
 **Record the audit result here** (update this file when the audit is completed):
-- Audit status: _not yet run_
-- Generics found in Go-Gobra source: _unknown_
-- Chosen option if generics found: _N/A_
+- Audit status: **Deferred** — `gobra-go/` implementation has not started; run the grep at plan 36 scheduling time as documented above.
+- Generics found in Go-Gobra source: **Deferred** — will be determined by the audit grep at plan 36 scheduling time.
+- Chosen option if generics found: **Deferred** — Option A (replace with concrete types/interfaces) is preferred; choose at plan 36 scheduling time based on audit result.
 
 ## Scope
 
@@ -80,6 +80,27 @@ for an initial implementation.
 - `internal/translator/encodings/generics.go`
 - Monomorphization cache in the translator context
 - Tests: encode a generic identity function and a generic stack type with one instantiation each
+
+## Verification Specifications (C9)
+
+This plan is **not yet a pipeline component** — generics encoding is deferred until after the
+self-hosting milestone unless the plan-36 audit finds generics in Go-Gobra's own source (see
+Status section). Accordingly, there are no C9 contracts to verify at this stage.
+
+Once this plan is implemented, the following contracts must be added:
+
+```go
+// EncodeGeneric: translates a generic instantiation to a monomorphic Silver subtree.
+//@ requires ctx != nil && inst != nil
+//@ ensures  result != nil
+//@ ensures  result.WellFormed()   // no unresolved type variables in the Silver output
+func (e *GenericEncoding) EncodeGeneric(ctx Context, inst *GenericInst) silver.Member
+
+// MonoCache: encoding of the same (name, types) pair is emitted at most once.
+//@ invariant forall k MonoCacheKey :: k in e.cache ==> e.cache[k] != nil
+```
+
+Until the plan is implemented, C9 is **explicitly N/A** for this plan.
 
 ## Open Questions
 

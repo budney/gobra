@@ -190,17 +190,17 @@ verified before this plan is considered complete.
 ```go
 //@ requires prog != nil
 //@ ensures  forall m silver.Member :: cfg.Selection(m) ==>
-//@             exists sp in result :: memberIn(m, sp)
-//@ ensures  forall sp in result :: sp != nil
+//@             exists j int :: 0 <= j && j < len(result) && memberIn(m, result[j])
+//@ ensures  forall j int :: 0 <= j && j < len(result) ==> result[j] != nil
 //@ decreases // pure computation over finite AST
 func Chop(prog *Program, cfg ChopConfig) (result []*Program)
 ```
 
 **`Chop` self-containment: each sub-program is dependency-closed:**
 ```go
-//@ ensures forall sp in result ::
-//@   forall m silver.Member :: memberIn(m, sp) ==>
-//@     forall dep silver.Member :: dependsOn(m, dep) ==> memberIn(dep, sp)
+//@ ensures forall j int :: 0 <= j && j < len(result) ==>
+//@   forall m silver.Member :: memberIn(m, result[j]) ==>
+//@     forall dep silver.Member :: dependsOn(m, dep) ==> memberIn(dep, result[j])
 ```
 
 **`buildDepGraph` termination (finite Silver AST, no cycles):**

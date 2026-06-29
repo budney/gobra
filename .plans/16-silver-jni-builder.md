@@ -175,7 +175,7 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
 ## Deliverables
 
 - `internal/backend/silver/SilverBridge.java` — Java helper class (~175 lines); includes:
-  - Construction methods: `makeNoInfo()`, `makeAnnotationInfo(key, values)`, `makeConsInfo(head, tail)` for constructing info chains (including `@opaque`/`@reveal` annotations for plan 27 and `gobra_node_id` annotations for node identity)
+  - Construction methods: `makeNoInfo()`, `makeAnnotationInfo(key, values)`, `makeConsInfo(head, tail)` for constructing info chains (including `@opaque`/`@reveal` annotations for plan 27 and `gobra_node_id` annotations for node identity). **`@opaque` may be placed anywhere in the ConsInfo chain** — Silicon's `getUniqueInfo` (in `Ast.scala`) recursively searches head→tail until found; no hoisting to chain head is required.
   - **`static long getNodeId(Object node)`** — reads the `gobra_node_id` annotation from a Silver node's `Info` chain and returns it as a `long`. Returns `-1` if no `gobra_node_id` annotation is present (indicating a node built outside Go-Gobra, which should not happen in practice). Implementation: walk the info chain (`ConsInfo`, `AnnotationInfo`) looking for key `"gobra_node_id"`; parse the first value as a long.
   - **`static String getNodeFile(Object node)`**, **`static int getNodeLine(Object node)`**, **`static int getNodeCol(Object node)`**, **`static String getNodeTag(Object node)`** — extract individual `NodeInfo` fields stored as `gobra_node_file`, `gobra_node_line`, `gobra_node_col`, `gobra_node_tag` annotations (see note below). These allow the worker to populate `VerificationError.Pos` without a nodeMap lookup for the common non-synthetic case.
   

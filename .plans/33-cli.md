@@ -121,6 +121,15 @@ This is **distinct** from `--workers N` (plan 17b):
 Both can be set simultaneously. Document in `--help` for both flags that combining them
 multiplies thread usage and the total should not exceed available CPU cores.
 
+**`--chop` + `--z3APIMode` interaction (documented):** When `--z3APIMode` is set, Silicon
+uses the Z3 API instead of process-based Z3; this forces `poolSize = 1` (Z3 API mode is not
+thread-safe across multiple simultaneous verification jobs). With `--chop --workers 4
+--z3APIMode`, the chopper may produce up to 4 sub-programs, but only 1 worker can run at a
+time — execution is serialized despite appearing parallel from the config. **This is
+functionally correct** (all sub-programs are eventually verified) but counterintuitive and
+slower than `--workers 1` would suggest. Document in `--help` for `--z3APIMode`: "Forces
+sequential verification even when --workers N > 1."
+
 ## Verification Specifications (C9)
 
 The following Gobra annotations will be written into `internal/pipeline/pipeline.go` and

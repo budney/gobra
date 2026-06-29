@@ -154,3 +154,15 @@ construction functions enforce structural invariants on the node types themselve
    func NewVar(name string, typ Type, addressable bool) (r *Var)
    ```
 
+5. **Ghost `NodeCount()` method** — used by plan 13's C9 invariants to bound the size of the
+   AST before and after transforms. Defined in `internal/ast/internal/program.go`:
+   ```go
+   // NodeCount returns the total number of AST nodes in the program tree.
+   // Ghost method — visible to Gobra; invisible to non-Gobra callers.
+   //@ pure
+   //@ ensures result >= 0
+   func (p *Program) NodeCount() (result int)
+   ```
+   The concrete body counts all `Member`, `Stmt`, and `Expr` nodes recursively via a
+   tree-fold. It is used only in specifications; callers must not depend on it for runtime logic.
+

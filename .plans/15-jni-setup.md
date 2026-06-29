@@ -204,6 +204,15 @@ func Start(cfg JVMConfig) (*JVM, error) {
 `jvm.Stop()` is called once at process exit via `defer` in `main`. Do not call `Stop()`
 concurrently with any JNI worker.
 
+**Test isolation implication:** Because `jvmErr` is set permanently on first failure, any
+subsequent call to `Start()` — even with a corrected config — returns the cached error. This
+means: if one test binary starts the JVM with a bad JDK path (e.g., `JVMConfig{LibPath: ""}`),
+all later tests in the same binary that call `Start()` will fail, even if their config is
+correct. **Test isolation for JVM startup failures requires separate test binaries.** Tests that
+exercise JVM error paths must run in isolation (e.g., via `go test -run=TestBadJVM ./internal/backend/jvm/`
+as a distinct binary from tests that require a working JVM). This constraint should be noted in
+the test infrastructure plan (34) under "JVM test isolation."
+
 **CGo and cross-compilation (resolved):** CGo is required (jnigi depends on it). Cross-
 compilation is limited to target platforms where a JVM is available. Document in the README:
 "Go-Gobra requires CGo and cannot be cross-compiled to platforms without JVM support. Set

@@ -118,6 +118,33 @@ and `src/main/scala/viper/gobra/translator/encodings/arrays/`.
 Mark each row ✓ when confirmed. This is the highest-risk encoding in the system; missing
 postconditions on bodyless slice functions are the most likely source of silent unsoundness.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/slices.go`
+and verified before this plan is considered complete.
+
+**`EncodeSlice` non-nil result:**
+```go
+//@ requires ctx != nil && t != nil
+//@ ensures  result != nil
+func (e *SliceEncoding) EncodeSlice(ctx Context, t internal.Type) (result silver.Type)
+```
+
+**`nilSlice` encoding postcondition — the nil slice is the default:**
+```go
+//@ requires ctx != nil
+//@ ensures  result != nil
+//@ ensures  result == ctx.Dflt(e.EncodeSlice(ctx, elemType))
+func (e *SliceEncoding) NilSlice(ctx Context, elemType internal.Type) (result silver.Expr)
+```
+
+**`EncodeSliceOp` non-nil result (indexing, append, sub-slice):**
+```go
+//@ requires ctx != nil && op != nil
+//@ ensures  result != nil
+func (e *SliceEncoding) EncodeSliceOp(ctx Context, op *internal.SliceOp) (result silver.Expr)
+```
+
 ## Deliverables
 
 - `internal/translator/encodings/slices.go` — `Slice[T]` domain + all slice operations

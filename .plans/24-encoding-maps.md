@@ -67,6 +67,34 @@ no tuple handling is needed here.
 **`range` over maps:** Model as non-deterministic selection; the verifier cannot reason about
 iteration order. Use a ghost variable or quantifier over the map domain.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/maps.go`
+and verified before this plan is considered complete.
+
+**`EncodeMap` non-nil result:**
+```go
+//@ requires ctx != nil && t != nil
+//@ ensures  result != nil
+func (e *MapEncoding) EncodeMap(ctx Context, t *internal.MapType) (result silver.Type)
+```
+
+**`EmptyMap` encoding postcondition — the empty map is the default:**
+```go
+//@ requires ctx != nil
+//@ ensures  result != nil
+//@ ensures  result == ctx.Dflt(e.EncodeMap(ctx, t))
+func (e *MapEncoding) EmptyMap(ctx Context, t *internal.MapType) (result silver.Expr)
+```
+
+**`Type` domain emission guard** — map lookup emits `comparableType` from the `Type` domain
+(plan 25). The domain must be emitted before any map encoding call; enforced by calling
+`ctx.TypeEncoding().EnsureTypeDomain(ctx)` at the start of each `EncodeMap` / `EncodeMapOp`:
+```go
+//@ requires ctx.TypeEncoding() != nil
+//@ ensures  typeDomainEmitted(ctx)  // ghost: Type domain is present in ctx's Silver program
+```
+
 ## Deliverables
 
 - `internal/translator/encodings/maps.go` (runtime `map[K]V` only; ghost `dict[K]V` is in plan 29)

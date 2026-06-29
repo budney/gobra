@@ -103,6 +103,6 @@ func Apply(prog *internal.Program, cfg Config) (result *internal.Program, diags 
 **Immutability contract**: Neither `Apply` nor any sub-transform modifies the input `prog` in place. The input tree is read-only; all structural changes produce a new tree.
 
 ```go
-//@ ensures result !== prog  // different pointer; input is untouched
+//@ ensures result != prog  // different pointer; input is untouched
 //@ ensures old(prog.NodeCount()) == prog.NodeCount()  // input unchanged
 ```

@@ -45,8 +45,26 @@ constructs. These have their own typing rules that differ from standard Go.
 
 ## Deliverables
 
-- Extension of `TypeInfo` covering all spec expression nodes
-- Structural constraint checks integrated into the checker pass
+- `internal/info/specchecker.go` — `CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic`
+  Entry point for the spec type-checking pass. Mutates `info.Ghost` in place.
+- `internal/info/specvisitor.go` — the spec expression visitor; one visitor method per spec
+  AST node type handled. The following spec-AST node types are handled by `CheckSpecs`:
+  - `PRequires`, `PEnsures`, `PPreserves` — precondition/postcondition/preservation clauses
+  - `PInvariant` — loop invariant expression
+  - `PDecreases` — termination measure; element type must be well-ordered
+  - `PAccess` (`acc(e)`, `acc(e, p)`) — `e` must be a field access or predicate call
+  - `PForall`, `PExists` — quantifier; bound variable scoping; body must be `bool`
+  - `POld` — `old(e)`; only valid inside postconditions
+  - `PBefore` — `before(e)`; only valid inside `preserves` clauses
+  - `PMagicWand` — `A --* B`; A and B must be permission expressions
+  - `PSeq`, `PSet`, `PMSet`, `PDict`, `POption` — ghost collection expressions
+  - `PMatch` — pattern match; exhaustiveness check
+  - `PGhostCall` — ghost function/method call
+  - `PUnfolding` — `unfolding P in e`
+  - `PPure`, `PTrusted`, `POpaque`, `PMayBeUsedInInit` — function modifier constraints
+- `internal/info/ghosttypes.go` — `GhostTypeInfo`, `GhostType`, and all concrete implementations
+  (already defined in plan 08; plan 09 populates the `GhostTypeInfo.Types` map)
+- Structural constraint checks integrated into the checker pass (see Scope above)
 - Tests: annotation-heavy regression files from `src/test/resources/regressions/features/`
 
 ## Resolved Questions
@@ -75,7 +93,7 @@ checker with spec-specific rules.
 //@ requires pkg != nil && info != nil && info.Go != nil
 //@ ensures  len(result) >= 0
 //@ ensures  forall i int :: 0 <= i && i < len(result) ==> result[i] != (Diagnostic{})
-//@ ensures  len(result) == 0 ==> (info.Ghost != nil)
+//@ ensures  len(result) == 0 ==> info.Ghost.Resolved()
 //@ decreases
 func CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) (result []Diagnostic)
 ```
@@ -85,15 +103,18 @@ func CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) (result []Diagnostic)
 - If `CheckSpecs` returns a non-empty diagnostics slice, `info.Ghost` may be partially populated; callers must not use `info.Ghost` if any diagnostics have `Category == DiagError`.
 - Result slice is never nil; an empty slice (not nil) is returned when no errors are found.
 
-**Spec-scope balance invariant**: Every quantifier bound-variable scope opened during spec traversal must be closed before `CheckSpecs` returns. Formally, the scope depth counter satisfies:
+**Spec-scope balance invariant**: Every quantifier bound-variable scope opened during spec traversal must be closed before `CheckSpecs` returns. This is an implementation-internal invariant tracked by a ghost local counter inside the visitor loop:
 
 ```go
+// Inside the spec visitor loop body:
+//@ ghost var scopeDepth int = 0  // declared as ghost local, not a function parameter
 //@ invariant scopeDepth >= 0
-//@ ensures   scopeDepth == 0   // no open scopes on exit
+// On exit:
+//@ assert scopeDepth == 0   // verified at end of traversal, not as function postcondition
 ```
 
-**Incremental-fill postcondition** (matches plan 08 C9 contract): `info.Ghost` fields are filled monotonically — once set for a node they are never cleared. This allows callers to partially consume `info.Ghost` while `CheckSpecs` is still running (e.g., parallel spec checking of independent packages).
+**Incremental-fill postcondition** (matches plan 08 C9 contract): `info.Ghost.Types` entries are filled monotonically — once set for a node they are never cleared. This allows callers to partially consume `info.Ghost` while `CheckSpecs` is still running (e.g., parallel spec checking of independent packages).
 
 ```go
-//@ ensures forall n PNode :: old(info.Ghost[n]) != nil ==> info.Ghost[n] == old(info.Ghost[n])
+//@ ensures forall n PNode :: old(info.Ghost.Types[n]) != nil ==> info.Ghost.Types[n] == old(info.Ghost.Types[n])
 ```

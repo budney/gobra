@@ -126,6 +126,35 @@ test that stores a channel in `interface{}` and asserts its type tag after extra
 **Implication for annotations**: channel-using code is heavily annotation-dependent. The test
 in this plan must include user-written `SendChannel`/`RecvChannel` predicates.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/channels.go`
+and verified before this plan is considered complete.
+
+**`EncodeChannel` non-nil result:**
+```go
+//@ requires ctx != nil && t != nil
+//@ ensures  result != nil
+func (e *ChannelEncoding) EncodeChannel(ctx Context, t *internal.ChanType) (result silver.Type)
+```
+
+**`chan_Type` domain emission guard** — channel encoding requires the `chan_Type` function
+from the `Type` domain (plan 25) to distinguish `chan T` from other types in interface contexts.
+`EnsureTypeDomain` must be called before any channel type is emitted:
+```go
+//@ requires ctx.TypeEncoding() != nil
+//@ ensures  typeDomainEmitted(ctx)  // ghost: Type domain is present in ctx's Silver program
+//@ ensures  chanTypeFunctionDefined(ctx)  // ghost: chan_Type domain function is present
+```
+
+**`SendChannel` / `RecvChannel` predicate ownership postcondition:**
+```go
+//@ requires ctx != nil && makeExpr != nil
+//@ ensures  result != nil
+//@ ensures  exclusive(result)  // caller gets full send+receive channel permissions on make
+func (e *ChannelEncoding) EncodeMake(ctx Context, makeExpr *internal.MakeChannel) (result silver.Expr)
+```
+
 ## Deliverables
 
 - `internal/translator/encodings/channels.go`

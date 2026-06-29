@@ -100,6 +100,37 @@ and 23–25. If any are discovered during implementation, add them to this table
 this plan beyond `trusted` functions (user-specified specs). If any are found, add them to
 the table above and verify against the Scala source before marking this encoding complete.
 
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/translator/encodings/methods.go`
+and `internal/translator/encodings/functions.go` and verified before this plan is considered complete.
+
+**`EncodeMethod` non-nil result:**
+```go
+//@ requires ctx != nil && m != nil
+//@ ensures  result != nil
+func (e *MethodEncoding) EncodeMethod(ctx Context, m *internal.Method) (result silver.Member)
+```
+
+**Dispatch table completeness** — every method declared in the internal AST is registered in
+the method table before encoding completes:
+```go
+//@ requires ctx != nil && pkg != nil
+//@ ensures  forall m *internal.Method :: methodDeclared(m, pkg) ==> ctx.FunctionTable().Has(m)
+func (e *MethodEncoding) EncodePkg(ctx Context, pkg *internal.Program)
+```
+
+**`@opaque` placement** — if a method is marked opaque, the Silver output carries the
+`@opaque` annotation anywhere in the `ConsInfo` chain. Silicon's `getUniqueInfo` (verified
+in `silver/src/main/scala/viper/silver/ast/Ast.scala`) recursively searches the entire chain
+(head first, then tail) — `@opaque` at any depth is found. No hoisting to the chain head is
+required. Plan 16's builder may prepend `gobra_node_id` / `gobra_node_*` entries in front of
+`@opaque` without breaking Silicon's `@opaque` handling:
+```go
+//@ ensures m.IsOpaque() ==> containsAnnotation(result, "opaque")
+// ghost: @opaque appears at some depth in the ConsInfo chain (not necessarily head)
+```
+
 ## Deliverables
 
 - `internal/translator/encodings/methods.go`

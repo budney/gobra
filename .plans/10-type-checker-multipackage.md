@@ -116,11 +116,16 @@ the disk cache until profiling shows type-checking is a bottleneck.
 ## Verification Specifications (C9)
 
 ```go
+// Pure helper — used in the idempotency postcondition below.
+// Gobra does not support { stmt; expr } blocks inside postconditions;
+// round-trip equality is expressed via a pure function instead.
+//@ pure func serializeIdempotent(eti *externalTypeInfo) bool
+
 // ExternalTypeInfo.Serialize idempotency:
 //@ requires eti != nil
 //@ ensures  err == nil ==> len(result) > 0
-//@ ensures  err == nil ==>
-//@   { r2, e2 := eti.Serialize(); e2 == nil && bytes.Equal(r2, result) }
+//@ ensures  err == nil ==> serializeIdempotent(eti)
+// serializeIdempotent(eti) holds iff calling Serialize() again returns equal bytes with no error.
 //@ decreases
 func (eti *externalTypeInfo) Serialize() (result []byte, err error)
 ```

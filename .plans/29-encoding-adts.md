@@ -172,8 +172,12 @@ considered complete.
    //@ requires ctx != nil && lit != nil
    //@ requires allIndicesConcrete(lit) // ghost: desugarer guarantee — no Index == -1
    //@ ensures  result != nil
-   //@ ensures  forall i int :: i in sourceIndices(lit) ==> indexPresent(result, i)
+   //@ ensures  forall i int :: {indexPresent(result, i)} sourceIndexMember(i, lit) ==> indexPresent(result, i)
    func EncodeSeqLit(ctx *Context, lit *internal.SeqLit) (result silver.Expr)
+
+// Pure helpers (defined as ghost functions in adts.go):
+//@ pure func sourceIndexMember(i int, lit *internal.SeqLit) bool  // true iff i is a concrete index in lit.Elements
+//@ pure func indexPresent(result silver.Expr, i int) bool          // true iff output encodes element at index i
    ```
 
 3. **`emptySeq_{T}` postcondition (no-panic guard)** — the bodyless Silver function emitted
@@ -192,6 +196,17 @@ considered complete.
    //@ decreases len(matchExpr.Arms)
    func EncodeMatch(ctx *Context, matchExpr *internal.MatchExpr) (result silver.Expr)
    ```
+
+## Known Limitations
+
+**Mutually recursive ADTs are not supported.** The rank function `rank$X(t: X): Int` is defined
+per ADT domain and its axioms reference only `rank$X` itself for recursive fields of the same
+type `X`. For mutually recursive ADTs (e.g., `adt A { Leaf{}; Node{child B} }` and
+`adt B { Wrap{inner A} }`), a correctness-preserving rank function would need to span both
+domains simultaneously — this is not supported by the single-domain rank axiom structure above.
+
+Add to `gobra-go/KNOWN_LIMITATIONS.md`: "Mutually recursive ADTs are unsupported. Define a
+combined ADT with all constructors in a single declaration as a workaround."
 
 ## Deliverables
 

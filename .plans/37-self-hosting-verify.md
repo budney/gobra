@@ -78,6 +78,12 @@ DECISIONS.md D8), all of the following must be satisfied:
 - [ ] All regression tests pass (or are in `skip.txt` with documented reasons).
 - [ ] Last Scala release is tagged (e.g., `v0.9.9-scala-final`) before the cut-over commit.
       **Owner: project lead / release manager** — this is a meta-project action, not part of any plan's code deliverables.
+- [ ] **CI runner has Go ≥ 1.21 installed.** Go-Gobra requires `go` in `$PATH` at runtime for
+      package resolution (`go list`). A runner with only the Go-Gobra binary but no Go toolchain
+      will fail at plan-07 package resolution with an unclear error. The CI workflow for
+      `gobra-self-verify` must include a `go` setup step (e.g., `actions/setup-go@v4` with
+      `go-version: '1.21'`). The bootstrap sequence is:
+      (1) build Go-Gobra with Go → (2) run Go-Gobra (requires `go` in PATH) → (3) verify source.
 
 ## CI Gate Strategy
 

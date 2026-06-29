@@ -147,7 +147,7 @@ func Desugar(pkg *frontend.PPackage, info *TypeInfo) (result *internal.Program, 
 **Fresh variable counter monotonicity (loop invariant inside `desugarFunc`):**
 ```go
 //@ invariant counter >= old(counter)
-//@ invariant forall v in introduced :: v.Name != ""
+//@ invariant forall i int :: 0 <= i && i < len(introduced) ==> introduced[i] != nil && introduced[i].Name != ""
 ```
 
 **Position preservation postcondition on each node-lowering helper:**

@@ -117,6 +117,22 @@ built-in `recover`. Not in Scala Gobra's grammar; `go/types` resolves `recover` 
 `*types.Builtin` with `Id() == "recover"`.
 Error message: `"recover is not supported by Gobra"`.
 
+**Reserved identifier patterns**: Plan 19's name-mangling scheme reserves two identifier
+patterns for internal Silver names. If Go-Gobra source uses these patterns, the generated
+Silver will have a name collision with a Go-Gobra internal identifier — producing an invalid
+Silver program with no clear error message. Reject both patterns here (third-line-of-defense,
+after plan 07 rejects `unsafe` at parse time) with a user-facing diagnostic:
+
+- Identifiers matching `_u[0-9A-F]{1,6}_` (unicode escape encoding): reject any
+  `*ast.Ident` whose `Name` matches the regular expression `^_u[0-9A-F]{1,6}_$`.
+  Error message: `"identifier %q uses a pattern reserved for Gobra's unicode encoding"`
+- Identifiers beginning with `gobra__` (internal namespace prefix): reject any `*ast.Ident`
+  whose `Name` has the prefix `gobra__`.
+  Error message: `"identifier %q uses the 'gobra__' prefix reserved for internal Gobra names"`
+
+These checks apply to all declared names (function names, variable names, type names, field
+names, method names). Run as a second pass over declarations after `go/types.Check` completes.
+
 These three checks should run as a single AST walk after `go/types.Check` completes, before
 the ghost type checking pass (plan 09).
 
@@ -136,8 +152,15 @@ func Check(pkg *frontend.PPackage, importer types.Importer) (info *TypeInfo, dia
 ```
 
 **Stub resolution invariant (end of Pass 2 assertion):**
+
+`ghostTable` is an unexported local; it cannot appear in a function-level Gobra annotation.
+The invariant is expressed via a pure predicate on the exported `TypeInfo.Ghost` field instead:
 ```go
-//@ ensures forall t in ghostTable.Values() :: !t.IsStub()
+// Pure predicate: every ghost type in the GhostTypeInfo table is resolved (not a stub).
+//@ pure func allGhostTypesResolved(g GhostTypeInfo) bool
+
+// After Check completes, all ghost types must be resolved:
+//@ ensures info != nil ==> allGhostTypesResolved(info.Ghost)
 ```
 
 **`CheckSpecs` incremental fill (Ghost field populated, Go field unchanged):**
@@ -168,7 +191,9 @@ This two-stub-pass approach handles all patterns the Scala checker handles, incl
 self-recursive ADTs (`adt Tree { Leaf{}; Node{left Tree; right Tree} }`).
 
 **Ghost types with no `go/types` representation (resolved):** Define a `GhostType` interface
-extending `types.Type` (implementing `Underlying() types.Type` and `String() string`).
+extending `types.Type` (implementing `Underlying() types.Type`, `String() string`, and
+`IsStub() bool`). `IsStub()` returns true for a forward-reference placeholder not yet resolved;
+false once the full type is known. All concrete implementations return `false` for `IsStub()`.
 Concrete implementations:
 
 | Go-Gobra ghost type | GhostType implementation |
@@ -181,6 +206,29 @@ Concrete implementations:
 | ADT types           | `ADTType{Name string, Constructors []ADTConstructor}` |
 | permission amount   | `PermissionType{}` |
 | magic wand          | `WandType{Left, Right types.Type}` |
+| forward-reference stub | `StubType{Name string}` — `IsStub()` returns `true` |
+
+`ADTConstructor` definition (in `internal/info/ghosttypes.go`):
+```go
+type ADTConstructor struct {
+    Tag    string      // constructor name, e.g. "Leaf", "Node"
+    Fields []GhostType // field types in declaration order
+}
+```
+
+`GhostTypeInfo` definition (in `internal/info/ghosttypes.go`):
+```go
+type GhostTypeInfo struct {
+    Types map[PNode]GhostType // ghost type for each ghost/spec AST node; nil until CheckSpecs fills it
+}
+
+// Resolved returns true iff Types is non-nil and contains no StubType entries.
+func (g GhostTypeInfo) Resolved() bool {
+    if g.Types == nil { return false }
+    for _, t := range g.Types { if t.IsStub() { return false } }
+    return true
+}
+```
 
 These satisfy `types.Type` and are stored in the `map[PNode]GhostType` table inside
 `GhostTypeInfo` — NOT in the stdlib `*types.Info` map (which is not extensible by callers).

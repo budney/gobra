@@ -114,6 +114,13 @@ producing a complete set of parsed frontend ASTs ready for type checking.
   sequence. The `PPackage` contains the merged file list in declaration order. Plan 08's
   `Check(pkg *frontend.PPackage, ...)` and plan 12's `Desugar(pkg *frontend.PPackage, ...)`
   both receive `info.Package` from the caller (plan 33 `pipeline.go`).
+
+  **Field usage rule**: `PackageInfo.Package` is the **authoritative** assembled form for all
+  type-checking, desugaring, and translation pipeline stages. `PackageInfo.Files` is retained
+  only for diagnostic source-position lookup and selective re-parsing. **Using `Files` directly
+  for type-checking or desugaring is a bug** — the individual `PFile` values do not have merged
+  ghost declarations, and `GhostDecls` may be scattered across files before plan 07's assembly
+  step populates `Package`. Downstream plans must use `info.Package`, not `info.Files`.
 - `ResolverConfig` type (see above)
 - Embedded built-in stub files (`internal/frontend/stubs/` with `//go:embed`)
 - Coordination note: for each file, `Resolve` runs a **4-step sequence**:
