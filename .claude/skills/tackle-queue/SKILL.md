@@ -1,4 +1,5 @@
 ---
+name: tackle-queue
 description: Run an autonomous, self-correcting engineering loop to sequentially resolve all pending issues logged in the .plans/scratchpad.md Remediation Queue. Invoke with no arguments to sweep the entire queue top-down.
 allowed-tools: Bash, Read, Edit, Write
 ---

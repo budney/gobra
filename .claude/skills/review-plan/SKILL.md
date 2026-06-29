@@ -1,4 +1,5 @@
 ---
+name: review-plan
 description: Review Go-Gobra rewrite plan docs in .plans/ for contradictions, gaps, logic errors, bad design decisions, and possible simplifications or improvements. Invoke as /review-plan [file-or-glob] to scope the review, or with no arguments to review all docs.
 allowed-tools: Bash, Read
 ---

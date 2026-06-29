@@ -1,0 +1,17 @@
+name: "spec-to-code-team"
+pipeline:
+  # Step 1: Your local Ollama agent reviews the specs
+  - agent:
+      name: "reviewer"
+      harness: "openai-agents"
+      model: "deepseek-r1:8b"  # or: model: "GPT-OSS:latest", etc.
+      auth:
+        type: "provider"
+        name: "local-ollama"
+      prompt: "Review the system specs in this directory and list missing constraints."
+
+  # Step 2: Handoff the results to your existing Claude Code harness
+  - agent:
+      name: "developer"
+      harness: "claude-code"  # Omnigent wraps your existing Claude Code install natively
+      prompt: "Take the reviewer's output and implement the missing features in the codebase."

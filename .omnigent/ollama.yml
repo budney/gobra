@@ -1,0 +1,20 @@
+name: "spec-reviewer"
+instructions: "./claude/skills/review-plan/SKILL.md"
+
+executor:
+  harness: "openai-agents"
+  model: "GPT-OSS:latest"
+  auth:
+    type: "provider"
+    name: "local-ollama"
+
+# Grants the local model permission to look at files in the current folder (.)
+os_env:
+  type: "caller_process"
+  cwd: "."
+  sandbox:
+    type: "none" # Trusted local execution bypasses the container proxy network freeze
+
+# Keep the tools block for custom Python/MCP plugins (omit if you don't have external tools)
+tools: {}
+

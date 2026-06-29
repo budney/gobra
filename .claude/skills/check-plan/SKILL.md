@@ -1,4 +1,5 @@
 ---
+name: check-plan
 description: Check Go-Gobra rewrite plan docs against the acceptance criteria in .plans/CRITERIA.md. Invoke as /check-plan [file-or-glob] to scope the check, or with no arguments to check all docs. Useful after applying /review-plan recommendations to verify the fixes are correct and complete.
 allowed-tools: Bash, Read
 ---
