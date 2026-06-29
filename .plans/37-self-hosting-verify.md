@@ -76,6 +76,7 @@ DECISIONS.md D8), all of the following must be satisfied:
 - [ ] CI job `gobra-self-verify` is passing for all blocking-tier modules.
 - [ ] `SELF_HOSTING.md` is written and up-to-date.
 - [ ] All regression tests pass (or are in `skip.txt` with documented reasons).
+- [ ] All CRITERIA.md checks (C1–C9) pass against the final plan set.
 - [ ] Last Scala release is tagged (e.g., `v0.9.9-scala-final`) before the cut-over commit.
       **Owner: project lead / release manager** — this is a meta-project action, not part of any plan's code deliverables.
 - [ ] **CI runner has Go ≥ 1.21 installed.** Go-Gobra requires `go` in `$PATH` at runtime for

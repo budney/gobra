@@ -60,7 +60,7 @@ self-hosting: Go-Gobra verifies its own source code.
 | [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 15, 16 |
 | [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) | Worker Pool Expansion (N workers) | 15, 16, 17 |
 | [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15b, 16, 17 |
-| [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend (optional) | 16, 17 |
+| [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend **[DEFERRED — D12]** | *(not in active path)* |
 
 ### Group 5: Translator
 | File | Title | Blocked by |

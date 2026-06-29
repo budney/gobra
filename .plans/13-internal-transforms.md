@@ -79,12 +79,12 @@ fits in [-128, 127]) when `--overflow` is enabled.
 //@ requires prog != nil
 //@ ensures  result != nil
 //@ ensures  len(diags) >= 0
-//@ ensures  len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount())
+//@ ensures  !cfg.Overflow && len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount())
 //@ decreases
 func Apply(prog *internal.Program, cfg Config) (result *internal.Program, diags []Diagnostic)
 ```
 
-**Node-count invariant**: Constant folding reduces or preserves the node count; no transform adds nodes without also removing the node(s) it replaces. Formally, `result.NodeCount() ≤ prog.NodeCount()` when there are no diagnostics.
+**Node-count invariant**: Constant folding reduces or preserves the node count; no transform adds nodes without also removing the node(s) it replaces. Formally, `result.NodeCount() ≤ prog.NodeCount()` when there are no diagnostics and `--overflow` is not enabled. When `cfg.Overflow == true`, the overflow transform inserts range-assertion nodes for every arithmetic expression; this is correct behaviour that increases node count without producing diagnostics, so the non-increasing guarantee is conditioned on `!cfg.Overflow`.
 
 **Transform order postcondition**: The four transforms run in the fixed sequence
 `constantProp → callGraphEdges → overflowChecks → termination`. This ordering is a postcondition of `Apply`: the resulting program has CG edge annotations present before overflow checks are applied, which overflow checks may inspect.

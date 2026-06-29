@@ -33,9 +33,32 @@ on them, and compares results to the expected outcomes declared in `//@ expected
     throughput gain. Recommended: `-parallel $(nproc)` and `--workers $(nproc)`.
   Document the recommended value in the CI workflow and README.
 - Differential mode: optionally run Scala Gobra on the same file and compare results
+- `HasGenericDecl(f *ast.File) bool` — pure AST predicate that reports whether a parsed
+  Go file contains at least one generic declaration; Gobra-annotated with the postcondition
+  specified in plan 35; ghost predicates `funcDeclIsGeneric`, `genDeclHasGenericSpec`,
+  `typeSpecIsGeneric` defined alongside it
+
+- **Skip-list support** (consumed by plan 35): The runner accepts a `SkipConfig` at
+  construction time:
+  ```go
+  type SkipConfig struct {
+      File       string          // path to skip.txt; empty disables skip-list support
+      ValidSlugs map[string]bool // slug set supplied by the caller (plan 35 defines the values)
+  }
+  ```
+  When a `SkipConfig` is provided:
+  1. Load and parse `skip.txt` at startup before any tests run.
+  2. For each entry, validate the reason slug against `ValidSlugs`; if any slug is
+     unrecognised, return a startup error immediately (no tests run).
+  3. Run skip-listed tests normally but in "expected-to-fail" mode: if a skip-listed test
+     *passes*, emit `UNEXPECTED_PASS: <path>` and count it as a CI failure; if it fails as
+     expected, report it as skipped (not counted against the pass rate).
+  The `SkipConfig` design keeps slug definitions out of this plan — plan 35 supplies the
+  `ValidSlugs` map when it constructs the runner; plan 34 only enforces the contract.
 
 **Out of scope:**
 - The regression test files themselves (35-regression-suite.md)
+- The specific set of valid reason slugs (defined in 35-regression-suite.md and passed in via `SkipConfig.ValidSlugs`)
 - Performance benchmarking (future work)
 
 ## Dependencies
@@ -52,8 +75,13 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 
 ## Deliverables
 
-- `internal/testing/runner.go` — test runner logic
-- `tests/regression_test.go` — Go test file that plugs the runner into `go test`
+- `internal/testing/runner.go` — test runner logic, including `SkipConfig` struct,
+  skip-list loader/validator, and `HasGenericDecl(*ast.File) bool` with its ghost predicates
+  (`funcDeclIsGeneric`, `genDeclHasGenericSpec`, `typeSpecIsGeneric`) and the Gobra
+  postcondition specified in plan 35. `HasGenericDecl` is a pure function; its spec must
+  be verified before plan 37 self-hosting verification begins.
+- `tests/regression_test.go` — Go test file that plugs the runner into `go test`; supplies
+  the `SkipConfig` (with `ValidSlugs` from plan 35) when constructing the runner
 - Documentation on how to add new test cases
 
 ### Required output format for skip-list integration (plan 35 depends on this)

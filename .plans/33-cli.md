@@ -11,7 +11,7 @@ status code.
 **In scope:**
 - All CLI flags from the current Gobra (replicate `--help` output parity):
   - Input: `-i`/`--input` (files), `-p`/`--packages`, `--projectRoot`, `--include`
-  - Backend: `--backend` (silicon/carbon), `--z3Exe`, `--boogieExe`
+  - Backend: `--z3Exe` (path to Z3 executable; also read from `Z3_EXE` env var)
   - JVM: `--viperServerJar` (path to the ViperServer/Silicon fat JAR; also read from
     `VIPERSERVER_JAR` env var); `--jvmArgs` (additional JVM flags)
   - Verification: `--overflow`, `--checkConsistency`, `--module`, `--assumeInjectivityOnInhale`
@@ -56,6 +56,10 @@ status code.
 **Out of scope:**
 - IDE/LSP mode (not in initial scope)
 - Daemon/server mode
+- `--backend carbon` flag and `--boogieExe` flag — Carbon backend is deferred per D12.
+  Do **not** add a `--backend` flag; Silicon is the only active backend. If a `--backend`
+  flag is added in future, it must be wired through [18-carbon-backend.md](18-carbon-backend.md),
+  which is a separate deferred dependency tree not reachable from this plan.
 
 ## Dependencies
 
@@ -72,8 +76,6 @@ status code.
 - [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend
 - [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)
 - [17b-parallel-workers.md](17b-parallel-workers.md) — parallel worker pool (--workers N)
-- [18-carbon-backend.md](18-carbon-backend.md) — Carbon backend; required because plan 33
-  exposes `--backend carbon` as a flag
 - [19-translator-core.md](19-translator-core.md) — translation
 - [27-encoding-methods.md](27-encoding-methods.md) — encoding must be substantially complete
 - [32-reporter.md](32-reporter.md) — output
@@ -81,7 +83,8 @@ status code.
 ## Reference: Current Gobra
 
 - `src/main/scala/viper/gobra/GobraRunner.scala` — main runner
-- `src/main/scala/viper/gobra/GobraConfig.scala` — all configuration options; replicate these
+- `src/main/scala/viper/gobra/GobraConfig.scala` — all configuration options; replicate the
+  Silicon-relevant subset only. Skip `--backend carbon` and `--boogieExe` per D12.
 
 ## Deliverables
 

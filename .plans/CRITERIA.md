@@ -15,7 +15,7 @@ or (c) is `CRITERIA.md` itself (this file), or (d) is `00-overview.md`
 (the master index — it cannot list itself).  Reference documents
 have no Objective/Scope/Deliverables sections; they belong in the
 "Reference Documents" table, not the WBS. Current reference documents:
-`DECISIONS.md`, `CONTEXT.md`, `COVERAGE.md`.  No orphan docs. No
+`DECISIONS.md`, `CONTEXT.md`, `COVERAGE.md`, `scratchpad.md`.  No orphan docs. No
 phantom plans.
 
 ## C2 — Required sections

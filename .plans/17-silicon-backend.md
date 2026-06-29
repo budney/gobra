@@ -137,9 +137,11 @@ per-worker instances at pool construction time.
   func (s *SiliconFrontendAPI) Stop()
   ```
   Note: `NewSiliconFrontendAPI` does NOT take a `*jvm.JVM` parameter — it accesses the
-  process-wide JNI environment via the `jnigi` package directly, avoiding an import of
-  `gobra/internal/backend/jvm`. The `silicon` sub-package imports only
-  `gobra/internal/backend` (parent) and external libraries. `jobject` is jnigi's JNI object
+  process-wide JNI environment via the `jnigi` package directly. The `silicon` sub-package
+  imports `gobra/internal/backend` (parent) for shared types and
+  `gobra/internal/backend/jvm` for the `ThreadAttached` predicate used in C9 annotations.
+  This import is safe: `jvm` depends on the `backend.SiliconInstance` interface, not on
+  the `silicon` package, so there is no import cycle. `jobject` is jnigi's JNI object
   reference type, consistent with plan 16's `BuiltProgram.JavaObject jobject`.
 
 - Silicon initialization and teardown integrated with JVM lifecycle (15)
@@ -154,8 +156,8 @@ so Gobra can statically enforce the threading precondition and result validity c
 1. **`Verify` threading precondition**: `Verify` makes JNI calls and may only be called from
    a goroutine that holds the OS-thread lock and JVM attachment:
    ```go
-   //@ requires acc(backend.ThreadAttached(), 1)
-   //@ ensures  acc(backend.ThreadAttached(), 1)
+   //@ requires acc(jvm.ThreadAttached(), 1)
+   //@ ensures  acc(jvm.ThreadAttached(), 1)
    //@ ensures  err == nil ==> result != nil
    func Verify(prog jobject, cfg backend.SiliconConfig) (result *backend.VerificationResult, err error)
    ```

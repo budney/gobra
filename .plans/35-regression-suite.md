@@ -49,19 +49,59 @@ and achieve full pass rate parity with the Scala implementation.
 
 **Pre-populating the generics skip list:** Before the first test run, identify all test files
 that declare generic functions or types and pre-mark them as `SKIP:generics-not-implemented`.
-Use a pattern that targets generic *declarations* (type parameter lists on `func` or `type`),
-not array types or other bracket uses:
 
-```bash
-find src/test/resources/regressions -name "*.gobra" \
-  | xargs grep -El "^\s*(func|type)\s+\w+\s*\[" \
-  | sort
+Do **not** use a grep pattern for this. A text pattern cannot be formally related to Go syntax
+and requires manual false-positive review. Instead, parse each file with `go/parser` and
+inspect the resulting AST. The function `HasGenericDecl` (plan 34 deliverable,
+`internal/testing/runner.go`) does this and carries a Gobra postcondition that makes its
+correctness machine-checkable:
+
+```go
+// HasGenericDecl reports whether f contains at least one generic function or type
+// declaration — i.e., an *ast.FuncDecl whose TypeParams list is non-empty, or an
+// *ast.TypeSpec (inside a *ast.GenDecl) whose TypeParams list is non-empty.
+//
+// Correctness argument: go/parser is the authoritative Go parser. A declaration is
+// syntactically generic iff go/parser sets a non-nil, non-empty TypeParams field on
+// the corresponding AST node. HasGenericDecl checks exactly those fields, so its
+// result is true iff the file contains a syntactically valid generic declaration.
+//
+//@ requires f != nil && acc(f)
+//@ ensures  result ==
+//@     (exists i int :: 0 <= i && i < len(f.Decls) &&
+//@         (funcDeclIsGeneric(f.Decls[i]) || genDeclHasGenericSpec(f.Decls[i])))
+//@ pure
+//@ decreases
+func HasGenericDecl(f *ast.File) (result bool)
+
+// Ghost predicates used in the spec above:
+//@ ghost pure func funcDeclIsGeneric(d ast.Decl) bool {
+//@     fd, ok := d.(*ast.FuncDecl)
+//@     return ok && fd.Type != nil && fd.Type.TypeParams != nil &&
+//@            len(fd.Type.TypeParams.List) > 0
+//@ }
+//@ ghost pure func genDeclHasGenericSpec(d ast.Decl) bool {
+//@     gd, ok := d.(*ast.GenDecl)
+//@     if !ok { return false }
+//@     return exists i int :: 0 <= i && i < len(gd.Specs) &&
+//@         typeSpecIsGeneric(gd.Specs[i])
+//@ }
+//@ ghost pure func typeSpecIsGeneric(s ast.Spec) bool {
+//@     ts, ok := s.(*ast.TypeSpec)
+//@     return ok && ts.TypeParams != nil && len(ts.TypeParams.List) > 0
+//@ }
 ```
 
-This matches lines like `func F[T any](...)` and `type Stack[T any] struct{...}` but not
-array types (`[N]T` always appears in a type position, not immediately after a name).
-Review matches manually for false positives (e.g., slice-typed return types on the same
-line as a declaration), then add confirmed generics tests to `tests/testdata/skip.txt`.
+`HasGenericDecl` is a pure function over an already-parsed `*ast.File`. The skip-list
+pre-population script calls `go/parser.ParseFile` on each `.gobra` file (mode
+`parser.SkipObjectResolution` for speed, since type-checking is not needed) and passes
+the result to `HasGenericDecl`. Files where it returns `true` are added to `skip.txt`
+with reason `generics-not-implemented`.
+
+**Note**: plan 34 is responsible for implementing `HasGenericDecl` and its ghost predicates.
+Plan 35 consumes it and specifies these Gobra annotations as a deliverable requirement on
+plan 34. The self-hosting verification run (plan 37) will verify `HasGenericDecl`'s
+postcondition as part of the blocking tier.
 
 ## Deliverables
 

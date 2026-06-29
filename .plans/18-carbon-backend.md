@@ -1,4 +1,14 @@
-# 18 — Carbon Backend (Optional)
+# 18 — Carbon Backend [DEFERRED — NOT IN ACTIVE WBS]
+
+> **This plan is deferred indefinitely per D12 in DECISIONS.md.** It is not part of the
+> active dependency graph. Plan 33 (CLI) does **not** depend on this plan and does not
+> expose `--backend carbon`. No other active plan depends on this one.
+>
+> **To pick this up after self-hosting:** (1) Add the `Backend` interface to
+> `internal/backend/types.go` (see "Backend Interface Definition" below), (2) wire
+> `--backend silicon/carbon` and `--boogieExe` flags into Plan 33 (CLI), (3) implement
+> `CarbonFrontendAPI` following the pattern in Plan 17. Plan 33 will need to add
+> [18-carbon-backend.md](18-carbon-backend.md) back to its Dependencies at that time.
 
 ## Objective
 
@@ -102,8 +112,8 @@ and verified before this plan is considered complete.
 
 2. **`Verify` threading precondition** — JNI calls require OS-thread lock and JVM attachment:
    ```go
-   //@ requires acc(backend.ThreadAttached(), 1)
-   //@ ensures  acc(backend.ThreadAttached(), 1)
+   //@ requires acc(jvm.ThreadAttached(), 1)
+   //@ ensures  acc(jvm.ThreadAttached(), 1)
    //@ ensures  result != nil   // never returns nil; JNI errors encoded in result.Err
    func (c *CarbonFrontendAPI) Verify(prog jobject) (result *backend.VerificationResult)
    ```

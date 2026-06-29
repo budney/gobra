@@ -291,6 +291,33 @@ the self-hosting milestone. Silicon is the only active verification backend.
 
 ---
 
+## D13 — Generic-declaration detection uses AST inspection, not grep
+
+**Decision:** The function that identifies `.gobra` test files containing generic declarations
+(used to pre-populate the `generics-not-implemented` skip list) parses each file with
+`go/parser` and inspects the resulting AST, rather than applying a grep pattern to raw source
+text. The function is `HasGenericDecl(*ast.File) bool` (plan 34 deliverable).
+
+**Rationale:**
+- A grep pattern is not formally relatable to Go syntax. The pattern
+  `^\s*(func|type)\s+\w+\s*\[` is a heuristic that requires manual false-positive review
+  and cannot be verified.
+- `go/parser` is the authoritative Go parser. A declaration is syntactically generic iff
+  `go/parser` sets a non-nil, non-empty `TypeParams` field on the corresponding AST node
+  (`*ast.FuncDecl.Type.TypeParams` or `*ast.TypeSpec.TypeParams`). `HasGenericDecl` checks
+  exactly those fields.
+- Because the check is defined in terms of the parsed AST, its correctness is expressible
+  as a Gobra postcondition and can be machine-verified. This aligns with the self-hosting
+  goal: the test infrastructure itself becomes a target for formal verification (plan 37
+  blocking tier).
+
+**Consequence:** Plan 34 owns `HasGenericDecl` and three ghost predicates
+(`funcDeclIsGeneric`, `genDeclHasGenericSpec`, `typeSpecIsGeneric`). Plan 35 specifies the
+required Gobra postcondition. Plan 37 must verify `HasGenericDecl` as part of the blocking
+tier before cut-over. The grep-based approach is permanently superseded.
+
+---
+
 ## D11 — Self-hosting may require extending the annotation language and refactoring Go-Gobra
 
 **Decision:** If Gobra's current annotation language cannot express a key invariant of

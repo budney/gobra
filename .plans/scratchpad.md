@@ -128,7 +128,7 @@
 ---
 
 ## 3. AUDIT HISTORY
-*Seven rounds of architectural audit completed against CRITERIA.md (C1–C9). 96 items resolved. Round 8 in progress (full review-plan ALL).*
+*Nine rounds of architectural audit completed against CRITERIA.md (C1–C9). 109 items resolved.*
 
 | Round | Scope | Items | Status |
 |---|---|---|---|
@@ -139,10 +139,21 @@
 | 5 | File-by-file audit follow-up | 70–88 | All DONE |
 | 6 | File-by-file audit (plans 01–37, second pass) | 89–95 | All DONE |
 | 7 | Full criteria check (C1–C9), all 41 plans | 96 | All DONE |
-| 8 | Full /review-plan ALL (all 41 plans + foundation docs) | 97–104 | 7 RESOLVED, 0 OPEN |
+| 8 | Full /review-plan ALL (all 41 plans + foundation docs) | 97–104 | All DONE |
 | — | D12 decision: defer Carbon backend (Plan 18) | — | RESOLVED |
+| 9 | Full /review-plan ALL second pass (verified 34–37, COVERAGE, CRITERIA) | 105–109 | All DONE |
+| — | D13 decision: AST-based generic detection replaces grep | — | RESOLVED |
 
-**Total: 96 prior items resolved. 8 new items (97–104) from round 8, all resolved. Plan 18 deferred per D12.**
+**Total: 109 items resolved. All rounds complete. No open items.**
+
+### Active Global Constraint — HasGenericDecl ownership
+
+`HasGenericDecl(*ast.File) bool` and its ghost predicates (`funcDeclIsGeneric`,
+`genDeclHasGenericSpec`, `typeSpecIsGeneric`) are owned by **plan 34**
+(`internal/testing/runner.go`). Plan 35 specifies the required Gobra postcondition; plan 37
+blocking tier must verify it before cut-over. No other plan may define a competing generic-
+detection function. The grep-based pre-population approach (former plan 35 text) is
+superseded and must not be re-introduced.
 
 ---
 
@@ -345,3 +356,95 @@ first module verified and added, establishing the CI gate before any other modul
 the self-hosting pipeline a warm-up target with near-zero verification effort.
 
 **Status**: RESOLVED — fix to be applied to `37-self-hosting-verify.md`.
+
+---
+
+## ROUND 9 — Full /review-plan ALL (all 41 plans + foundation docs, second pass)
+
+### Item 105 — BLOCKING CONTRADICTION: Plan 33 still contains `--backend carbon` and Plan 18 dependency despite D12
+
+**Criterion**: C1 — Contradictions between plan documents and decisions.
+
+**Finding**: Item 100 was marked RESOLVED ("no code change needed; Plan 18 removed from active WBS") but Plan 33's actual text was never updated. Plan 33 still contains:
+- In-scope bullet: "`--backend` (silicon/carbon), `--z3Exe`, `--boogieExe`"
+- Dependencies section: "- [18-carbon-backend.md](18-carbon-backend.md) — Carbon backend; required because plan 33 exposes `--backend carbon` as a flag"
+
+D12 states: "Plan 33 (CLI) does not wire a `--backend carbon` flag; `--backend` flag is omitted entirely or reserved for future use." The WBS scratchpad state (Section 2) correctly marks Plan 18 as `[DEFERRED]`, but the plan 33 text was not updated to match.
+
+**Required fix**:
+1. Remove `--backend (silicon/carbon)` from Plan 33's In-scope flag list; replace with `--backend silicon` or remove `--backend` entirely per D12.
+2. Remove `--boogieExe` from Plan 33's flag list (Carbon-only flag).
+3. Remove the Plan 18 dependency entry from Plan 33's Dependencies section.
+
+**Status**: RESOLVED — `33-cli.md` updated: removed `--backend (silicon/carbon)` and
+`--boogieExe` from scope, removed Plan 18 from Dependencies, added Carbon to Out-of-scope with
+forward pointer. `00-overview.md` WBS row updated to `[DEFERRED — D12]` with no active
+dependency arrows. `18-carbon-backend.md` given a prominent deferred notice and pickup
+instructions. The Carbon dependency tree is now isolated: no active plan depends on Plan 18.
+
+---
+
+### Item 106 — LOGIC ERROR: Plan 13 C9 NodeCount postcondition is false when `--overflow` is enabled
+
+**Criterion**: C9 — Self-verification annotations must be correct.
+
+**Finding**: Plan 13's C9 postcondition for the transform pipeline:
+```go
+//@ ensures len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount())
+```
+The overflow transform (`overflowChecks`) inserts range-assertion nodes into the AST for every arithmetic expression when `--overflow` is enabled. These insertions are correct behavior and produce no diagnostics (`len(diags) == 0`). So with `--overflow` enabled, it is possible that `len(diags) == 0` AND `result.NodeCount() > old(prog.NodeCount())` simultaneously — directly falsifying the postcondition.
+
+**Required fix**: Weaken the spec to account for overflow-check insertions. Options:
+1. Conditionalize: `//@ ensures !cfg.Overflow && len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount())`
+2. Replace with a monotone bound: `//@ ensures len(diags) == 0 ==> result.NodeCount() <= old(prog.NodeCount()) + cfg.Overflow ? prog.ArithExprCount() : 0`
+Option 1 is simpler to state; Option 2 is stronger but requires `ArithExprCount()` ghost method.
+
+**Status**: RESOLVED — C9 annotation conditioned on `!cfg.Overflow`; prose note updated to
+explain why overflow-check insertions legitimately increase node count without diagnostics.
+
+---
+
+### Item 107 — NOTATION: Plans 16 and 17 C9 specs use `backend.ThreadAttached()` but predicate lives in `jvm` sub-package
+
+**Criterion**: C4 — Cross-plan references must use exact names.
+
+**Finding**: `pred ThreadAttached()` is declared in `internal/backend/jvm/jvm.go` (Plan 15). Plans 16 and 17 reference it in their C9 specs as `acc(backend.ThreadAttached(), 1)`. From the packages that Plans 16 and 17 deliver (`internal/backend/silver/builder.go` and `internal/backend/silicon/silicon.go`), the correct import path is `jvm.ThreadAttached()`. The package qualifier `backend` refers to the parent package, not the `jvm` subpackage — as written, the spec would not compile.
+
+Note: Item 97 fixed the argument count (`ThreadAttached(jvm)` → `ThreadAttached()`); this finding is separate: the package qualifier is also wrong.
+
+**Required fix**: Replace `backend.ThreadAttached()` with `jvm.ThreadAttached()` in Plans 16 and 17 C9 specs.
+
+**Status**: RESOLVED — both plans updated to `jvm.ThreadAttached()`. Plan 16 already imports
+`jvm` (takes `*jvm.JVM` parameter). Plan 17 import note updated: `silicon` safely imports
+`jvm` for annotation purposes — no cycle because `jvm` depends on the `backend.SiliconInstance`
+interface, not on the `silicon` package.
+
+---
+
+### Item 108 — GAP: Plan 34 does not specify skip-list loading or slug validation, but Plan 35 requires both of the runner
+
+**Criterion**: C5 — Every artifact a plan consumes must be produced by a listed dependency.
+
+**Finding**: Plan 35 specifies that the skip list parser "must reject any unrecognised reason slug as a parse error at startup, failing the test run before any tests execute." It also specifies the two-mode design: skip-listed tests must be run (not omitted) and emit `UNEXPECTED_PASS:` on unexpected pass.
+
+Plan 34 (which delivers `internal/testing/runner.go`) describes the `UNEXPECTED_PASS:`/`UNEXPECTED_FAIL:` sentinel format but does not mention: (a) loading `tests/testdata/skip.txt` at startup, (b) validating slugs against the fixed set, or (c) the two-mode run-expected-to-fail behavior. Plan 35 specifies behavior that Plan 34's deliverable must implement but Plan 34's own scope and deliverables section is silent about it.
+
+**Required fix**: Add to Plan 34's Scope section: loading `tests/testdata/skip.txt` at startup; validating slugs against the fixed set from Plan 35; failing the run on unrecognized slugs; running skip-listed tests in "expected-to-fail" mode and emitting `UNEXPECTED_PASS:` if they pass.
+
+**Status**: RESOLVED — `34-test-infrastructure.md` updated. Added `SkipConfig` struct
+(with `File` and `ValidSlugs` fields) to In-scope; runner accepts it at construction time,
+validates slugs against the caller-supplied set, and runs skip-listed tests in expected-to-fail
+mode. Slug set definition stays in Plan 35, avoiding circular content duplication.
+
+---
+
+### Item 109 — DOCUMENTATION: CRITERIA.md C1 enumeration of reference documents omits `scratchpad.md`
+
+**Criterion**: C1 — Internal consistency.
+
+**Finding**: CRITERIA.md C1 states: "Current reference documents: `DECISIONS.md`, `CONTEXT.md`, `COVERAGE.md`." The `00-overview.md` Reference Documents table lists four entries: `CONTEXT.md`, `DECISIONS.md`, `COVERAGE.md`, `scratchpad.md`. `scratchpad.md` is missing from CRITERIA.md's enumeration, so C1 as written is internally inconsistent with the master index.
+
+**Required fix**: Update CRITERIA.md C1 to list `scratchpad.md` in its "Current reference documents" enumeration.
+
+**Status**: RESOLVED — `CRITERIA.md` C1 updated to include `scratchpad.md` in the reference
+documents enumeration.
