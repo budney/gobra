@@ -72,13 +72,15 @@ Plan 31's primary deliverable is a static file-copy operation (stub files embedd
 ```go
 // Importer.Import postcondition for stub paths:
 //@ requires isStubPath(path)   // path has a matching file in internal/frontend/stubs/
-//@ ensures  pkg != nil && isFromStub(pkg, path)
+//@ ensures  pkg != nil && i.isFromStub(pkg, path)
 //@ ensures  err == nil
 ```
 
 **Ghost predicate ownership**: `isStubPath` and `isFromStub` are ghost predicates defined
 in `internal/frontend/stubs/stubs.go` (owned by this plan, plan 31). They must be pure and
 side-effect-free so Gobra can use them in preconditions and postconditions.
+
+`isStubPath` is a pure function over the embedded filesystem and needs no state:
 
 ```go
 // isStubPath reports whether the given import path has a corresponding embedded stub file.
@@ -89,26 +91,43 @@ side-effect-free so Gobra can use them in preconditions and postconditions.
 //@ func isStubPath(path string) bool {
 //@     return stubFS.Exists(path + ".gobra") || stubFS.Exists(path + "/stub.gobra")
 //@ }
-
-// isFromStub reports whether pkg was loaded from the embedded stub for the given path,
-// rather than from the real filesystem or go/packages. Used to enforce that stub-directory-
-// first resolution (plan 10) does not silently fall back to the real stdlib package.
-//
-//@ pure
-//@ decreases
-//@ func isFromStub(pkg *types.Package, path string) bool {
-//@     return pkg != nil && pkg.Path() == path && stubSourceTag(pkg)
-//@ }
-// stubSourceTag is a ghost field set on *types.Package by the importer when a package
-// is loaded from the embedded stubs. It is never set for real-stdlib packages.
-//@ ghost field stubSourceTag bool  // on *types.Package; set only by stub-loading path
 ```
 
-The importer (plan 10) sets `stubSourceTag` on each `*types.Package` it creates from
-embedded stub bytes, and never sets it for packages loaded from disk. This makes
-`isFromStub` decidable and falsifiable: a `*types.Package` built from disk for a stub path
-(e.g., by accidentally falling through to the real stdlib resolver) will have
-`stubSourceTag == false` and the postcondition will fail.
+`isFromStub` cannot be implemented as a ghost field on `*types.Package` — that is a stdlib
+type not owned by this codebase, and Gobra cannot annotate ghost fields on foreign types.
+Instead, the importer (plan 10) owns a ghost map field tracking which packages it loaded
+from stubs:
+
+```go
+// In internal/info/importer.go (plan 10):
+//@ ghost field stubLoaded map[*types.Package]bool  // on *Importer; keyed by package pointer
+
+// isFromStub reports whether pkg was loaded from the embedded stub for the given path,
+// rather than from the real filesystem or go/packages. Defined as a method on *Importer
+// so it can read the ghost map without an explicit receiver parameter in specs.
+//
+//@ pure
+//@ requires acc(i.stubLoaded, _)
+//@ decreases
+//@ func (i *Importer) isFromStub(pkg *types.Package, path string) bool {
+//@     return pkg != nil && pkg.Path() == path && i.stubLoaded[pkg]
+//@ }
+```
+
+The stub-resolution postcondition on `Import` then reads:
+
+```go
+// Importer.Import postcondition for stub paths (updated):
+//@ requires isStubPath(path)
+//@ ensures  pkg != nil && i.isFromStub(pkg, path)
+//@ ensures  err == nil
+```
+
+The importer sets `i.stubLoaded[pkg] = true` (ghost statement) for every package it
+creates from embedded stub bytes, and never sets it for packages loaded from disk. This
+makes `isFromStub` decidable and falsifiable: a `*types.Package` built from disk for a
+stub path (e.g., by accidentally falling through to the real stdlib resolver) will not
+be present in `i.stubLoaded`, so the postcondition will fail.
 
 **No-new-stub contract**: Plan 31 does not write new stub content — it only ports existing files from `src/main/resources/`. If a stub file is absent from `internal/frontend/stubs/` that was present in `src/main/resources/`, that is a gap requiring a new stub (out of scope for plan 31). Termination: the porting loop iterates over a finite, known file set.
 

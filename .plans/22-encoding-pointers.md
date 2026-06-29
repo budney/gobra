@@ -122,10 +122,13 @@ and verified before this plan is considered complete.
    func EncodePointer(ctx *Context, ptr *internal.PointerT, val internal.Expr) (result silver.Expr)
    ```
 
-2. **Nil pointer encoding correctness** — exclusive nil pointer equals `dflt(T°)`:
+2. **Nil pointer encoding correctness** — exclusive nil pointer value encodes to `dflt(T°)`;
+   non-nil values encode to something other than the default. The condition is on `val` (the
+   value expression), not on `ptr` (the type descriptor, which is never nil in the translator):
    ```go
-   //@ ensures isNilPointer(ptr) ==> result == ctx.Dflt(ptr.Elem)
-   //@ ensures !isNilPointer(ptr) ==> result != ctx.Dflt(ptr.Elem)
+   //@ ensures isNilValue(val) ==> result == ctx.Dflt(ptr.Elem)
+   //@ ensures !isNilValue(val) ==> result != ctx.Dflt(ptr.Elem)
+   // ghost: isNilValue(val) true iff val is an internal.DfltVal node for a pointer type
    ```
 
 3. **`new(T)` permission postcondition** — `new` inhales full write permission on the

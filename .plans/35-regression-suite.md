@@ -66,6 +66,13 @@ correctness machine-checkable:
 // the corresponding AST node. HasGenericDecl checks exactly those fields, so its
 // result is true iff the file contains a syntactically valid generic declaration.
 //
+// Caller requirement: f must be the result of parsing gobrafied source bytes, not raw
+// .gobra bytes. Raw .gobra files contain Gobra-specific syntax (ghost parameters,
+// pure/trusted modifiers, top-level adt/pred/ghost func) that is not valid Go;
+// go/parser may fail on those declarations and produce a partial AST that silently
+// omits generic declarations — a false negative. Gobrafied output is valid Go and
+// produces a complete AST. See the pre-population sequence below.
+//
 //@ requires f != nil && acc(f)
 //@ ensures  result ==
 //@     (exists i int :: 0 <= i && i < len(f.Decls) &&
@@ -93,10 +100,30 @@ func HasGenericDecl(f *ast.File) (result bool)
 ```
 
 `HasGenericDecl` is a pure function over an already-parsed `*ast.File`. The skip-list
-pre-population script calls `go/parser.ParseFile` on each `.gobra` file (mode
-`parser.SkipObjectResolution` for speed, since type-checking is not needed) and passes
-the result to `HasGenericDecl`. Files where it returns `true` are added to `skip.txt`
-with reason `generics-not-implemented`.
+pre-population script must gobrafy each file before parsing. Pre-population sequence
+for each `.gobra` test file:
+
+```go
+src, err := os.ReadFile(path)
+// ... handle err ...
+gobrafied, diags := frontend.Gobrafy(src, path)
+if len(diags) > 0 {
+    // gobrafication failed; conservatively treat as non-generic
+    // (the test run will catch it and it can be skip-listed manually)
+    continue
+}
+fset := token.NewFileSet()
+f, _ := parser.ParseFile(fset, path, gobrafied, parser.SkipObjectResolution)
+if f != nil && HasGenericDecl(f) {
+    // append entry to skip.txt
+}
+```
+
+`parser.SkipObjectResolution` is used for speed (type-checking is not needed). Always
+check `f != nil` before calling `HasGenericDecl` — `ParseFile` may return a non-nil
+error alongside a non-nil partial AST, and a nil `f` must not be passed to
+`HasGenericDecl`. Files where it returns `true` are added to `skip.txt` with reason
+`generics-not-implemented`.
 
 **Note**: plan 34 is responsible for implementing `HasGenericDecl` and its ghost predicates.
 Plan 35 consumes it and specifies these Gobra annotations as a deliverable requirement on

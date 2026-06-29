@@ -347,3 +347,36 @@ concisely, refactoring the code to make it more verifiable is in scope.
 **Consequence:** Plans 36 and 37 are open-ended by design. The annotation language and
 Go-Gobra implementation are co-evolving artifacts during the self-hosting phase. A gap
 discovered in plan 36 may block plan 37 until resolved — this is expected, not a failure.
+
+---
+
+## D14 — Translator encoding modules use internal AST types in their public interfaces
+
+**Decision:** The public function signatures of all translator encoding modules (plans 19–31)
+use `internal.Type` and related types from `internal/ast/internal/` as parameters and return
+values. They never take `go/types` stdlib types (`types.Type`, `types.Interface`, etc.)
+directly. When a function needs `go/types` information, it accesses it through
+`ctx.TypeInfo()`, not through a direct parameter of a `go/types` type.
+
+**Rationale:**
+- The translator is a distinct pipeline stage that operates on the internal AST (plan 11),
+  not on the frontend's `go/types`-backed representation. Passing `go/types` objects across
+  the stage boundary couples the translator to the frontend's type-checking layer and makes
+  the boundary ill-defined.
+- Self-hosting verification (plan 37) is easier when each stage's interface is expressed
+  purely in terms of types the project owns. Reasoning about `go/types` internals from within
+  Gobra specs would require either trusting those types or providing stubs for them.
+- The rule is enforceable by inspection: any `go/types.*` import in an encoding module's
+  public signature is a violation.
+
+**Alternatives considered:**
+1. **Pass `go/types` objects directly** — avoids a lookup through `ctx.TypeInfo()` at call
+   sites, but couples encoding modules to the frontend layer and complicates self-hosting
+   verification. The convenience is small; the coupling cost is ongoing.
+
+**Consequence:** Encoding modules that need `go/types` information (e.g., to look up method
+sets or interface satisfaction) call `ctx.TypeInfo()` to retrieve the `*TypeInfo` and access
+`TypeInfo.Go` from there. The `Context` interface (plan 19) is the approved channel for
+cross-stage information. This rule was the basis for fixing `EncodeInterface` (plan 25) from
+`*types.Interface` to `*internal.InterfaceType` and `BoxValue`'s `T` parameter from
+`types.Type` to `internal.Type`.

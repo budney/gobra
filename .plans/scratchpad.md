@@ -144,8 +144,9 @@
 | 9 | Full /review-plan ALL second pass (verified 34–37, COVERAGE, CRITERIA) | 105–109 | All DONE |
 | 10 | Full /review-plan ALL third pass (all 41 plans + foundation docs) | 110–113 | All DONE |
 | — | D13 decision: AST-based generic detection replaces grep | — | RESOLVED |
+| 11 | Full /review-plan ALL fourth pass (all 41 plans + foundation docs) | 114–118 | All DONE |
 
-**Total: 113 items resolved. All rounds complete. No open items.**
+**Total: 118 items resolved. All rounds complete. No open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -155,6 +156,14 @@
 blocking tier must verify it before cut-over. No other plan may define a competing generic-
 detection function. The grep-based pre-population approach (former plan 35 text) is
 superseded and must not be re-introduced.
+
+### Active Global Constraint — D14: translator encoding module type layering
+
+Encoding module public signatures (plans 19–31) must use `internal.Type` and other types
+from `internal/ast/internal/` — never `go/types` stdlib types (`types.Type`,
+`types.Interface`, etc.) as direct parameters or return values. Cross-stage `go/types`
+access goes through `ctx.TypeInfo()`. Any `go/types.*` type in an encoding function's
+public signature is a layering violation. See DECISIONS.md D14.
 
 ---
 
@@ -515,3 +524,82 @@ domain names) to their zero-value Silver expressions.
 **Required fix**: Update Plan 20's note to clarify that `unsafe` is rejected at the import level (plan 07/08), so no encoding-stage handling is needed or expected. The "deferred" framing should be removed to avoid future implementers adding dead encoder code.
 
 **Status**: RESOLVED — `20-encoding-primitives.md` updated: Scope bullet changed to "not in scope"; Open Questions section replaced with a Resolved Questions entry explaining that `unsafe` is rejected by plan 07/08 and no encoder-level handling is needed or should be added.
+
+---
+
+## ROUND 11 — Full /review-plan ALL (all 41 plans + foundation docs, fourth pass)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 11 | Full /review-plan ALL fourth pass (all 41 plans + foundation docs) | 114–118 | In progress |
+
+### Item 114 — SIGNIFICANT Logic Error: Plan 31 C9 ghost field on stdlib type `*types.Package` is unimplementable
+
+**Criterion**: C9 — Self-verification annotations must be correct.
+
+**Finding**: Plan 31's C9 section defines:
+```go
+//@ ghost field stubSourceTag bool  // on *types.Package; set only by stub-loading path
+```
+This annotates a ghost field on `*types.Package`, which is `go/types.Package` — a stdlib type not owned by the Go-Gobra codebase. Gobra ghost fields can only be added to types declared in the verified code, not to external package types. If implemented as written, the Gobra verifier will reject the annotation because `*types.Package` is a foreign type without a Gobra source file.
+
+**Required fix**: Replace the ghost field with a `map[*types.Package]bool` maintained inside the importer struct (plan 10). The C9 predicate `isFromStub(pkg, path)` should be defined in terms of this map (a ghost field of the importer, not of the stdlib type).
+
+**Status**: RESOLVED — `31-encoding-builtins.md` updated: removed `//@ ghost field stubSourceTag bool` on `*types.Package`; added `//@ ghost field stubLoaded map[*types.Package]bool` on `*Importer` (plan 10's type); `isFromStub` redefined as a pure method on `*Importer` reading that map; both the stub-resolution postcondition and the ghost-predicate-ownership section updated to use the receiver form `i.isFromStub(pkg, path)`.
+
+---
+
+### Item 115 — MINOR Notation: Plan 06 C9 `bytes.Count(out, '\n')` takes rune, not []byte
+
+**Criterion**: C9 — Self-verification annotations must be correct.
+
+**Finding**: Plan 06's C9 spec comment uses `bytes.Count(out, '\n')`. Go's `bytes.Count` signature is `func Count(s, sep []byte) int` — the separator must be `[]byte`, not a rune. The correct notation is `bytes.Count(out, []byte("\n"))`. As written, the spec comment would not compile.
+
+**Required fix**: Update Plan 06 C9 to use `bytes.Count(out, []byte("\n"))`.
+
+**Status**: RESOLVED — `06-gobrafier.md` C9 annotation updated to `bytes.Count(out, []byte("\n"))` and `bytes.Count(src, []byte("\n"))`.
+
+---
+
+### Item 116 — MINOR Logic Error: Plan 22 C9 `isNilPointer(ptr)` checks the type object, not the value expression
+
+**Criterion**: C9 — Self-verification annotations must be correct.
+
+**Finding**: Plan 22's C9 postcondition on `EncodePointer`:
+```go
+//@ ensures isNilPointer(ptr) ==> result == ctx.Dflt(ptr.Elem)
+func (e *PointerEncoding) EncodePointer(ctx Context, ptr *internal.PointerT, val internal.Expr)
+```
+`ptr` is the pointer *type* (`*internal.PointerT`), not a pointer *value*. Nil-ness is a property of `val` (the value expression being encoded), not of the type descriptor `ptr`. The predicate `isNilPointer(ptr)` testing the type object is semantically wrong — the type object is never nil when called from the translator's dispatch.
+
+**Required fix**: Replace `isNilPointer(ptr)` with `isNilValue(val)`, checking the value expression: `//@ ensures isNilValue(val) ==> result == ctx.Dflt(ptr.Elem)`.
+
+**Status**: RESOLVED — `22-encoding-pointers.md` C9 updated: `isNilPointer(ptr)` → `isNilValue(val)` with explanatory comment that `val` is the value expression and `ptr` is the type descriptor, which is never nil in the translator.
+
+---
+
+### Item 117 — MINOR Design Concern: Plan 25 C9 `EncodeInterface` takes `*types.Interface` (stdlib) not `*internal.InterfaceType`
+
+**Criterion**: C4 — Cross-plan references; layering discipline.
+
+**Finding**: Plan 25's C9 spec:
+```go
+func EncodeInterface(ctx *Context, iface *types.Interface) *silver.Domain
+```
+`*types.Interface` is from the stdlib `go/types` package. The translator operates on internal AST types (`*internal.InterfaceType` from plan 11). Passing a stdlib type across the translator boundary is a layering violation: the translator should not depend on `go/types` directly; it should receive internal AST nodes and access `go/types` information through `ctx.TypeInfo()` if needed.
+
+**Required fix**: Change the parameter type to `*internal.InterfaceType`. The implementation may call `ctx.TypeInfo()` to look up the corresponding `go/types` information if needed.
+
+**Status**: RESOLVED — `25-encoding-interfaces.md` C9 updated: `EncodeInterface` parameter changed from `*types.Interface` to `*internal.InterfaceType`; `BoxValue` `T` parameter changed from `types.Type` to `internal.Type`. Both carry explanatory notes about the layering rule.
+
+---
+
+### Item 118 — MINOR Gap: Plan 35 `HasGenericDecl` pre-population applied to `.gobra` files may need gobrafication first
+
+**Criterion**: C2 — Gaps in coverage.
+
+**Finding**: Plan 35 says to pre-populate the generics skip list by calling `go/parser.ParseFile` on each `.gobra` test file and passing the result to `HasGenericDecl`. Some `.gobra` test files use Gobra-specific inline syntax (e.g., `ghost` parameters in function signatures) that is not valid Go and will cause `go/parser` to return a partial or error parse. For detecting generic declarations, `go/parser` needs to reach the `TypeParams` field of each `FuncDecl`/`TypeSpec`, which may be prevented if a prior syntax error causes the parser to bail out of a top-level declaration.
+
+**Required fix**: Plan 35 (or the pre-population script in plan 34) should specify: call `Gobrafy(src, filename)` (plan 06) on each `.gobra` file before passing to `go/parser`, so the file is valid Go before AST inspection. The error mode for `go/parser` should be `parser.AllErrors` to obtain a maximally-complete partial AST even when the gobrafied content contains residual issues. Alternatively, document the known failure mode: for files that `go/parser` cannot parse even after gobrafication, conservatively treat `HasGenericDecl` as `false` (may produce false negatives in pre-population, caught by the actual test run).
+
+**Status**: RESOLVED — `35-regression-suite.md` updated: added a "Caller requirement" note inside `HasGenericDecl`'s doc comment explaining why gobrafication is required; replaced the single-sentence pre-population description with a full code sequence (`Gobrafy` → `parser.ParseFile` → `HasGenericDecl`) including nil-check and conservative fallback on gobrafication failure.

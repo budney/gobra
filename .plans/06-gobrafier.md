@@ -97,7 +97,7 @@ verified before this plan is considered complete.
 **`Gobrafy` line-count preservation and output safety:**
 ```go
 //@ requires len(src) >= 0
-//@ ensures  len(diags) == 0 ==> bytes.Count(out, '\n') == bytes.Count(src, '\n')
+//@ ensures  len(diags) == 0 ==> bytes.Count(out, []byte("\n")) == bytes.Count(src, []byte("\n"))
 //@ ensures  len(diags) > 0  ==> out == nil
 //@ decreases len(src)
 func Gobrafy(src []byte, filename string) (out []byte, diags []Diagnostic)

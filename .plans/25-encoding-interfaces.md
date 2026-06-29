@@ -266,15 +266,22 @@ and verified before this plan is considered complete.
 //@ requires ctx != nil && iface != nil
 //@ ensures  result != nil
 //@ ensures  result.Name == "InterfaceDomain"   // singleton: same name every call
-func EncodeInterface(ctx *Context, iface *types.Interface) *silver.Domain
+func EncodeInterface(ctx *Context, iface *internal.InterfaceType) *silver.Domain
 ```
+
+Note: the parameter type is `*internal.InterfaceType` (plan 11's internal AST type), not
+`*types.Interface` from stdlib `go/types`. The translator operates on internal AST nodes;
+`go/types` information is accessed through `ctx.TypeInfo()` when needed.
 
 **`BoxValue` unbox-before-dyntype invariant:**
 ```go
 //@ requires dynTypeEstablished(ctx, val, T)
 //@ ensures  unboxed != nil
-func BoxValue(ctx *Context, val silver.Expr, T types.Type) (boxed silver.Expr, unboxed silver.Expr)
+func BoxValue(ctx *Context, val silver.Expr, T internal.Type) (boxed silver.Expr, unboxed silver.Expr)
 ```
+
+Note: `T internal.Type` (plan 11), not `T types.Type` from stdlib `go/types`, for the same
+layering reason as `EncodeInterface`.
 
 **`Type` domain singleton (emitted at most once):**
 ```go
