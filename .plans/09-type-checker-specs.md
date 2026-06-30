@@ -45,6 +45,8 @@ constructs. These have their own typing rules that differ from standard Go.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/info/specchecker.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/info/specchecker.go` — `CheckSpecs(pkg *frontend.PPackage, info *TypeInfo) []Diagnostic`
   Entry point for the spec type-checking pass. Mutates `info.Ghost` in place.
 - `internal/info/specvisitor.go` — the spec expression visitor; one visitor method per spec

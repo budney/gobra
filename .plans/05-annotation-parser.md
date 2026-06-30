@@ -106,6 +106,8 @@ be fully checked (all ☑) before plan 05 is marked complete.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/frontend/annotationparser.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - Ghost AST type definitions in `internal/ast/frontend/` — all ghost node types listed in
   the In-scope section above (plan 05 is the owner; these extend the package begun by plan 03)
 - `internal/frontend/annotationparser.go` —

@@ -58,8 +58,8 @@ the `jobs` channel signals all workers to drain, call `silicon.Stop()`, and exit
 Use a semaphore to cap in-flight programs at `poolSize`:
 
 ```go
-func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResult {
-    type indexed struct{ idx int; res *VerificationResult }
+func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *backend.VerificationResult {
+    type indexed struct{ idx int; res *backend.VerificationResult }
     ch := make(chan indexed, len(progs))
     sem := make(chan struct{}, p.poolSize)
     for i, prog := range progs {
@@ -69,7 +69,7 @@ func (p *WorkerPool) DispatchChopped(progs []*silver.Program) *VerificationResul
             ch <- indexed{i, p.Submit(prog)}
         }(i, prog)
     }
-    results := make([]*VerificationResult, len(progs))
+    results := make([]*backend.VerificationResult, len(progs))
     for range progs {
         r := <-ch
         results[r.idx] = r.res
@@ -92,9 +92,9 @@ unique `uint64` ID. The `NodeMap`s from all sub-results can be merged into a sin
 `map[uint64]silver.Node` without key collisions.
 
 ```go
-func mergeResults(results []*VerificationResult) *VerificationResult {
+func mergeResults(results []*backend.VerificationResult) *backend.VerificationResult {
     merged := make(map[uint64]silver.Node)
-    var allErrors []VerificationError
+    var allErrors []backend.VerificationError
     allSucceeded := true
     for _, r := range results {
         if !r.Success {
@@ -105,7 +105,7 @@ func mergeResults(results []*VerificationResult) *VerificationResult {
             merged[id] = node
         }
     }
-    return &VerificationResult{
+    return &backend.VerificationResult{
         Success: allSucceeded,
         Errors:  backend.Deduplicate(allErrors),
         NodeMap: merged,

@@ -80,6 +80,8 @@ largest single unit of work in the frontend.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/info/checker.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/info/checker.go` — `GobraScope` interface and `gobraScopeImpl` (see D16 in
   DECISIONS.md). Plan 08 constructs a `gobraScopeImpl` per block/file/package scope,
   populating `ghostDecls` from `PFile.GhostDecls` during Pass 1. All name lookups that need

@@ -57,9 +57,9 @@ implicit conversion gap.
 
 Any mutable state accessed from multiple goroutines names the
 synchronization mechanism (mutex, channel, or atomic). Every goroutine
-that calls JNI explicitly documents `runtime.LockOSThread()` and
-the JVM attach/detach lifecycle. Silence is a failure — there is
-no implicit pass for undocumented shared state.
+that interacts with a subprocess (gRPC calls, process fork/kill) explicitly
+documents its synchronization contract and failure behavior. Silence is a
+failure — there is no implicit pass for undocumented shared state.
 
 ## C8 — Every plan is independently validatable
 
@@ -73,8 +73,8 @@ Every plan describing a pipeline component or internal logic must
 explicitly detail the formal Gobra specifications (`//@ requires`,
 `//@ ensures`, and loop invariants) that will be written into the
 resulting Go source code. The plan must describe what safety
-properties (e.g., pointer validity, data-race freedom, memory
-deallocation at JNI boundaries) the component will prove about
+properties (e.g., pointer validity, data-race freedom, resource
+lifecycle at subprocess/gRPC boundaries) the component will prove about
 itself using the Viper backend before it is considered complete.
 Silence or deferring verification to a later stage is an automatic
 failure.

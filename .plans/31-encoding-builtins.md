@@ -76,15 +76,18 @@ Plan 31's primary deliverable is a static file-copy operation (stub files embedd
 //@ ensures  err == nil
 ```
 
-**Ghost predicate ownership**: `isStubPath` and `isFromStub` are ghost predicates defined
-in `internal/frontend/stubs/stubs.go` (owned by this plan, plan 31). They must be pure and
-side-effect-free so Gobra can use them in preconditions and postconditions.
+**Ghost predicate ownership**:
 
-`isStubPath` is a pure function over the embedded filesystem and needs no state:
+- `isStubPath` — defined in `internal/frontend/stubs/stubs.go` (owned by this plan, plan 31).
+  Pure function over the embedded filesystem; needs no receiver state.
+- `isFromStub` — defined as a ghost method on `*gobImporter` in `internal/info/importer.go`
+  (owned by plan 10). Plan 31 consumes it in the stub-resolution postcondition below.
+
+`isStubPath` is a pure function over the embedded filesystem:
 
 ```go
 // isStubPath reports whether the given import path has a corresponding embedded stub file.
-// Defined in internal/frontend/stubs/stubs.go.
+// Defined in internal/frontend/stubs/stubs.go (plan 31).
 //
 //@ pure
 //@ decreases
@@ -96,28 +99,22 @@ side-effect-free so Gobra can use them in preconditions and postconditions.
 `isFromStub` cannot be implemented as a ghost field on `*types.Package` — that is a stdlib
 type not owned by this codebase, and Gobra cannot annotate ghost fields on foreign types.
 Instead, the importer (plan 10) owns a ghost map field tracking which packages it loaded
-from stubs:
+from stubs. See plan 10 for the full definition; the relevant signatures are:
 
 ```go
 // In internal/info/importer.go (plan 10):
-//@ ghost field stubLoaded map[*types.Package]bool  // on *Importer; keyed by package pointer
+//@ ghost field stubLoaded map[*types.Package]bool  // on *gobImporter; keyed by package pointer
 
-// isFromStub reports whether pkg was loaded from the embedded stub for the given path,
-// rather than from the real filesystem or go/packages. Defined as a method on *Importer
-// so it can read the ghost map without an explicit receiver parameter in specs.
-//
+// isFromStub is a pure ghost method on *gobImporter (defined in plan 10).
 //@ pure
 //@ requires acc(i.stubLoaded, _)
 //@ decreases
-//@ func (i *Importer) isFromStub(pkg *types.Package, path string) bool {
-//@     return pkg != nil && pkg.Path() == path && i.stubLoaded[pkg]
-//@ }
+//@ func (i *gobImporter) isFromStub(pkg *types.Package, path string) bool
 ```
 
-The stub-resolution postcondition on `Import` then reads:
+The stub-resolution postcondition on `Import` (annotated in plan 10's C9 section):
 
 ```go
-// Importer.Import postcondition for stub paths (updated):
 //@ requires isStubPath(path)
 //@ ensures  pkg != nil && i.isFromStub(pkg, path)
 //@ ensures  err == nil

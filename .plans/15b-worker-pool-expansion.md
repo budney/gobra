@@ -18,7 +18,7 @@ the worker goroutine template initialises a `SiliconFrontendAPI` instance (defin
   `SiliconFrontendAPI` instance, and reuses both across all jobs
 - Worker health monitoring: if `(*Backend).Ping()` fails mid-job, the worker calls `Stop()`
   on the dead subprocess and `Start()` to restart it, then retries the job
-- `WorkerPool.Submit(prog *silver.Program) *VerificationResult` sends a job to the pool and
+- `WorkerPool.Submit(prog *silver.Program) *backend.VerificationResult` sends a job to the pool and
   blocks until a worker completes the full Serialize → Verify cycle
 
 **Out of scope:**
@@ -51,7 +51,8 @@ Each of the N workers follows this pattern:
 func runWorker(cfg SubprocessConfig, instance backend.SiliconInstance, args []string,
                jobs <-chan workerJob) {
     // Fork the SilverServer subprocess for this worker.
-    backend, err := subprocess.Start(cfg)
+    // Call Start directly (no package prefix — runWorker lives in package subprocess).
+    sub, err := Start(cfg)
     if err != nil {
         // Drain the channel returning errors until it is closed.
         for job := range jobs {
@@ -59,12 +60,25 @@ func runWorker(cfg SubprocessConfig, instance backend.SiliconInstance, args []st
         }
         return
     }
-    defer backend.Stop()
+    defer sub.Stop()
 
     instance.Initialize(args)
     defer instance.Stop()
 
     for job := range jobs {
+        // Health check: ping before each job; restart subprocess on failure.
+        if err := sub.Ping(); err != nil {
+            sub.Stop()
+            sub, err = Start(cfg)
+            if err != nil {
+                // Subprocess cannot be restarted; return error and drain.
+                job.result <- &backend.VerificationResult{Err: err}
+                for remaining := range jobs {
+                    remaining.result <- &backend.VerificationResult{Err: err}
+                }
+                return
+            }
+        }
         // silverser is an import alias for "gobra/internal/backend/silver" to avoid
         // conflict with "gobra/internal/silver" (both default package name "silver").
         serialized, err := silverser.Serialize(job.prog)
@@ -111,7 +125,8 @@ automatically after the caller is done with them.
 - Updated `internal/backend/subprocess/subprocess.go` — `WorkerPool` expanded to
   configurable `poolSize`; `NewPool(poolSize int, cfg backend.SiliconConfig) *WorkerPool`
   starts N worker goroutines at construction time. `NewPool` calls `cfg.NewInstance()` once
-  per worker and `subprocess.Start(cfg)` once per worker to create the dedicated subprocess.
+  per worker and `Start(cfg)` once per worker to create the dedicated subprocess (unqualified:
+  `NewPool` is inside package `subprocess`, so no package prefix is needed).
   **`runWorkerSkeleton` removal**: plan 15 delivers a `runWorkerSkeleton` stub. Plan 15b
   delivers the full `runWorker` that supersedes it. When implementing plan 15b, **delete
   `runWorkerSkeleton`** — only `runWorker` must remain.
@@ -142,11 +157,12 @@ validity.
 3. **Worker subprocess health** — each worker goroutine maintains a ghost invariant that its
    subprocess is alive (Ping succeeds) before processing any job:
    ```go
-   //@ invariant b.Running()
+   //@ invariant sub.Running()
    ```
    If `Ping()` fails mid-run (ghost invariant broken), the worker restarts the subprocess via
    `Stop()`/`Start()` before processing the next job. This is expressed as a loop invariant
-   on the worker's `for job := range jobs` loop.
+   on the worker's `for job := range jobs` loop; `sub` is the `*Backend` variable in the
+   worker template (renamed from `backend` to avoid shadowing the `backend` package).
 
 ## Scaling Note
 

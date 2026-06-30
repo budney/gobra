@@ -85,6 +85,8 @@ file path, not any temp-file path.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/frontend/parser.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/frontend/parser.go` — `ParseFile(fset *token.FileSet, filename string, src []byte) (*frontend.PFile, []Diagnostic)`
   - `fset` is the `*token.FileSet` owned by plan 07 (one per package, shared across all
     files). Plan 07 creates it before the first `ParseFile` call; `go/parser.ParseFile`

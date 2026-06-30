@@ -25,12 +25,13 @@ Annotated .go/.gobra files
   └─ Desugarer        frontend AST → internal AST (eliminate sugar)
   └─ Transforms       constant propagation, overflow checks, termination
   └─ Translator       internal AST → Silver IR (Go structs)
-  └─ JNI Backend      Silver Go structs → Java Silver objects → Silicon → VerificationResult
+  └─ gRPC Backend     Silver Go structs → Protobuf → SilverServer gRPC → Silicon → VerificationResult
   └─ Reporter         map Silicon errors back to Go source positions → output
 ```
 
 The verification backend (Viper/Silver/Silicon/Carbon) is **not being rewritten** — it is
-used as-is via JNI. Only the pipeline above is being rewritten in Go.
+used as-is via gRPC (an out-of-process `SilverServer` subprocess). Only the pipeline above is
+being rewritten in Go.
 
 ---
 
@@ -44,7 +45,7 @@ viperproject/gobra/          ← existing repo, self-hosting branch
     internal/                ← all pipeline stages
     tests/testdata/          ← symlinks to regression tests and stubs (see below)
   src/                       ← existing Scala implementation (reference; deleted at cut-over)
-  viperserver/               ← git submodule: Silicon/Carbon JARs for JNI (kept permanently)
+  viperserver/               ← git submodule: Silicon/Carbon JARs for gRPC subprocess (kept permanently)
   .plans/                    ← this planning directory
 ```
 
@@ -63,7 +64,7 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 | # | Decision | Choice |
 |---|----------|--------|
 | D1 | Scope | Rewrite Gobra only; Viper/Silver/Silicon/Carbon unchanged |
-| D2 | Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR (`SilverBridge.java`) |
+| D2 | Backend interface | Out-of-process gRPC subprocess (`SilverServer` embedded JAR) — see DECISIONS.md D2 |
 | D3 | Go parser | `go/parser` stdlib + custom recursive-descent annotation mini-parser |
 | D4 | Annotation syntax | **Resolved** — keep `//@ ...` unchanged (see 02) |
 | D5 | Feature scope | Full parity with pinned Scala Gobra commit, built incrementally |
@@ -82,10 +83,10 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 40 plan files, organized in 9 groups. See [00-overview.md](00-overview.md) for the full
 dependency table and list of currently unblocked work items.
 
-Two plans in Group 4 (Silver IR & JNI Backend) address parallelism:
+Two plans in Group 4 (Silver IR & gRPC Backend) address parallelism:
 - [16b-silver-chopper.md](16b-silver-chopper.md) — Go port of the Silver Chopper; splits
-  a `*silver.Program` into sub-programs for parallel verification; no JVM dependency
-- [17b-parallel-workers.md](17b-parallel-workers.md) — expands the JNI worker pool from
+  a `*silver.Program` into sub-programs for parallel verification; no subprocess dependency
+- [17b-parallel-workers.md](17b-parallel-workers.md) — expands the goroutine worker pool from
   N=1 to N workers; enables true parallel verification of chopped sub-programs
 
 **To find what you can work on next:** open `00-overview.md` and find plan files whose
@@ -96,7 +97,7 @@ These four are independent and can be done in any order:
 - [03-frontend-ast.md](03-frontend-ast.md) — define Go types for the frontend AST
 - [11-internal-ast.md](11-internal-ast.md) — define Go types for the internal AST
 - [14-silver-ast.md](14-silver-ast.md) — define Go types for the Silver IR
-- [15-jni-setup.md](15-jni-setup.md) — jnigi integration and JVM lifecycle
+- [15-jni-setup.md](15-jni-setup.md) — SilverServer subprocess lifecycle
 
 ---
 
@@ -130,11 +131,11 @@ viperserver/                      ← git submodule: ViperServer + Silicon + Car
 
 ## Prerequisites for running Go-Gobra (once built)
 
-- Go 1.21+ (with CGo enabled)
-- Java 11+ 64-bit (`JAVA_HOME` set)
+- Go 1.21+ (`CGO_ENABLED=0` builds supported — no CGo required)
+- Java 11+ 64-bit (`JAVA_HOME` set — needed to run the `SilverServer` subprocess JAR)
 - Z3 4.8.7+ 64-bit (`Z3_EXE` set)
 - ViperServer/Silicon JAR (`VIPERSERVER_JAR` set, or built via `sbt assembly` in `viperserver/`)
-- Optional (Carbon backend): Boogie (`BOOGIE_EXE` set)
+- Optional (Carbon backend, deferred — see D12): Boogie (`BOOGIE_EXE` set)
 
 ---
 

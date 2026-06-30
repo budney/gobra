@@ -219,9 +219,10 @@ func buildDepGraph(prog *Program) depGraph
 - `internal/silver/vertices.go` — `Vertex` type (with `Always` sentinel) and dependency
   edge extraction, including the `PluginAwareEdges` logic for `WellFoundedOrder` domains
 - `internal/silver/penalty.go` — `PenaltyConfig` with defaults and `gobra-chopper.json` loader
-- `ChopConfig` struct: `{Bound *int, Penalty PenaltyConfig, Selection func(silver.Member) bool}`
-  where `silver.Member` is the interface defined in plan 14 (`*Method`, `*Function`,
-  `*Predicate`, `*Field`, `*Domain` all satisfy it)
+- `ChopConfig` struct: `{Bound *int, Penalty PenaltyConfig, Selection func(Member) bool}`
+  where `Member` is the interface defined in plan 14 (`*Method`, `*Function`,
+  `*Predicate`, `*Field`, `*Domain` all satisfy it); `silver.Member` is not used as a
+  self-referential package qualifier — within package `silver`, the type is unqualified `Member`
 - Tests: chop a Silver program with 3 methods; verify each sub-program is self-contained;
   verify the union of sub-programs covers all members; test that greedy merging with
   bound=2 reduces a 3-sub-program result to 2; test that a `WellFoundedOrder` domain is

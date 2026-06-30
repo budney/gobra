@@ -111,6 +111,8 @@ func Gobrafy(src []byte, filename string) (out []byte, diags []Diagnostic)
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/frontend/gobrafier.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/frontend/gobrafier.go` — `Gobrafy(src []byte, filename string) ([]byte, []Diagnostic)`
   (no PositionMap needed for the initial implementation; see position mapping note above).
   `Diagnostic` is imported from `internal/diagnostic/` (plan 32a). Do **not** return a plain

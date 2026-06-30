@@ -13,6 +13,7 @@
 | `internal/ast/frontend/` — `PMagicWand`, `PGhostCall`, `PMatch`, `PMatchCase` | 03 |
 | `Visitor` interface (frontend) | 03 |
 | `internal/info/checker.go` — `GobraScope` interface, `gobraScopeImpl` | 08 |
+| `internal/info/importer.go` — `stubLoaded` ghost field, `isFromStub` ghost method on `*gobImporter` | 10 |
 | `internal/ast/internal/` — `Method`, `Function`, `FPredicate`, `Expr`, `Stmt`, etc. | 11 |
 | `Visitor` interface (internal) | 11 |
 | `internal/silver/` — `Program`, `Member`, `Node`, `NodeInfo`, `VprInfo`, `NoInfo`, `AnnotationInfo`, `ConsInfo` | 14 |
@@ -135,7 +136,7 @@
 ---
 
 ## 3. AUDIT HISTORY
-*Thirteen rounds of architectural audit completed against CRITERIA.md (C1–C9). 124 items resolved.*
+*Eighteen rounds of architectural audit completed or in progress against CRITERIA.md (C1–C9). 139 items resolved; 8 open (Round 18).*
 
 | Round | Scope | Items | Status |
 |---|---|---|---|
@@ -158,8 +159,9 @@
 | 15 | Full /check-plan (all 41 plans + foundation docs) | — | All PASS |
 | 16 | Full check-plan & review-plan execution | — | All PASS |
 | 17 | Wave 3 gRPC refactor audit (plans 15, 15b, 16, 17, 17b, 14, 32, 33, 34, 00) | 127–138 | All DONE |
+| 18 | Deep-dive review of all plans + foundation docs | 139–147 | All DONE |
 
-**Total: 138 items resolved. All rounds complete. No open items.**
+**Total: 147 items resolved. 0 open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -877,6 +879,72 @@ Plan 32 line 162: "`NodeMap` field on `VerificationResult` is retained for lifec
 **Status**: RESOLVED — addressed as part of Item 132 fix (gRPC integration note rewrite).
 
 **Round 17 complete. All 12 items (127–138) resolved. No open items.**
+
+---
+
+## 5. ROUND 18 — Wave 3 Post-Refactor Deep-Dive Review (all plans + foundation docs)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 18 | Deep-dive review of all plans | 139–147 | 139 RESOLVED; 140–147 verified, fixes pending |
+
+### Item 139 — CONTRADICTION: `31-encoding-builtins.md` vs `10-type-checker-multipackage.md` regarding ownership/location of `isFromStub`
+**Criterion**: C3 — Single owner; C4 — Cross-plan references.
+**Finding**: Plan 31 claims that `isFromStub` is a ghost predicate defined in `internal/frontend/stubs/stubs.go` (owned by Plan 31). But on line 102, Plan 31 also describes it as defined in `internal/info/importer.go` (owned by Plan 10) as a ghost method on `*Importer` in order to read the ghost map `stubLoaded`. This is a contradiction in ownership, package location, and type receiver.
+**Required fix**: Clarify that `isFromStub` is defined as a ghost method on `*Importer` in `internal/info/importer.go` and is owned by Plan 10, and update Plan 31 to consume it rather than claiming to define it in `stubs.go`. Alternatively, define it in `stubs.go` as a function `isFromStub(pkg *types.Package, path string, imp *Importer)` owned by Plan 31.
+**Status**: RESOLVED — `isStubPath` stays in plan 31 (`stubs.go`); `isFromStub` + `stubLoaded` ghost field moved to plan 10 (`importer.go`). Plan 31 ownership section updated to consume `isFromStub` from plan 10. Plan 10 deliverables and C9 updated with the ghost field definition, `isFromStub` body, and stub-resolution postcondition on `Import`.
+
+### Item 140 — LOGIC ERROR: Go compile error in `15b-worker-pool-expansion.md` worker template calling `subprocess.Start`
+**Criterion**: C4 — Cross-plan references / compiler correctness.
+**Finding**: CONFIRMED — two compile errors, not one.
+1. `subprocess.Start(cfg)` from inside package `subprocess` is a self-referential package prefix → compile error. Fix: `Start(cfg)`.
+2. The local variable is named `backend` (`backend, err := Start(cfg)` after fix). This shadows the `backend` package import. Line 58's `&backend.VerificationResult{Err: err}` resolves `backend` as the local `*subprocess.Backend`, not the package — field not found → compile error. Fix: rename local variable to `sub` throughout the template.
+**Required fix**: Change `subprocess.Start(cfg)` to `Start(cfg)`; rename local variable `backend` → `sub` to avoid shadowing the `backend` package import.
+**Status**: RESOLVED — `subprocess.Start(cfg)` → `Start(cfg)`; local variable `backend` → `sub`; `defer backend.Stop()` → `defer sub.Stop()` in template.
+
+### Item 141 — LOGIC ERROR: Go compile error in `17b-parallel-workers.md` templates missing `backend.` package qualifier
+**Criterion**: C4 — Cross-plan references / compiler correctness.
+**Finding**: CONFIRMED. `DispatchChopped` and `mergeResults` live in package `subprocess` (`internal/backend/subprocess/dispatch.go`). Templates already correctly use `backend.Deduplicate` (line 110), confirming cross-package context — yet `VerificationResult` and `VerificationError` are unqualified throughout. Affected lines: 61, 62, 72, 95, 97, 108.
+**Required fix**: Replace `VerificationResult` → `backend.VerificationResult` and `VerificationError` → `backend.VerificationError` at all affected lines in both templates.
+**Status**: RESOLVED — all unqualified `VerificationResult` and `VerificationError` in both templates replaced with `backend.VerificationResult` and `backend.VerificationError`.
+
+### Item 142 — CONTRADICTION / STALENESS: Stale JNI references in `CONTEXT.md`
+**Criterion**: C1 — Internal consistency.
+**Finding**: CONFIRMED. Lines 28, 33, 47, 66, 85, 88, 99 all reference the old JNI design: pipeline step "JNI Backend", D2 decision "JNI via jnigi + SilverBridge.java", "Group 4 (Silver IR & JNI Backend)", plan 15 described as "jnigi integration and JVM lifecycle". None updated during Wave 3 audit.
+**Required fix**: Update CONTEXT.md pipeline diagram (line 28), D2 row (line 66), Group 4 label (line 85), parallelism note (line 88), and plan 15 description (line 99) to reflect gRPC/SilverServer design.
+**Status**: RESOLVED — pipeline diagram updated to "gRPC Backend"; D2 row updated to gRPC/SilverServer; viperserver note updated; Group 4 label updated; parallelism note updated; plan 15 description updated; Prerequisites section updated (CGo removed).
+
+### Item 143 — CONTRADICTION / STALENESS: Stale JNI references in `36-self-hosting-annotations.md` and `37-self-hosting-verify.md`
+**Criterion**: C1 — Internal consistency.
+**Finding**: CONFIRMED. Plan 36 lines 17, 75, 78, 79, 83: "JNI backend resource safety", "CGo (via jnigi)", "`internal/backend/jvm/`", "trusted at the package boundary". Plan 37 line 48: "Stretch goal: verify the JNI backend layer". Package `internal/backend/jvm/` does not exist in the gRPC design.
+**Required fix**: Plan 36: replace JNI/CGo trust boundary with subprocess lifecycle trust boundary; update package path to `internal/backend/subprocess/`. Plan 37: update stretch goal to reference subprocess/gRPC verification.
+**Status**: RESOLVED — plan 36 "Unsafe Operations" section rewritten as "Subprocess Boundary" with gRPC/subprocess trust boundary and correct package path; plan 37 stretch goal updated to reference subprocess/gRPC verification.
+
+### Item 144 — STALENESS: Outdated JNI invariants in `CRITERIA.md`
+**Criterion**: C1 — Internal consistency.
+**Finding**: CONFIRMED. C7 line 60: "Every goroutine that calls JNI explicitly documents `runtime.LockOSThread()` and the JVM attach/detach lifecycle." C9 line 77: "memory deallocation at JNI boundaries". Both are vacuously satisfied (no JNI goroutines exist) but mislead future auditors into looking for documentation that will never exist.
+**Note**: Previously logged as Item 137 "NOTE only — vacuously satisfied". Upgrading: CRITERIA.md is the authoritative audit checklist; dead requirements should not remain in it.
+**Required fix**: C7: replace JNI clause with "Every goroutine that interacts with a subprocess (gRPC calls, process fork/kill) explicitly documents its synchronization contract and failure behavior." C9: replace "memory deallocation at JNI boundaries" with "resource lifecycle at subprocess/gRPC boundaries."
+**Status**: RESOLVED — C7 updated to subprocess/gRPC synchronization contract requirement; C9 updated to "resource lifecycle at subprocess/gRPC boundaries".
+
+### Item 145 — GAP: Missing `diagnostic.` package qualifier in early-pipeline signatures
+**Criterion**: C4 — Cross-plan references / compiler correctness.
+**Finding**: PARTIALLY CONFIRMED. Plans 04, 05, 06, 07, 08, 09, 12, 13 write `[]Diagnostic` without qualification in function signatures. `Diagnostic` lives in `internal/diagnostic/` (package `diagnostic`); cross-package use requires either `diagnostic.Diagnostic` or a per-package type alias. Plan 04 explicitly acknowledges the import but does not declare the alias in deliverables. Plan 00 does not establish this as a cross-cutting convention. Plan 19 correctly uses `[]diagnostic.Diagnostic`.
+**Assessment**: Gap is real. The review's proposed fix (update 9 plan files individually) is heavier than necessary. The canonical fix is: (1) add a cross-cutting note to plan 00 mandating `type Diagnostic = diagnostic.Diagnostic` as a required deliverable in every pipeline stage package; (2) each affected plan adds one alias line to its deliverables. Signature text in plan bodies need not change.
+**Required fix**: Add alias convention to plan 00 cross-cutting notes; add `type Diagnostic = diagnostic.Diagnostic` deliverable line to plans 04, 05, 06, 07, 08, 09, 12, 13.
+**Status**: RESOLVED — cross-cutting note added to plan 00; alias deliverable added to Deliverables sections of plans 04, 05, 06, 07, 08, 09, 12, 13.
+
+### Item 146 — GAP: Selection signature package qualifier in `16b-silver-chopper.md`
+**Criterion**: C4 — Cross-plan references.
+**Finding**: CONFIRMED for struct definition. `ChopConfig` is defined in `internal/silver/chopper.go` (package `silver`). Deliverables line: `Selection func(silver.Member) bool` — self-referential package prefix is a compile error. Gobra annotation lines using `silver.Member` inside `//@ ` specs are documentation-level and may use qualified names for clarity; those are not compile errors.
+**Required fix**: Change `Selection func(silver.Member) bool` to `Selection func(Member) bool` in the `ChopConfig` struct definition in plan 16b's deliverables.
+**Status**: RESOLVED — `Selection func(silver.Member) bool` → `Selection func(Member) bool` in plan 16b Deliverables; note added explaining the unqualified name.
+
+### Item 147 — GAP: Missing subprocess health check and restart logic in `15b-worker-pool-expansion.md` worker template
+**Criterion**: C2 — Gaps / internal contradiction.
+**Finding**: CONFIRMED. C9 section (lines 142–147) promises the worker tracks subprocess liveness via a ghost invariant and triggers `Ping()`/`Stop()`/`Start()` restart on failure. The code template (lines 67–85) contains only a bare `for job := range jobs` loop — no `Ping()` call or restart branch. C9 promises behavior the template omits; implementers following the template would not implement health checking.
+**Required fix**: Add a `Ping()`-check-and-restart branch to the worker loop template showing where the check fires (e.g., on `Verify` error or before each job) and how restart is handled (`Stop()` → `Start()` → retry or propagate).
+**Status**: RESOLVED — `Ping()`-check-and-restart branch added to worker loop template: pings before each job; on failure calls `sub.Stop()` then `Start(cfg)`; if restart fails, drains remaining jobs with the error and returns.
 
 
 

@@ -90,6 +90,8 @@ producing a complete set of parsed frontend ASTs ready for type checking.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/frontend/packageresolver.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/frontend/packageresolver.go` — main entry point:
   ```go
   // Resolve loads, preprocesses, and parses all packages transitively imported

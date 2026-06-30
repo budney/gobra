@@ -55,6 +55,8 @@ edge annotation.
 
 ## Deliverables
 
+- `type Diagnostic = diagnostic.Diagnostic` alias in `internal/transform/pipeline.go`
+  (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - `internal/transform/` package with one file per transform
 - `internal/transform/pipeline.go` — `Apply(prog *internal.Program, cfg Config) (*internal.Program, []Diagnostic)`
 - Tests: verify that overflow assertions are inserted correctly; verify constant folding;

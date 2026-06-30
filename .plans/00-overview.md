@@ -143,6 +143,19 @@ into a `[]Diagnostic` slice and continues where possible; the pipeline aborts on
 errors exist before moving to the next stage. Panics (not errors) are reserved for internal
 consistency violations that cannot be recovered from.
 
+**Diagnostic type alias (required deliverable)**: Because `Diagnostic` lives in
+`internal/diagnostic/` (package name `diagnostic`), cross-package use requires either
+`diagnostic.Diagnostic` or a type alias. Every pipeline stage package (plans 04, 05, 06, 07,
+08, 09, 12, 13) **must** declare the following type alias as a required deliverable in its
+primary `.go` file:
+```go
+type Diagnostic = diagnostic.Diagnostic
+```
+This alias keeps function signatures readable (`[]Diagnostic` instead of
+`[]diagnostic.Diagnostic`) and is required for plan files' signatures to compile correctly.
+Plan 19 (translator) already uses `[]diagnostic.Diagnostic` with full qualification; the
+alias convention applies only to pipeline stage packages below the translator layer.
+
 **Bodyless Viper functions**: See the critical warning in plan 19 — missing postconditions
 on bodyless Viper functions silently weaken verification. This affects plans 21, 23, 25, 27.
 (Plan 20's `goIntDiv`/`goIntMod` carry explicit bodies extracted from `IntegerEncoding.scala`

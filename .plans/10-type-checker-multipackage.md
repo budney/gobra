@@ -62,6 +62,20 @@ verified as a whole.
     `"import of package \"unsafe\" is not supported by Gobra"`.
     (Plan 07 also scans the import graph for `"unsafe"` at the resolver level; this importer
     rejection is the second line of defense for imports that reach type-checking.)
+  - Ghost field and predicate for stub-resolution verification (consumed by plan 31's C9):
+    ```go
+    //@ ghost field stubLoaded map[*types.Package]bool  // keyed by package pointer
+
+    // isFromStub reports whether pkg was loaded from the embedded stub for path.
+    //@ pure
+    //@ requires acc(i.stubLoaded, _)
+    //@ decreases
+    //@ func (i *gobImporter) isFromStub(pkg *types.Package, path string) bool {
+    //@     return pkg != nil && pkg.Path() == path && i.stubLoaded[pkg]
+    //@ }
+    ```
+    The importer records `i.stubLoaded[pkg] = true` (ghost statement) for every package
+    created from embedded stub bytes; never for packages loaded from disk.
 - Integration with 08's symbol table to expose imported symbols (both Go and ghost)
 - Commented-out `// TODO: cache` insertion point in the type-checker after each package
   completes (see Resolved Questions)
@@ -151,6 +165,17 @@ func DeserializeExternalTypeInfo(
 //@ ensures  (pkg != nil) != (err != nil)
 //@ ensures  pkg != nil ==> pkg.Complete()
 //@ decreases
+func (imp *gobImporter) Import(path string) (pkg *types.Package, err error)
+```
+
+```go
+// Importer.Import stub-resolution contract (consumed by plan 31's C9):
+// When the requested path matches an embedded stub, the returned package must
+// have been loaded from that stub — not from the real stdlib.
+// isStubPath is defined in internal/frontend/stubs/stubs.go (plan 31).
+//@ requires isStubPath(path)
+//@ ensures  pkg != nil && imp.isFromStub(pkg, path)
+//@ ensures  err == nil
 func (imp *gobImporter) Import(path string) (pkg *types.Package, err error)
 ```
 

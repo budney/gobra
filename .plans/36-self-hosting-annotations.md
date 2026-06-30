@@ -14,7 +14,7 @@ intellectual heart of the self-hosting milestone.
   - Type checker: output TypeInfo is consistent (every node has a type, scopes are balanced)
   - Desugarer: output internal AST is well-formed
   - Translator: output Silver AST is well-formed (Silver program is valid)
-  - JNI backend: resource safety (JVM is started before any JNI calls)
+  - subprocess backend: resource safety (SilverServer subprocess is started before any gRPC calls)
 - Write ghost helper functions and predicates as needed (e.g., `ValidAST(n Node) bool`)
 - Annotate data structure invariants (e.g., scope chain properties, Silver program properties)
 - Ghost fields on structs where needed — ghost fields are a first-class Gobra annotation feature (full parity per D5); plan 05 implements ghost field syntax in the annotation parser. If a ghost field cannot be expressed with the current Go-Gobra parser, treat it as an annotation language gap per D11 and document it in `SELF_HOSTING.md`.
@@ -70,17 +70,21 @@ good first target — it's a pure function with no heap allocation beyond string
   isolation using Scala Gobra as the verifier before the full-program self-hosting run in
   plan 37.
 
-## Unsafe Operations
+## Subprocess Boundary
 
-Go-Gobra itself uses CGo (via jnigi) and may indirectly use `unsafe.Pointer` in the JNI
-layer. Gobra cannot currently reason about `unsafe.Pointer` semantics. For self-hosting:
+Go-Gobra uses an out-of-process gRPC subprocess (`SilverServer`) for its verification backend.
+No CGo, JNI, or `unsafe.Pointer` is used in the backend layer. The subprocess lifecycle
+package (`internal/backend/subprocess/`) interacts with OS processes (fork, kill, TCP dial)
+but contains no unsafe Go code. For self-hosting:
 
-- Mark the entire `internal/backend/jvm/` package as `//@ trusted` at the package boundary.
-  The JVM lifecycle and JNI calling convention is verified by design-review and testing, not
+- Mark any platform-specific subprocess management code in `internal/backend/subprocess/` as
+  `//@ trusted` at the package boundary if Gobra cannot reason about OS-call postconditions.
+  The subprocess lifecycle contract is verified by design-review and integration testing, not
   by formal proof.
 - Document each `//@ trusted` annotation in `SELF_HOSTING.md` with the reason and the
   test/invariant that stands in for the missing proof.
-- The stretch goal (plan 37) of verifying the JNI backend layer is explicitly post-milestone.
+- The stretch goal (plan 37) of verifying the subprocess/gRPC backend layer is explicitly
+  post-milestone.
 
 ## Open Questions
 

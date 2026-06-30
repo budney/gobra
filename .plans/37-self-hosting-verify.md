@@ -45,8 +45,8 @@ The milestone is achieved when Go-Gobra (Phase 2) successfully verifies at least
 pipeline (parser through translator) using Silicon, with no `//@ assume` or `//@ trusted`
 shortcuts on the critical path, and the result matches the Scala Gobra run (Phase 1).
 
-Stretch goal: verify the JNI backend layer (this requires specs for the JVM interaction,
-which is challenging but possible using ghost modeling of the JVM state).
+Stretch goal: verify the subprocess/gRPC backend layer (this requires specs for OS-process
+interaction, feasible using ghost modeling of subprocess liveness state).
 
 ## Approach
 
