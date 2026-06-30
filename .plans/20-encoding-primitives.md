@@ -42,11 +42,11 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 - Shared: `vpr.Ref`.
 - No Silver domain for integers.
 - **Integer division and modulo**: Do NOT use Silver's built-in `/` and `%` operators — they
-  use floor division, but Go truncates toward zero. Generate **bodyless** Viper functions
-  `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with preconditions and
-  postconditions specifying Go's truncation semantics (see Bodyless Functions table below).
-  Do NOT emit a Silver function body — the truncation specification is expressed entirely
-  via postconditions, which the SMT solver axiomatizes. Emit these functions once and cache them.
+  use floor division, but Go truncates toward zero. Generate **body-carrying** Viper functions
+  `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with explicit Silver bodies
+  extracted verbatim from `IntegerEncoding.scala` (see Silver Functions Table below). The body
+  is the sole specification for the SMT solver; do NOT add postconditions. Emit these functions
+  once and cache them.
   Both functions carry a precondition `requires r != 0` — Go panics on integer division by
   zero at runtime. **No call-site assertion is inserted** by the desugarer or any transform.
   The function's precondition is sufficient: Silicon requires proof that `r != 0` at every

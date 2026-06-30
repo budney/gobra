@@ -190,3 +190,12 @@ result to the skip expectation, not simply omit them. Concretely:
 - If the test *fails as expected*, report it as skipped (not counted against pass rate).
 This two-mode design means adding a new feature automatically flags stale skip entries on the
 next CI run without any manual bookkeeping.
+
+## Verification Specifications (C9)
+
+**C9: N/A** — This plan's deliverables are test data files, `tests/testdata/skip.txt`, CI
+configuration, and the `prune-skips` Makefile target. None of these are Go functions with
+verifiable pre/postconditions. The Gobra spec for `HasGenericDecl` (used during skip-list
+pre-population) is owned by plan 34 and specified there; this plan references that spec as a
+deliverable requirement on plan 34. Plan 37's blocking tier verifies `HasGenericDecl` before
+the self-hosting cut-over.

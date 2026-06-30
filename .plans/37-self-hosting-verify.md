@@ -119,3 +119,12 @@ assumptions in the code.
 
 **CI blocking scope (resolved):** See "CI Gate Strategy" above. Block on the pure functional
 modules; run full self-hosting as advisory until stable.
+
+## Verification Specifications (C9)
+
+**C9: N/A** — This plan delivers a CI job (`gobra-self-verify`), a cut-over checklist, and
+`SELF_HOSTING.md` documentation. No new algorithmic Go functions with verifiable
+pre/postconditions are implemented by this plan. The self-hosting verification run (Go-Gobra
+verifying its own source) IS the collective C9 validation for all other plans — it verifies
+the specs added by plan 36. Plan 37 itself is infrastructure and documentation, not a function
+with a contract.

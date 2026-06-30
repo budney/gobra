@@ -70,3 +70,12 @@ Every plan that produces `[]Diagnostic` must list plan 32a as a dependency in it
 section. The following plans are affected: 04, 05, 06, 07, 08, 09, 10, 12, 13, 19, 32.
 (Plan 19's `Translate` returns `(result *silver.Program, diags []diagnostic.Diagnostic)` —
 consistent with all other pipeline stages — so plan 19 lists plan 32a as a dependency.)
+
+## Verification Specifications (C9)
+
+**C9: N/A** — This plan defines only data type declarations (`Diagnostic` struct, `Category`
+int type, and three constants). There are no functions with pre/postconditions to specify.
+The struct fields carry no invariants beyond Go type-system guarantees (e.g., `Category` is
+an `int` with no enforced range at construction time; pipeline stages are responsible for
+using only the declared constants). The unit test ("construct a `Diagnostic`, verify the
+fields are accessible") is the sole validation artifact per C8.

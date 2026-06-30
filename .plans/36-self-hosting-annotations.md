@@ -103,3 +103,12 @@ language is in scope** (see D11 in DECISIONS.md). When a gap is discovered:
 
 The same applies to code structure: if a module in Go-Gobra has an invariant that requires
 deep changes to verify, refactoring is preferred over an ever-expanding `//@ trusted` boundary.
+
+## Verification Specifications (C9)
+
+**C9: N/A** — This plan IS the annotation work. Its deliverables are Gobra annotations
+(`//@ requires`, `//@ ensures`, invariants, ghost predicates) added to all other plans'
+deliverable source files. There are no new algorithmic Go functions implemented by this plan
+that themselves need pre/postconditions. The C9 requirement is satisfied transitively: each
+annotated module acquires a C9 section (or has one already) as a direct result of plan 36's
+work, and those annotations are verified by plan 37.

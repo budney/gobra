@@ -128,7 +128,7 @@
 ---
 
 ## 3. AUDIT HISTORY
-*Nine rounds of architectural audit completed against CRITERIA.md (C1–C9). 109 items resolved.*
+*Thirteen rounds of architectural audit completed against CRITERIA.md (C1–C9). 124 items resolved.*
 
 | Round | Scope | Items | Status |
 |---|---|---|---|
@@ -145,8 +145,10 @@
 | 10 | Full /review-plan ALL third pass (all 41 plans + foundation docs) | 110–113 | All DONE |
 | — | D13 decision: AST-based generic detection replaces grep | — | RESOLVED |
 | 11 | Full /review-plan ALL fourth pass (all 41 plans + foundation docs) | 114–118 | All DONE |
+| 12 | Full /check-plan (all 41 plans + foundation docs) | 119–123 | All DONE |
+| 13 | Full /review-plan ALL sixth pass (all 41 plans + foundation docs) | 124 | All DONE |
 
-**Total: 118 items resolved. All rounds complete. No open items.**
+**Total: 124 items resolved. All rounds complete. No open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -646,7 +648,7 @@ func EncodeInterface(ctx *Context, iface *types.Interface) *silver.Domain
 
 > **C9: N/A** — This plan defines only data type declarations (`Diagnostic` struct, `Category` int). There are no functions with pre/postconditions to specify. The struct fields have no invariants beyond Go type-system guarantees. The unit test ("construct a Diagnostic, verify the fields are accessible") is the validation method per C8.
 
-**Status**: OPEN
+**Status**: RESOLVED — C9 N/A section added to `32a-diagnostics.md`.
 
 ---
 
@@ -675,7 +677,7 @@ Plan 34 has no `## Verification Specifications (C9)` section. The spec for `HasG
    //@ decreases len(pending)
    ```
 
-**Status**: OPEN
+**Status**: RESOLVED — C9 section added to `34-test-infrastructure.md` with `HasGenericDecl` spec, `loadSkipList` contract, and runner loop termination annotation.
 
 ---
 
@@ -691,4 +693,37 @@ Plan 34 has no `## Verification Specifications (C9)` section. The spec for `HasG
 - **Plan 36**: "C9: N/A — This plan IS the annotation work. Its deliverables are Gobra annotations (`//@ requires`, `//@ ensures`, invariants) added to all other plans' deliverable files. The C9 requirement is satisfied transitively: each annotated module gains a C9 section as part of plan 36's work."
 - **Plan 37**: "C9: N/A — This plan delivers a CI job and `SELF_HOSTING.md` documentation. No new Go functions with verifiable logic are implemented. The self-hosting verification run (Go-Gobra verifying itself) is the C9 validation for all other plans collectively, not a C9 target for plan 37 itself."
 
-**Status**: OPEN
+**Status**: RESOLVED — C9 N/A sections added to `35-regression-suite.md`, `36-self-hosting-annotations.md`, and `37-self-hosting-verify.md`.
+
+---
+
+## ROUND 13 — Full /review-plan ALL (all 41 plans + foundation docs, sixth pass)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 13 | Full /review-plan ALL sixth pass (all 41 plans + foundation docs) | 124 | All DONE |
+
+### Item 124 — CONTRADICTION: Plan 20 main text says `goIntDiv`/`goIntMod` are bodyless; Silver Functions Table and C9 say they are body-carrying
+
+**Criterion**: C1 — Contradictions within a single plan document.
+
+**Finding**: `20-encoding-primitives.md` contains two directly contradictory descriptions of `goIntDiv` and `goIntMod`:
+
+1. **Proposed Approach section (lines 43–54):**
+   > "Generate **bodyless** Viper functions `goIntDiv(l, r: Int): Int` and `goIntMod(l, r: Int): Int` with preconditions and postconditions specifying Go's truncation semantics (see Bodyless Functions table below). Do NOT emit a Silver function body — the truncation specification is expressed entirely via postconditions."
+
+2. **Silver Functions Table header (lines 82–88):**
+   > "**Interpreted (body-carrying)**: `goIntDiv` and `goIntMod` have explicit Silver function bodies...They carry no postconditions — the body is the sole specification."
+
+3. **Table rows** (lines 93–94): Give explicit Silver function bodies (`(0 <= l ? l / r : -((-l) / r))`).
+
+4. **C9 section** (item 3): `result.Body != nil` — confirms body-carrying.
+
+Round 8 item 98 established that `goIntDiv`/`goIntMod` are body-carrying and removed Plan 20 from plan 00's bodyless-functions warning, but the main Proposed Approach text in plan 20 was never updated. Additionally, the main text says "see Bodyless Functions table below" but no such table exists — it is titled "Silver Functions Table."
+
+**Required fix**: Update the Proposed Approach section of `20-encoding-primitives.md`:
+1. Replace "bodyless Viper functions" with "body-carrying Viper functions."
+2. Replace "Do NOT emit a Silver function body" and surrounding text with the correct note: "Emit the body extracted verbatim from `IntegerEncoding.scala`; do NOT add postconditions (the body is the sole specification)."
+3. Change "see Bodyless Functions table below" to "see Silver Functions Table below."
+
+**Status**: RESOLVED — `20-encoding-primitives.md` Proposed Approach text updated: "bodyless" → "body-carrying," "Do NOT emit a Silver function body" removed, "see Bodyless Functions table below" → "see Silver Functions Table below."

@@ -120,3 +120,63 @@ After plan 17b, the pool has N workers; set `-parallel ≤ --workers` to bound p
 worker holds one Silicon + one Z3 process. Goroutines beyond the pool size block in `Submit()`,
 holding `*silver.Program` ASTs in memory with no throughput benefit. Recommended after plan 17b:
 both `-parallel` and `--workers` at `$(nproc)`. Document in CI workflow and README.
+
+## Verification Specifications (C9)
+
+The following Gobra annotations will be written into `internal/testing/runner.go` and verified
+before this plan is considered complete.
+
+1. **`HasGenericDecl` postcondition** — the function's result is true iff the file contains at
+   least one generic function or type declaration. This is the canonical spec; plan 35 references
+   it as the specification driver:
+
+   ```go
+   // HasGenericDecl reports whether f contains at least one generic function or type
+   // declaration — i.e., an *ast.FuncDecl whose TypeParams list is non-empty, or an
+   // *ast.TypeSpec (inside a *ast.GenDecl) whose TypeParams list is non-empty.
+   //
+   //@ requires f != nil && acc(f)
+   //@ ensures  result ==
+   //@     (exists i int :: 0 <= i && i < len(f.Decls) &&
+   //@         (funcDeclIsGeneric(f.Decls[i]) || genDeclHasGenericSpec(f.Decls[i])))
+   //@ pure
+   //@ decreases
+   func HasGenericDecl(f *ast.File) (result bool)
+
+   //@ ghost pure func funcDeclIsGeneric(d ast.Decl) bool {
+   //@     fd, ok := d.(*ast.FuncDecl)
+   //@     return ok && fd.Type != nil && fd.Type.TypeParams != nil &&
+   //@            len(fd.Type.TypeParams.List) > 0
+   //@ }
+   //@ ghost pure func genDeclHasGenericSpec(d ast.Decl) bool {
+   //@     gd, ok := d.(*ast.GenDecl)
+   //@     if !ok { return false }
+   //@     return exists i int :: 0 <= i && i < len(gd.Specs) &&
+   //@         typeSpecIsGeneric(gd.Specs[i])
+   //@ }
+   //@ ghost pure func typeSpecIsGeneric(s ast.Spec) bool {
+   //@     ts, ok := s.(*ast.TypeSpec)
+   //@     return ok && ts.TypeParams != nil && len(ts.TypeParams.List) > 0
+   //@ }
+   ```
+
+   This spec is verified by plan 37's blocking tier before the self-hosting cut-over.
+
+2. **`loadSkipList` fail-fast contract** — returns a non-nil list on success and nil on any
+   parse or validation failure (including unrecognised slugs); never returns a partially-loaded
+   list:
+
+   ```go
+   //@ requires cfg.File == "" || fileExists(cfg.File)
+   //@ ensures  err == nil ==> list != nil
+   //@ ensures  err != nil ==> list == nil
+   //@ decreases
+   func loadSkipList(cfg SkipConfig) (list *SkipList, err error)
+   ```
+
+3. **Test runner loop termination** — the runner iterates over a finite, statically-bounded set
+   of discovered test files; the loop terminates:
+
+   ```go
+   //@ decreases len(pending)
+   ```
