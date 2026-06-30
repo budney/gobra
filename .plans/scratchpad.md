@@ -147,8 +147,10 @@
 | 11 | Full /review-plan ALL fourth pass (all 41 plans + foundation docs) | 114–118 | All DONE |
 | 12 | Full /check-plan (all 41 plans + foundation docs) | 119–123 | All DONE |
 | 13 | Full /review-plan ALL sixth pass (all 41 plans + foundation docs) | 124 | All DONE |
+| 14 | Full /review-plan ALL seventh pass (all 41 plans + foundation docs) | 125–126 | All DONE |
+| 15 | Full /check-plan (all 41 plans + foundation docs) | — | All PASS |
 
-**Total: 124 items resolved. All rounds complete. No open items.**
+**Total: 126 items resolved. All rounds complete. No open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -727,3 +729,48 @@ Round 8 item 98 established that `goIntDiv`/`goIntMod` are body-carrying and rem
 3. Change "see Bodyless Functions table below" to "see Silver Functions Table below."
 
 **Status**: RESOLVED — `20-encoding-primitives.md` Proposed Approach text updated: "bodyless" → "body-carrying," "Do NOT emit a Silver function body" removed, "see Bodyless Functions table below" → "see Silver Functions Table below."
+
+---
+
+### Item 125 — CONTRADICTION: Plan 16 C9 shadows package name `jvm` with parameter `jvm`
+
+**Criterion**: C1 — Contradictions / C9 — Self-verification annotations must be correct.
+
+**Finding**: Plan 16's C9 specification for `Build` (lines 308–310) writes:
+```go
+//@ requires acc(jvm.ThreadAttached(), 1)
+//@ ensures  acc(jvm.ThreadAttached(), 1)
+func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
+```
+The parameter name `jvm` shadows the imported package name `jvm` (`gobra/internal/backend/jvm`). In Go, using `jvm` as a variable shadows the package name, so calling `jvm.ThreadAttached()` inside/on the signature is parsed as a selector on the variable `jvm` (which lacks the `ThreadAttached()` method).
+
+**Required fix**: Move the declaration of the `ThreadAttached()` ghost predicate from `internal/backend/jvm/jvm.go` (plan 15) to `internal/backend/types.go` (also plan 15, parent package). Revert the parameter name in plan 16 back to `jvm *jvm.JVM`, and update all specifications across plans 15, 15b, 16, 17, and 18 to reference the predicate from the parent package: `backend.ThreadAttached()`.
+
+**Status**: RESOLVED — `ThreadAttached` declaration moved to `internal/backend/types.go` in plan 15; all specs in plans 15, 15b, 16, 17, and 18 updated to `backend.ThreadAttached()`; parameter in plan 16 kept as `jvm *jvm.JVM`.
+
+---
+
+### Item 126 — CONTRADICTION: Inconsistent Context parameter types (pointer-to-interface `*Context` vs. interface `Context`) across translator plans
+
+**Criterion**: C1 — Contradictions / C4 — Cross-plan references / C6 — Pipeline boundaries.
+
+**Finding**: Across the 11 translator and encoding plans (19 to 31), there is a systematic inconsistency in how `Context` is passed:
+- `19-translator-core.md` uses `ctx Context` in some places (like `translateExpr`), and `ctx *Context` in others (like `BoxValue`, `UnboxValue`, `EnsureTypeDomain`).
+- Plans `21` (structs), `22` (pointers), `25` (interfaces), and `29` (ADTs) pass `ctx *Context`.
+- Plans `20` (primitives), `23` (slices), `24` (maps), and `27` (methods) pass `ctx Context`.
+Since `Context` is defined as an interface in `19-translator-core.md`, passing `*Context` (a pointer to an interface) is a Go anti-pattern and violates consistency/layering rules.
+
+**Required fix**: Standardize on `ctx Context` (by-value interface passing) across all translator and encoding plans. Replace all occurrences of `*Context` with `Context` in signatures and documentation.
+
+**Status**: RESOLVED — changed `*Context` to `Context` in all signatures and specifications in plans 19, 21, 22, 25, and 29.
+
+---
+
+## ROUND 15 — Full /check-plan (all 41 plans + foundation docs, final pass)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 15 | Full /check-plan (all 41 plans + foundation docs) | — | All PASS |
+
+Verification completed successfully. All plans satisfy all C1–C9 criteria with zero failures or open contradictions.
+

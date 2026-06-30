@@ -310,15 +310,15 @@ type TypeEncoding interface {
 
     // BoxValue boxes a value of Go type T into Poly[T].box(val), for use in interface encoding.
     // Requires that the Silver Type domain has already been emitted (call TypeValue first).
-    BoxValue(ctx *Context, val silver.Expr, T internal.Type) silver.Expr
+    BoxValue(ctx Context, val silver.Expr, T internal.Type) silver.Expr
 
     // UnboxValue unboxes a Ref into a value of Go type T via Poly[T].unbox(val).
     // Caller is responsible for establishing dynType(iface) == TypeValue(T) before calling.
-    UnboxValue(ctx *Context, val silver.Expr, T internal.Type) silver.Expr
+    UnboxValue(ctx Context, val silver.Expr, T internal.Type) silver.Expr
 
     // EnsureTypeDomain forces emission of the global Type domain into the Silver program
     // accumulator if it has not been emitted yet. Idempotent; safe to call from any encoding.
-    EnsureTypeDomain(ctx *Context)
+    EnsureTypeDomain(ctx Context)
 }
 ```
 

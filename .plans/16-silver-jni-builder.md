@@ -182,7 +182,7 @@ has `Tag == "synthetic"`, the reporter calls `searchInfo(goSilverNode)` which ca
   **Note on NodeInfo in the Info chain:** In addition to `gobra_node_id`, the builder also embeds the `NodeInfo` fields as annotations: `AnnotationInfo("gobra_node_file", [file])`, `AnnotationInfo("gobra_node_line", [line])`, `AnnotationInfo("gobra_node_col", [col])`, `AnnotationInfo("gobra_node_tag", [tag])`, all chained before the existing `VprInfo`. The `getNode*` methods above retrieve these. This mirrors the Scala Gobra's approach of embedding Go source position directly in the Viper `Info` chain — the Go-side `nodeMap` is kept as a fallback for `searchInfo` DFS (which needs the Go Silver struct for `Children()`), not as the primary position source.
 - `Makefile` target: compile `SilverBridge.java` against the ViperServer JAR, produce
   `SilverBridge.jar`, embed it via `//go:embed` in `internal/backend/silver/bridge_jar.go`
-- `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *JVM) (*BuiltProgram, error)`,
+- `internal/backend/silver/builder.go` — `Build(prog *silver.Program, jvm *jvm.JVM) (*BuiltProgram, error)`,
   where:
 
   ```go
@@ -289,7 +289,7 @@ close and double-close bugs.
    ```go
    //@ ensures err == nil ==>
    //@     acc(built) && built != nil && acc(built.NodeMap) && built.NodeMap != nil
-   func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
+   func Build(prog *silver.Program, jvm *jvm.JVM) (built *BuiltProgram, err error)
    ```
 
 2. **`Close` precondition — ownership required, consumed on call**: `Close` must be called
@@ -305,9 +305,9 @@ close and double-close bugs.
 3. **Thread precondition on `Build`**: `Build` makes JNI calls and requires the caller to
    already hold the OS-thread lock and JVM attachment (plan 15's `ThreadAttached` predicate):
    ```go
-   //@ requires acc(jvm.ThreadAttached(), 1)
-   //@ ensures  acc(jvm.ThreadAttached(), 1)
-   func Build(prog *silver.Program, jvm *JVM) (built *BuiltProgram, err error)
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1)
+   func Build(prog *silver.Program, jvm *jvm.JVM) (built *BuiltProgram, err error)
    ```
 
 4. **NodeMap integrity**: after a successful `Build`, every entry in `built.NodeMap` is

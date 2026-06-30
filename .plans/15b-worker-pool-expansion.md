@@ -34,7 +34,7 @@ the worker goroutine template initialises a `SiliconFrontendAPI` instance (defin
 - [17-silicon-backend.md](17-silicon-backend.md) — `SiliconFrontendAPI` concrete type (for
   implementing `backend.SiliconInstance`); behavioral reference for the verify call sequence.
   **Import note**: plan 15b does NOT import `internal/backend/silicon` directly. The
-  `SiliconConfig` and `SiliconInstance` types come from the parent package
+  `SiliconConfig`, `SiliconInstance` types, and the `ThreadAttached` predicate come from the parent package
   `gobra/internal/backend` (see `internal/backend/types.go`, owned by plan 15). The concrete
   `SiliconFrontendAPI` constructor is injected via the `backend.SiliconConfig.NewInstance`
   factory field — the caller (plan 33, CLI wiring) binds `silicon.NewSiliconFrontendAPI` to
@@ -127,13 +127,13 @@ thread ownership and result validity using Gobra permissions.
 1. **Worker thread-lock invariant** — each `runWorker` goroutine holds an exclusive
    `ThreadAttached` token for its lifetime (produced by `AttachCurrentThread`, consumed by
    `DetachCurrentThread` on defer). `ThreadAttached` is declared **once** in plan 15's C9
-   (`internal/backend/jvm/jvm.go`); plan 15b reuses it — do NOT redeclare it here, as both
-   plans contribute to the same `jvm` package and Gobra rejects duplicate predicate declarations.
+   (`internal/backend/types.go`); plan 15b reuses it — do NOT redeclare it here, as it is
+   declared in the parent `backend` package and Gobra rejects duplicate predicate declarations.
    ```go
-   // ThreadAttached is declared in plan 15 (jvm.go) — reference only, not redeclared.
-   //@ requires acc(ThreadAttached(), 1)
-   //@ ensures  acc(ThreadAttached(), 1) && acc(result) && result != nil
-   func (instance *SiliconFrontendAPI) Verify(prog jobject) *backend.VerificationResult
+   // SiliconInstance interface method Verify contract (defined in internal/backend/types.go)
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1) && acc(result) && result != nil
+   // Verify(prog jobject) *VerificationResult
    ```
 
 2. **Submit postcondition** — `Submit` blocks until a result is available; the returned

@@ -51,7 +51,7 @@ emitted on the **first occurrence of any feature that references it**, which inc
 1. First use of any interface type (the primary trigger, covered below).
 2. First map lookup or key-in-map check — because `comparableType(kType)` is emitted by plan 24
    for every such operation, even in programs with no interfaces.
-The encoding module must expose a `ensureTypeDomain(ctx *Context)` helper that emits the domain
+The encoding module must expose an `EnsureTypeDomain(ctx Context)` helper that emits the domain
 on first call and is a no-op on subsequent calls. Plan 24's map encoding calls this helper before
 emitting any `comparableType` assertion; plan 25's interface encoding calls it before emitting
 `InterfaceDomain`. Do NOT make plan 24 depend on plan 25 having already executed; the trigger
@@ -263,10 +263,10 @@ and verified before this plan is considered complete.
 
 **`EncodeInterface` output ownership (emitted Silver domain is globally unique):**
 ```go
-//@ requires ctx != nil && iface != nil
+//@ requires iface != nil
 //@ ensures  result != nil
 //@ ensures  result.Name == "InterfaceDomain"   // singleton: same name every call
-func EncodeInterface(ctx *Context, iface *internal.InterfaceType) *silver.Domain
+func EncodeInterface(ctx Context, iface *internal.InterfaceType) *silver.Domain
 ```
 
 Note: the parameter type is `*internal.InterfaceType` (plan 11's internal AST type), not
@@ -277,7 +277,7 @@ Note: the parameter type is `*internal.InterfaceType` (plan 11's internal AST ty
 ```go
 //@ requires dynTypeEstablished(ctx, val, T)
 //@ ensures  unboxed != nil
-func BoxValue(ctx *Context, val silver.Expr, T internal.Type) (boxed silver.Expr, unboxed silver.Expr)
+func BoxValue(ctx Context, val silver.Expr, T internal.Type) (boxed silver.Expr, unboxed silver.Expr)
 ```
 
 Note: `T internal.Type` (plan 11), not `T types.Type` from stdlib `go/types`, for the same

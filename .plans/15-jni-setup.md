@@ -225,35 +225,38 @@ compilation is limited to target platforms where a JVM is available. Document in
 3. Global Instance Mutex: Access to the initialized JVM instance pointer must be guarded by a package-level sync.Once or sync.Mutex.
 
 ### Verification Specifications (C9)
-
+ 
 The JNI bridge package must formally specify thread-state safety using Gobra permissions:
-
+ 
 1. **Thread-locked invariant**: The internal `callJVM` helper may only be called from a goroutine
-   that holds the OS-thread lock and has an attached JVM thread. This is expressed as a
-   thread-ownership ghost predicate:
+   that holds the OS-thread lock and has an attached JVM thread. The thread-ownership ghost
+   predicate is declared in `internal/backend/types.go` (package `backend`):
    ```go
    //@ pred ThreadAttached()
-   //
-   //@ requires acc(ThreadAttached(), 1)
-   //@ ensures  acc(ThreadAttached(), 1)
+   ```
+   
+   Functions inside `jvm.go` reference it from the parent package:
+   ```go
+   //@ requires acc(backend.ThreadAttached(), 1)
+   //@ ensures  acc(backend.ThreadAttached(), 1)
    func (jvm *JVM) callJVM(method string) error
    ```
    `ThreadAttached` takes no argument because the JVM is a process-wide singleton (plan 15
    `sync.Once`); there is never ambiguity about which JVM's attachment is meant. The predicate
-   models OS-thread state: each goroutine that holds `acc(ThreadAttached(), 1)` has its
+   models OS-thread state: each goroutine that holds `acc(backend.ThreadAttached(), 1)` has its
    underlying OS thread attached. An un-attached goroutine has no token, so calling `callJVM`
    without it is a static verification error.
-
+ 
 2. **Attach/detach lifecycle**: `AttachCurrentThread` produces the token; `DetachCurrentThread`
    consumes it. The `defer` pattern in `runWorkerSkeleton` must be annotated:
    ```go
-   //@ ensures acc(ThreadAttached(), 1)
+   //@ ensures acc(backend.ThreadAttached(), 1)
    func (jvm *JVM) AttachCurrentThread()
-
-   //@ requires acc(ThreadAttached(), 1)
+ 
+   //@ requires acc(backend.ThreadAttached(), 1)
    func (jvm *JVM) DetachCurrentThread()
    ```
-
+ 
 3. **JVM singleton**: `Start` has a postcondition that the returned `*JVM` is non-nil on nil error:
    ```go
    //@ ensures err == nil ==> j != nil

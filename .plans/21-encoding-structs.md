@@ -93,21 +93,21 @@ and verified before this plan is considered complete.
 **`EncodeStruct` non-nil result** — the encoding of any well-typed struct type produces a
 non-nil Silver member:
 ```go
-//@ requires ctx != nil && s != nil
+//@ requires s != nil
 //@ ensures  result != nil
 //@ decreases
-func (e *StructEncoding) EncodeStruct(ctx *Context, s *internal.StructType) (result silver.Member)
+func (e *StructEncoding) EncodeStruct(ctx Context, s *internal.StructType) (result silver.Member)
 ```
 
 **`EncodeFieldAccess` correct Silver field name** — the emitted `FieldAccess` node uses the
 mangled field name and refers to the correct receiver:
 ```go
-//@ requires ctx != nil && recv != nil && field != nil
+//@ requires recv != nil && field != nil
 //@ ensures  result != nil
 //@ ensures  result.ReceiverType() == silver.RefType()
 //@ decreases
 func (e *StructEncoding) EncodeFieldAccess(
-    ctx *Context, recv silver.Expr, field *internal.FieldDecl,
+    ctx Context, recv silver.Expr, field *internal.FieldDecl,
 ) (result *silver.FieldAccess)
 ```
 
@@ -137,5 +137,5 @@ each field type is encoded by a separate encoding module (no recursive call back
 `EncodeStruct` for field types):
 ```go
 //@ decreases len(s.Fields)
-func (e *StructEncoding) EncodeStruct(ctx *Context, s *internal.StructType) (result silver.Member)
+func (e *StructEncoding) EncodeStruct(ctx Context, s *internal.StructType) (result silver.Member)
 ```

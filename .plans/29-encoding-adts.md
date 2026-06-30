@@ -162,21 +162,21 @@ considered complete.
    Silver conditional chain that covers every constructor arm; the chain is never a dangling
    `else false`:
    ```go
-   //@ requires ctx != nil && matchExpr != nil
+   //@ requires matchExpr != nil
    //@ requires allArmsReachable(matchExpr) // ghost: no arm is unreachable by type
    //@ ensures  result != nil
    //@ ensures  matchIsExhaustive(result, matchExpr) // ghost: Silver cond chain covers all ctors
-   func EncodeMatch(ctx *Context, matchExpr *internal.MatchExpr) (result silver.Expr)
+   func EncodeMatch(ctx Context, matchExpr *internal.MatchExpr) (result silver.Expr)
    ```
 
 2. **`SeqLit` chunk-coverage postcondition** — every source index in `SeqLit.Elements`
    appears in the output Silver sequence; no element is silently dropped by the chunking:
    ```go
-   //@ requires ctx != nil && lit != nil
+   //@ requires lit != nil
    //@ requires allIndicesConcrete(lit) // ghost: desugarer guarantee — no Index == -1
    //@ ensures  result != nil
    //@ ensures  forall i int :: {indexPresent(result, i)} sourceIndexMember(i, lit) ==> indexPresent(result, i)
-   func EncodeSeqLit(ctx *Context, lit *internal.SeqLit) (result silver.Expr)
+   func EncodeSeqLit(ctx Context, lit *internal.SeqLit) (result silver.Expr)
 
 // Pure helpers (defined as ghost functions in adts.go):
 //@ pure func sourceIndexMember(i int, lit *internal.SeqLit) bool  // true iff i is a concrete index in lit.Elements
@@ -197,7 +197,7 @@ considered complete.
    recursive call operates on a strictly smaller sub-expression:
    ```go
    //@ decreases len(matchExpr.Arms)
-   func EncodeMatch(ctx *Context, matchExpr *internal.MatchExpr) (result silver.Expr)
+   func EncodeMatch(ctx Context, matchExpr *internal.MatchExpr) (result silver.Expr)
    ```
 
 ## Known Limitations

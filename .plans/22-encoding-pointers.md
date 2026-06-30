@@ -117,9 +117,9 @@ and verified before this plan is considered complete.
 
 1. **`EncodePointer` non-nil result** — encoding always produces a valid Silver expression:
    ```go
-   //@ requires ctx != nil && ptr != nil
+   //@ requires ptr != nil
    //@ ensures  result != nil
-   func EncodePointer(ctx *Context, ptr *internal.PointerT, val internal.Expr) (result silver.Expr)
+   func EncodePointer(ctx Context, ptr *internal.PointerT, val internal.Expr) (result silver.Expr)
    ```
 
 2. **Nil pointer encoding correctness** — exclusive nil pointer value encodes to `dflt(T°)`;
@@ -134,11 +134,11 @@ and verified before this plan is considered complete.
 3. **`new(T)` permission postcondition** — `new` inhales full write permission on the
    allocated reference; the returned expression is a fresh `Ref` with no aliasing:
    ```go
-   //@ requires ctx != nil && T != nil
+   //@ requires T != nil
    //@ ensures  result != nil
    //@ ensures  freshRef(result)   // ghost: no other Silver expr aliases this Ref
    //@ ensures  inhaledAcc(result) // ghost: acc(result, write) was inhaled
-   func EncodeNew(ctx *Context, T internal.Type) (result silver.Expr)
+   func EncodeNew(ctx Context, T internal.Type) (result silver.Expr)
    ```
 
 4. **No-panic contract** — pointer encoding never panics for well-typed internal nodes; an
