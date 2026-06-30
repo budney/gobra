@@ -46,9 +46,9 @@ while containing data races or protocol violations. Document this prominently in
   exist if plan 20 or plan 27 ran first
 - The `--help` output for any flag that affects concurrent verification
 
-**Consequence for self-hosting (plan 36/37):** Go-Gobra uses goroutines internally (the JNI
+**Consequence for self-hosting (plan 36/37):** Go-Gobra uses goroutines internally (the backend
 worker pool, plan 15). These goroutines must either be annotated with the full permission
-protocol or marked `//@ trusted` at the package boundary. Marking `internal/backend/jvm/`
+protocol or marked `//@ trusted` at the package boundary. Marking `internal/backend/subprocess/`
 as trusted (plan 36) is the expected approach; document the reason.
 
 ## Proposed Approach (from Scala source analysis)

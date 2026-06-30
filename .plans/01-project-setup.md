@@ -11,11 +11,10 @@ The Go implementation lives in a `gobra-go/` subdirectory of the existing Gobra 
 on the `self-hosting` branch. This gives immediate access to:
 - `src/test/resources/regressions/` — the regression test corpus
 - `src/main/resources/` — the built-in Go stdlib stubs
-- `viperserver/` submodule — Silicon/Carbon JARs needed for JNI
+- `viperserver/` submodule — Silicon/Carbon JARs needed for backend subprocess
 
 **Endgame:** Once Go-Gobra reaches full parity and self-hosting, the Scala source is deleted
-and `gobra-go/` is promoted to the repo root in a cut-over commit. The `viperserver/`
-submodule stays (still needed for JNI).
+and `gobra-go/` is promoted to the repo root in a cut-over commit. The `viperserver/` submodule stays (still needed for the backend subprocess).
 
 **Module path:** `github.com/viperproject/gobra` — same as the Scala project, since this is
 a replacement, not a parallel tool. The subdirectory path avoids conflict during development.
@@ -33,7 +32,7 @@ a replacement, not a parallel tool. The subdirectory path avoids conflict during
 
 **Out of scope:**
 - Any actual Go source beyond skeleton `package` declarations
-- CGo / JNI configuration (that's 15-jni-setup.md)
+- Subprocess configuration (that's [15-jni-setup.md](15-jni-setup.md))
 
 ## Dependencies
 
@@ -60,7 +59,7 @@ gobra-go/                         ← Go module root (go.mod here)
     transform/                    ← internal transforms
     translator/                   ← translator core + encodings
     silver/                       ← Silver IR Go types + printer
-    backend/                      ← JNI setup, Silicon/Carbon callers
+    backend/                      ← subprocess setup, Silicon/Carbon callers
     reporting/                    ← error reporter
     diagnostic/                   ← shared Diagnostic type (source owned by plan 32a)
   tests/
@@ -78,7 +77,7 @@ Paths relative to the existing repo root:
 viperproject/gobra/
   gobra-go/          ← NEW: Go implementation (this project)
   src/               ← existing Scala implementation (reference; deleted at cut-over)
-  viperserver/       ← existing submodule: stays permanently (JNI JARs)
+  viperserver/       ← existing submodule: stays permanently (backend JARs)
   .plans/            ← this planning directory
 ```
 

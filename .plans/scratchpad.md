@@ -946,5 +946,48 @@ Plan 32 line 162: "`NodeMap` field on `VerificationResult` is retained for lifec
 **Required fix**: Add a `Ping()`-check-and-restart branch to the worker loop template showing where the check fires (e.g., on `Verify` error or before each job) and how restart is handled (`Stop()` → `Start()` → retry or propagate).
 **Status**: RESOLVED — `Ping()`-check-and-restart branch added to worker loop template: pings before each job; on failure calls `sub.Stop()` then `Start(cfg)`; if restart fails, drains remaining jobs with the error and returns.
 
+---
+
+## ROUND 19 — Full File-by-File Review (all 41 plans + foundation docs)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 19 | All plan files in .plans/ | 148– | In progress |
+
+### Item 148 — STALENESS: Stale JNI references in `01-project-setup.md`
+**Criterion**: C1 / C4 — Stale references and cross-plan consistency.
+**Finding**: `01-project-setup.md` contains several stale references to "JNI", "JNI setup", "JNI configuration", and "JNI JARs" on lines 14, 18, 36, 63, and 81. Under the new gRPC/SilverServer design, these should be updated to refer to the gRPC backend or subprocess launcher.
+**Required fix**: Update the JNI mentions in `01-project-setup.md` to reference the gRPC subprocess backend/SilverServer.
+**Status**: RESOLVED — updated `01-project-setup.md` to refer to backend subprocess and subprocess launcher.
+
+### Item 149 — STALENESS: Stale JNI reference in `16b-silver-chopper.md`
+**Criterion**: C1 / C4 — Stale references.
+**Finding**: `16b-silver-chopper.md` contains a stale JNI reference on line 263: "parallel JNI workers". Under the new gRPC/SilverServer design, this should refer to parallel subprocess workers or gRPC workers.
+**Required fix**: Update the JNI mention in `16b-silver-chopper.md` to reference the subprocess/gRPC backend workers.
+**Status**: RESOLVED — updated line 263 to refer to parallel backend workers.
+
+### Item 150 — STALENESS: Stale JNI references in `18-carbon-backend.md` and `DECISIONS.md`
+**Criterion**: C1 / C4 — Stale references.
+**Finding**: `18-carbon-backend.md` and `DECISIONS.md` contain several stale references to JNI, CGo, `jobject`, and `ThreadAttached()` in relation to the Carbon backend. Since the backend now uses the out-of-process gRPC subprocess architecture, these reference plans and decisions should be updated to align with the new gRPC/subprocess design patterns.
+**Required fix**:
+1. Update `18-carbon-backend.md` to replace JNI, CGo, and JVM thread attachment references with gRPC subprocess patterns, `*proto.SilverProgram` instead of `jobject`, and remove `ThreadAttached()` references.
+2. Update `DECISIONS.md` line 311 to refer to the gRPC/subprocess pattern instead of the JNI pattern.
+**Status**: RESOLVED — updated `DECISIONS.md` and `18-carbon-backend.md` to remove JNI and OS-thread attachment references, aligning with gRPC/subprocess designs.
+
+### Item 151 — STALENESS: Stale JNI references in `28-encoding-channels.md`
+**Criterion**: C1 / C4 — Stale references.
+**Finding**: `28-encoding-channels.md` contains stale JNI and package references on lines 49–52: "the JNI worker pool, plan 15" and "marking `internal/backend/jvm/` as trusted". These should refer to the gRPC/subprocess worker pool and the `internal/backend/subprocess/` package.
+**Required fix**: Update the JNI and package path references in `28-encoding-channels.md`.
+**Status**: RESOLVED — updated line 49–52 to refer to backend worker pool and `internal/backend/subprocess/`.
+
+
+
+
+
+
+
+
+
+
 
 

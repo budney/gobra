@@ -260,7 +260,7 @@ The chopper is called by **`pipeline.go` (plan 33)**, not by the pool dispatcher
 ```
 Translator (plan 19) → *silver.Program
   → pipeline.go calls Chop (plan 16b) → []*silver.Program
-    → pipeline.go calls WorkerPool.DispatchChopped (plan 17b) → parallel JNI workers
+    → pipeline.go calls WorkerPool.DispatchChopped (plan 17b) → parallel backend workers
       → Results merged and deduplicated
 ```
 

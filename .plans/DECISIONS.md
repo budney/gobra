@@ -308,8 +308,8 @@ the self-hosting milestone. Silicon is the only active verification backend.
 - Silicon is the default backend in practice; Carbon usage is negligible among real Gobra users.
 - The self-hosting CI job (plan 37) runs Silicon exclusively; Carbon has zero contribution to
   the completion milestone.
-- The JNI pattern established by Silicon (plan 17) fully documents how a second backend would
-  be added; Plan 18 remains as a reference design if Carbon is ever needed post-parity.
+- The gRPC/subprocess pattern established by Silicon (plan 17) fully documents how a second backend
+  would be added; Plan 18 remains as a reference design if Carbon is ever needed post-parity.
 
 **Consequence:**
 - The `Backend` interface (previously planned for `internal/backend/types.go` in plan 18) is
