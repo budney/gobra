@@ -48,9 +48,14 @@ largest single unit of work in the frontend.
 - **Two-pass approach**: Pass 1 collects all declarations in scope (needed for forward references
   and mutually recursive types/functions). Pass 2 resolves and checks all uses.
 - **Use `go/types` for standard Go (resolved — see D9 in DECISIONS.md)**: Because plan 03
-  commits to embedding `go/ast` nodes, `go/types.Check` can be called directly on the
-  underlying `*ast.File`. This handles all standard Go type rules. Gobra-specific checks
-  (ghost types, spec expression types, ADTs, permissions) are layered on top as a second pass.
+  uses `go/ast` nodes directly (no wrappers), `go/types.Check` is called on `pfile.GoFile`
+  without any unwrapping step. Gobra extensions are accessed via `pfile.Metadata[node]` lookups
+  during the ghost type-checking pass. Gobra-specific checks (ghost types, spec expression
+  types, ADTs, permissions) are layered on top as a second pass.
+- **Metadata-based Gobra extension access**: Instead of type-asserting through companion
+  wrapper structs (e.g., `n.(*PFunctionDecl)`), the type checker reads Gobra data via
+  `pfile.Metadata[goAstNode]`. For a function declaration `fd *ast.FuncDecl`, its spec is
+  `pfile.Metadata[fd].Spec` and its receiver (if any) is `pfile.Metadata[fd].Receiver`.
 - **Two-tier type system**: `go/types` produces a `*types.Info` side table for Go constructs.
   Gobra maintains a parallel `GhostTypeInfo` for ghost/spec-only constructs. Both are combined
   into the unified `TypeInfo` output consumed by the desugarer.
@@ -75,6 +80,17 @@ largest single unit of work in the frontend.
 
 ## Deliverables
 
+- `internal/info/checker.go` — `GobraScope` interface and `gobraScopeImpl` (see D16 in
+  DECISIONS.md). Plan 08 constructs a `gobraScopeImpl` per block/file/package scope,
+  populating `ghostDecls` from `PFile.GhostDecls` during Pass 1. All name lookups that need
+  to cover both Go and ghost namespaces go through `GobraScope.Lookup`; no call site accesses
+  `GhostTypeInfo` directly for name-by-string resolution:
+  ```go
+  type GobraScope interface {
+      Lookup(name string) types.Object
+      GoScope() *types.Scope
+  }
+  ```
 - `internal/info/typeinfo.go` — `TypeInfo` **concrete exported struct** (not an interface):
   ```go
   type TypeInfo struct {

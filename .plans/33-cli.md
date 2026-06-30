@@ -12,15 +12,16 @@ status code.
 - All CLI flags from the current Gobra (replicate `--help` output parity):
   - Input: `-i`/`--input` (files), `-p`/`--packages`, `--projectRoot`, `--include`
   - Backend: `--z3Exe` (path to Z3 executable; also read from `Z3_EXE` env var)
-  - JVM: `--viperServerJar` (path to the ViperServer/Silicon fat JAR; also read from
-    `VIPERSERVER_JAR` env var); `--jvmArgs` (additional JVM flags)
+  - Subprocess: `--silverServerJar` (path to the `SilverServer` fat JAR; also read from
+    `SILVERSERVER_JAR` env var; defaults to the embedded JAR extracted at startup);
+    `--jvmArgs` (additional JVM flags passed to the subprocess fork)
   - Verification: `--overflow`, `--checkConsistency`, `--module`, `--assumeInjectivityOnInhale`
   - Output: `--logLevel`, `--printViper`, `--parseOnly`, `--typeCheckOnly`, `--noVerify`
   - Performance: `--parallelizeBranches` (see note below), `--cacheFile`
 - Pipeline orchestration:
-  Gobrafier → Parser → Type Checker → Desugarer → Transforms → Translator → **Chopper** → JNI Backend → Reporter
+  Gobrafier → Parser → Type Checker → Desugarer → Transforms → Translator → **Chopper** → gRPC Backend → Reporter
 
-  The **Chopper** step (plan 16b) sits between the Translator and the JNI Backend. After
+  The **Chopper** step (plan 16b) sits between the Translator and the gRPC Backend. After
   `Translate(prog)` returns a single `*silver.Program`, `pipeline.go` calls
   `Chop(silverProg, chop.ChopConfig{Bound: cfg.ChopBound})` to produce `[]*silver.Program`
   (sub-programs split by method for parallel verification). `cfg.ChopBound` is a `*int`
@@ -33,7 +34,7 @@ status code.
   a warning. Use `--chop-bound N` (with `N ≤ --workers`) to cap sub-program count below the
   worker count, e.g., to reduce peak memory on memory-constrained machines.
   This slice is then passed to `WorkerPool.DispatchChopped`
-  (plan 17b), which dispatches sub-programs to available JNI workers concurrently.
+  (plan 17b), which dispatches sub-programs to available goroutine workers concurrently.
   If there are fewer sub-programs than workers, the excess workers simply idle.
   Pipeline.go must import plan 16b and call `Chop` explicitly — plan 17b's `DispatchChopped`
   does not call it internally.
@@ -70,10 +71,10 @@ status code.
 - [10-type-checker-multipackage.md](10-type-checker-multipackage.md) — custom `types.Importer` and `ExternalTypeInfo`; wired into plan 08's `Check` call
 - [12-desugarer.md](12-desugarer.md) — `Desugar(pkg *frontend.PPackage, info *TypeInfo) (*internal.Program, []Diagnostic)`; invoked after type checking
 - [13-internal-transforms.md](13-internal-transforms.md) — transform pipeline (`Apply`)
-- [15-jni-setup.md](15-jni-setup.md) — JVM lifecycle and `WorkerPool` skeleton
-- [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) — N-worker `NewPool`; `pipeline.go` constructs the pool using plan 15b's expanded `NewPool(jvm, poolSize, cfg)`
-- [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver JNI builder (Build + nodeMap)
-- [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and JNI Backend
+- [15-jni-setup.md](15-jni-setup.md) — subprocess lifecycle, `SubprocessConfig`, `WorkerPool` skeleton; embedded `SilverServer` fat JAR
+- [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) — N-worker `NewPool`; `pipeline.go` constructs the pool using plan 15b's expanded `NewPool(poolSize, cfg)`
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — Silver Protobuf serializer (`Serialize` + `NodeMap`)
+- [16b-silver-chopper.md](16b-silver-chopper.md) — `Chop()` and `ChopConfig`; called by `pipeline.go` between Translator and gRPC Backend
 - [17-silicon-backend.md](17-silicon-backend.md) — Silicon backend (Verify)
 - [17b-parallel-workers.md](17b-parallel-workers.md) — parallel worker pool (--workers N)
 - [19-translator-core.md](19-translator-core.md) — translation
@@ -91,7 +92,7 @@ status code.
 - `cmd/gobra/main.go` — entry point
 - `internal/config/config.go` — `Config` struct and flag parsing; includes `--workers N` flag
   (default = `runtime.NumCPU()`; wired to `WorkerPool` in plan 17b). Note: the actual
-  concurrent JNI job count is capped at `min(poolSize, len(subPrograms))` at dispatch time
+  concurrent job count is capped at `min(poolSize, len(subPrograms))` at dispatch time
   by the semaphore in `DispatchChopped` — excess workers simply idle. `numSubPrograms` is
   only known after the translator and chopper run and cannot be used to set the pool size
   at flag-parse time.
@@ -104,7 +105,7 @@ status code.
   var ErrVerificationFailed = errors.New("verification failed")
   ```
   `Run` returns `ErrVerificationFailed` when verification finds errors (exit code 1),
-  a wrapped infrastructure error when the JVM, JAR, or file system fails (exit code 1),
+  a wrapped infrastructure error when the subprocess, JAR, or file system fails (exit code 1),
   and `nil` when verification succeeds (exit code 0). The reporter is called inside `Run`
   before returning; all diagnostic output is written to stdout/stderr by `Run` itself.
 - Tests: integration tests running the full pipeline on small `.gobra` files
@@ -115,13 +116,16 @@ status code.
 but also adds a dependency and annotation burden for self-hosting. The current Gobra has no
 subcommands; `flag` is sufficient and keeps the codebase simpler to verify.
 
-**ViperServer JAR path precedence (resolved):** The `--viperServerJar` flag and the
-`VIPERSERVER_JAR` environment variable both specify the JAR path. Resolution order:
-1. `--viperServerJar` flag (explicit CLI override, highest priority)
-2. `VIPERSERVER_JAR` environment variable
-3. Fatal error if neither is set.
+**SilverServer JAR path precedence (resolved):** The `--silverServerJar` flag and the
+`SILVERSERVER_JAR` environment variable both specify the `SilverServer` fat JAR path.
+Resolution order:
+1. `--silverServerJar` flag (explicit CLI override, highest priority)
+2. `SILVERSERVER_JAR` environment variable
+3. The embedded JAR (`internal/backend/silverserver/SilverServer.jar`) extracted to a temp
+   file at startup (lowest priority, always available as a fallback).
 
-Document this precedence in `--help` output and the README.
+Document this precedence in `--help` output and the README. CGo is NOT required; the build
+must succeed with `CGO_ENABLED=0`.
 
 **`--parallelizeBranches` (resolved):** This flag enables Silicon's internal branch-level
 parallelism within a single Silicon verification job. It is a Silicon-side option, not a
@@ -137,14 +141,8 @@ This is **distinct** from `--workers N` (plan 17b):
 Both can be set simultaneously. Document in `--help` for both flags that combining them
 multiplies thread usage and the total should not exceed available CPU cores.
 
-**`--chop` + `--z3APIMode` interaction (documented):** When `--z3APIMode` is set, Silicon
-uses the Z3 API instead of process-based Z3; this forces `poolSize = 1` (Z3 API mode is not
-thread-safe across multiple simultaneous verification jobs). With `--chop --workers 4
---z3APIMode`, the chopper may produce up to 4 sub-programs, but only 1 worker can run at a
-time — execution is serialized despite appearing parallel from the config. **This is
-functionally correct** (all sub-programs are eventually verified) but counterintuitive and
-slower than `--workers 1` would suggest. Document in `--help` for `--z3APIMode`: "Forces
-sequential verification even when --workers N > 1."
+**`--z3APIMode` (resolved — not implemented):** `--z3APIMode` is not supported per D15.
+Z3 always runs as a subprocess specified by `--z3Exe`. Do not add this flag.
 
 ## Verification Specifications (C9)
 

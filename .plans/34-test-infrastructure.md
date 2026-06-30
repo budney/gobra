@@ -18,19 +18,18 @@ on them, and compares results to the expected outcomes declared in `//@ expected
 - Compare actual errors to expected errors; report pass/fail per file
 - Integration with `go test`: implement as `TestMain` or table-driven tests so `go test ./...`
   runs the regression suite
-- **JNI/JVM coordination for parallel tests**: The JVM is a process-wide singleton (plan 15).
-  Test goroutines share the N-worker pool (plan 15b); each worker owns its own `SiliconFrontendAPI`
-  instance and OS-thread lock. `go test -parallel N` is safe because goroutines that exceed
-  pool capacity block inside `pool.Submit()` until a worker is free — serialization happens
-  inside the pool, not at the test level. The JVM is initialized once in `TestMain` and shut
-  down after all tests complete.
+- **Subprocess coordination for parallel tests**: Each worker goroutine (plan 15b) owns its
+  own `SilverServer` subprocess — there is no process-wide JVM singleton. `go test -parallel N`
+  is safe because goroutines that exceed pool capacity block inside `pool.Submit()` until a
+  worker is free — serialization happens inside the pool, not at the test level. Workers are
+  started when the pool is constructed in `TestMain` and stopped after all tests complete.
   - **Before plan 17b is implemented** (single-worker baseline): set `--workers 1` and
     `-parallel 1`. Extra parallel goroutines would all block in `Submit()` without improving
     throughput.
   - **After plan 17b**: set `-parallel ≤ --workers` to bound peak memory. Each worker holds
-    one Silicon + one Z3 process; `-parallel` beyond the pool size adds goroutines that block
-    in `Submit()` while holding `*silver.Program` ASTs in memory, wasting RAM with no
-    throughput gain. Recommended: `-parallel $(nproc)` and `--workers $(nproc)`.
+    one `SilverServer` + one Z3 subprocess; `-parallel` beyond the pool size adds goroutines
+    that block in `Submit()` while holding `*silver.Program` ASTs in memory, wasting RAM with
+    no throughput gain. Recommended: `-parallel $(nproc)` and `--workers $(nproc)`.
   Document the recommended value in the CI workflow and README.
 - Differential mode: optionally run Scala Gobra on the same file and compare results
 - `HasGenericDecl(f *ast.File) bool` — pure AST predicate that reports whether a parsed
@@ -117,9 +116,16 @@ in the repo README and the CI workflow file.
 **Parallelism ceiling (resolved):** `go test -parallel N` controls how many test goroutines
 run concurrently. Before plan 17b, set `--workers 1` and `-parallel 1` (single-worker baseline).
 After plan 17b, the pool has N workers; set `-parallel ≤ --workers` to bound peak memory — each
-worker holds one Silicon + one Z3 process. Goroutines beyond the pool size block in `Submit()`,
-holding `*silver.Program` ASTs in memory with no throughput benefit. Recommended after plan 17b:
-both `-parallel` and `--workers` at `$(nproc)`. Document in CI workflow and README.
+worker holds one `SilverServer` + one Z3 subprocess. Goroutines beyond the pool size block in
+`Submit()`, holding `*silver.Program` ASTs in memory with no throughput benefit. Recommended
+after plan 17b: both `-parallel` and `--workers` at `$(nproc)`. Document in CI workflow and README.
+
+**JVM test isolation (resolved — not applicable):** The former JNI design required separate
+test binaries for JVM startup failure tests because a failed `sync.Once` JVM initialization
+permanently poisoned all subsequent calls in the same process. In the gRPC subprocess design
+there is no `sync.Once` singleton — each worker's `subprocess.Start()` is independent. A test
+that exercises subprocess startup failure does not affect other workers. No separate test binary
+is required for subprocess error-path tests; they may run in the same binary as normal tests.
 
 ## Verification Specifications (C9)
 

@@ -10,13 +10,13 @@ self-hosting: Go-Gobra verifies its own source code.
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Viper backend | Keep ViperServer/Silicon/Carbon as-is | Scope limited to Gobra itself |
-| Backend interface | JNI via [jnigi](https://github.com/timob/jnigi) + thin Java helper JAR | In-process JVM; helper JAR wraps Silver constructors with Java-friendly signatures, avoiding raw Scala collection construction from Go |
+| Backend interface | Out-of-process gRPC subprocess (`SilverServer`) — see D2 in DECISIONS.md | No CGo; JVM crashes sandboxed to subprocess; workers are plain goroutines; `CGO_ENABLED=0` builds supported |
 | Go parser | `go/parser` stdlib + custom annotation mini-parser | Go grammar is large/subtle; stdlib is correct, maintained, handles generics |
 | Annotation syntax | Keep `//@ ...` unchanged — see 02-annotation-syntax-decision.md | Resolved |
 | Feature scope | Full parity with commit `d7e0b582`, built incrementally | Self-hosting defines "done enough" |
 | Testing strategy | Port regression suite; differential testing vs. Scala Gobra | Scala Gobra is the oracle throughout |
 | Team / timeline | Solo, no hard deadline | Plan supports sequential or depth-first execution |
-| Frontend visitor | Companion wrapper structs (Option B) — see D10 in DECISIONS.md | Resolved |
+| Frontend visitor | Side-table + `PBlockStmt` exception (Option A) — see D10 in DECISIONS.md | Resolved |
 
 ## Work Breakdown Structure
 
@@ -50,16 +50,16 @@ self-hosting: Go-Gobra verifies its own source code.
 | [12-desugarer.md](12-desugarer.md) | Desugarer | 03, 08, 09, 10, 11 |
 | [13-internal-transforms.md](13-internal-transforms.md) | Internal Transforms | 11, 12 |
 
-### Group 4: Silver IR & JNI Backend
+### Group 4: Silver IR & gRPC Backend
 | File | Title | Blocked by |
 |------|-------|------------|
 | [14-silver-ast.md](14-silver-ast.md) | Silver IR (Go structs) | 01 |
-| [15-jni-setup.md](15-jni-setup.md) | JNI Setup & JVM Lifecycle | 01 |
-| [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver JNI Builder | 14, 15 |
+| [15-jni-setup.md](15-jni-setup.md) | Subprocess Lifecycle (`SilverServer`) | 01 |
+| [16-silver-jni-builder.md](16-silver-jni-builder.md) | Silver Protobuf Serializer | 14, 15 |
 | [16b-silver-chopper.md](16b-silver-chopper.md) | Silver Program Chopper | 14 |
-| [17-silicon-backend.md](17-silicon-backend.md) | Silicon Backend | 15, 16 |
-| [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) | Worker Pool Expansion (N workers) | 15, 16, 17 |
-| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel JNI Worker Pool | 15b, 16, 17 |
+| [17-silicon-backend.md](17-silicon-backend.md) | Silicon gRPC Backend | 15, 16 |
+| [15b-worker-pool-expansion.md](15b-worker-pool-expansion.md) | Goroutine Worker Pool | 15, 16, 17 |
+| [17b-parallel-workers.md](17b-parallel-workers.md) | Parallel Goroutine Workers | 15b, 16, 17 |
 | [18-carbon-backend.md](18-carbon-backend.md) | Carbon Backend **[DEFERRED — D12]** | *(not in active path)* |
 
 ### Group 5: Translator
@@ -126,15 +126,16 @@ Parser (frontend/Parser.scala + Gobrafier.scala)
 
 ## Cross-Cutting Notes
 
-**Concurrency model**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines, each locked to
-its own OS thread via `runtime.LockOSThread()` and each holding its own `SiliconFrontendAPI`
-instance. Plan 15 delivers the JVM lifecycle and a `WorkerPool` skeleton (`poolSize=1`).
-Plan 15b expands it to N Silicon-aware workers (each with its own `SiliconFrontendAPI`).
+**Concurrency model**: Go-Gobra uses a `WorkerPool` of plain goroutine workers (no
+`runtime.LockOSThread()`), each owning one `SilverServer` JVM subprocess and one
+`SiliconFrontendAPI` instance per D2. Z3 runs as a subprocess per D15 (`--z3Exe`); each
+worker's `SilverServer` manages its own Z3 process — no Z3-imposed limit on `poolSize`.
+Plan 15 delivers subprocess lifecycle primitives and a `WorkerPool` skeleton. Plan 15b expands
+it to N Silicon-aware goroutine workers (each with its own subprocess and `SiliconFrontendAPI`).
 Plan 17b adds `DispatchChopped` fan-out and result merging. With N workers and `--chop`,
 multiple chopped sub-programs verify in parallel — matching the parallelism Scala Gobra
-achieves via `Future.traverse`. Without `--chop`, or before plan 15b is complete,
-verification is effectively single-threaded at the Silicon level. Plan 33 wires `--workers N`
-and plan 34 accounts for the JNI worker pool in test infrastructure.
+achieves via `Future.traverse`. Plan 33 wires `--workers N` and plan 34 accounts for the
+goroutine worker pool in test infrastructure. `CGO_ENABLED=0` builds are fully supported.
 
 **Error/diagnostic contract**: Every pipeline stage uses the same `Diagnostic` type
 `{File, Line, Col, Message, Category}` (defined in plan 32a, `internal/diagnostic/`). Each stage accumulates errors
@@ -167,7 +168,7 @@ and independent of each other:
 - 06 (Gobrafier)
 - 11 (Internal AST)
 - 14 (Silver IR)
-- 15 (JNI Setup)
+- 15 (Subprocess Lifecycle)
 
 Note: 04 (Go Parser Integration) is blocked by **both** 03 and 06; it cannot start until
 both the Frontend AST and the Gobrafier are complete. The Gobrafier is a text preprocessor

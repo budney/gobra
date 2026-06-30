@@ -58,7 +58,14 @@ overflow checks stubs), and produces the flat, uniform representation the transl
 
 ## Key Implementation Notes
 
-- The desugarer is a recursive transformation; use the visitor pattern from 11
+- **Traversal model**: the desugarer drives traversal with `ast.Inspect` on `pkg`'s
+  `*ast.File` nodes. At each Go AST node, it looks up `pfile.Metadata[node]` to discover
+  Gobra-specific data (specs on `*ast.FuncDecl`, loop specs on `*ast.ForStmt`/`*ast.RangeStmt`,
+  `PBlockStmt` pointers on `*ast.BlockStmt`). Ghost nodes are processed inline from the
+  `PBlockStmt.Stmts` slice obtained via `pfile.Metadata[blockStmt].Block`. There is no
+  separate Gobra visitor for `go/ast` node types; the unified `ast.Inspect` + `Metadata`
+  lookup is the only traversal mechanism. Do not reintroduce a two-dispatch model.
+- For internal AST production: use the visitor pattern from plan 11
 - Fresh variable generation: the desugarer introduces temporary variables; maintain a counter
   per function scope
 - Position preservation: every internal AST node should carry the source position of the

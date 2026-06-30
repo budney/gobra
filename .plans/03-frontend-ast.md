@@ -97,38 +97,33 @@ type checker.
   idiomatic Go and mirrors the Scala sealed trait hierarchy. Avoid large structs with optional
   fields.
 
-- **Visitor interface — companion wrappers (resolved — see D10 in DECISIONS.md)**: The tree
-  mixes `go/ast` types and Gobra-specific types, which cannot be covered by a single visitor
-  interface without a common base. The chosen approach is Option B: **companion wrapper structs**
-  for every `go/ast` node that Gobra extends, plus standalone Gobra types for ghost-only
-  constructs. A single `Visitor` interface covers all Gobra node types, enabling the type
-  checker (08) and desugarer (12) to traverse the tree with one mechanism.
+- **Visitor interface — side-table + `PBlockStmt` exception (resolved — see D10 in DECISIONS.md)**:
+  Gobra extensions to `go/ast` nodes travel in a **`GobraMetadata` side-table**
+  (`map[ast.Node]*GobraMetadata` field on `PFile`). No companion wrapper structs are defined.
+  The `Visitor` interface covers only ghost-only node types; traversal of `go/ast` nodes uses
+  `ast.Inspect` directly. The single exception is `PBlockStmt`, which is a **standalone container**
+  (not a wrapper) — `*ast.BlockStmt` cannot represent interleaved ghost/Go statement order.
 
-  **Which nodes get wrappers** (only nodes Gobra actually extends):
-  - `PFunctionDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec` + `*PBodyParameterInfo`
-  - `PMethodDecl` wraps `*ast.FuncDecl` + `Receiver *PReceiver` + `*PFunctionSpec` + `*PBodyParameterInfo`
-    (Note: `PReceiver` carries the **full** receiver definition — named vs. unnamed, the
-    receiver type (value / actual-pointer / ghost-pointer), the identifier, and whether the
-    receiver is addressable. This is not purely a ghost extension: `go/ast` cannot distinguish
-    a ghost pointer receiver from a real pointer receiver (both are `*ast.StarExpr`); `PReceiver`
-    fills that gap. `ast.FuncDecl.Recv` is still needed by `go/types.Check`; `PReceiver` is
-    Gobra's authoritative receiver representation. See the Type Definitions section for the
-    full `PReceiver` / `PMethodRecvType` hierarchy.)
-  - `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
-  - `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
-  - `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
-  - `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + `PLoopSpec`
+  **Nodes extended via `pfile.Metadata[node]`** (not wrappers):
+  - `*ast.FuncDecl` → `GobraMetadata.Spec *PFunctionSpec`, `.BodyParamInfo *PBodyParameterInfo`,
+    `.Receiver *PReceiver` (non-nil only for method declarations). `PReceiver` carries the full
+    Gobra receiver definition: named vs. unnamed, value/actual-pointer/ghost-pointer type, and
+    addressability — `go/ast` cannot distinguish ghost pointer receivers from actual pointer
+    receivers (both are `*ast.StarExpr`). `ast.FuncDecl.Recv` is still used by `go/types.Check`.
+  - `*ast.TypeSpec` → `GobraMetadata.GhostExt PNode`
+  - `*ast.InterfaceType` → `GobraMetadata.GhostMethods []*PFunctionSpec`
+  - `*ast.ForStmt` → `GobraMetadata.LoopSpec *PLoopSpec`
+  - `*ast.RangeStmt` → `GobraMetadata.LoopSpec *PLoopSpec`
+  - `*ast.BlockStmt` → `GobraMetadata.Block *PBlockStmt` (the corresponding `PBlockStmt`)
 
-  Leaf nodes that Gobra does not annotate (`*ast.BasicLit`, `*ast.Ident`, `*ast.SelectorExpr`,
-  etc.) are referenced directly as `go/ast` types from within Gobra wrapper nodes — no wrapper
-  needed for them.
+  Leaf nodes Gobra does not annotate (`*ast.BasicLit`, `*ast.Ident`, etc.) are used directly
+  as `go/ast` types — no wrapper, no metadata entry needed.
 
-- **Consequence for node shape**: For any Go construct that `go/ast` already represents (file,
-  function declaration, statement, expression, type), the Gobra frontend AST defines a companion
-  struct embedding the `go/ast` node plus Gobra-specific data (attached specs, ghost markers).
-  For constructs `go/ast` has no representation for (predicates, magic wands, ADTs, ghost
-  parameters), define new Gobra types from scratch. The `go/types.Check` call in plan 08 runs
-  on the embedded `*ast.File` directly, independent of the Gobra wrapper layer.
+- **Consequence for node shape**: For any Go construct that `go/ast` already represents, Gobra
+  data is attached via `pfile.Metadata[goAstNode]`. For constructs `go/ast` has no representation
+  for (predicates, magic wands, ADTs, ghost parameters), new Gobra types are defined from scratch.
+  The `go/types.Check` call in plan 08 runs on `pfile.GoFile` directly, independent of the
+  Metadata layer.
 
 ## PNode Interface
 
@@ -168,10 +163,12 @@ The `Visitor` interface covers only Gobra node types; `go/ast` traversal uses `a
 - These are two separate, non-interleaved passes over the same source. No coordination needed.
 
 **Desugarer (plan 12):**
-- Drives the Gobra visitor for all wrapper and ghost nodes.
-- Inside each wrapper node handler, calls `ast.Inspect` to recurse into the embedded `go/ast`
-  subtree for the Go-side content.
-- This two-dispatch model is the intended implementation pattern; do not attempt to unify them.
+- Drives traversal with `ast.Inspect` on the `*ast.File`; at each Go AST node, looks up
+  `pfile.Metadata[node]` to discover Gobra-specific data (specs, loop specs, block mapping).
+- Ghost nodes (`PBlockStmt` content, ghost statements) are processed inline as part of the
+  same traversal via the Metadata block pointer.
+- This unified `ast.Inspect` + `Metadata` lookup pattern is the intended implementation;
+  do not introduce a separate Gobra visitor for `go/ast` node types.
 
 ### Interleaved content: PBlockStmt
 
@@ -251,11 +248,8 @@ type PInvariant struct {
 func (p *PInvariant) Pos() token.Pos { return p.StartPos }
 func (p *PInvariant) End() token.Pos { return p.Expr.End() }
 
-type PForStmt struct {
-    GoFor *ast.ForStmt
-    Spec  PLoopSpec    // invariants and termination measure; populated by plan 07
-    Body  *PBlockStmt  // the loop body, interleaving Go and ghost stmts
-}
+// PForStmt is no longer a wrapper struct. Access loop spec via pfile.Metadata[forStmt].LoopSpec
+// and the loop body's PBlockStmt via pfile.Metadata[forStmt.Body].Block.
 ```
 
 `PRangeStmt` follows the same pattern (`GoRange *ast.RangeStmt`, `Spec PLoopSpec`,
@@ -267,38 +261,31 @@ renamed form of the termination-measure node, matching the `decreases` keyword t
 
 ### Verification Specifications (C9)
 
-All wrapper constructors and traversal entry points carry Gobra pre/postconditions enforcing
-two invariants: non-nil embedded `go/ast` fields, and read-only structural immutability.
+AST construction helpers and traversal entry points carry Gobra pre/postconditions enforcing
+two invariants: non-nil nodes, and read-only structural immutability.
 
-1. **Non-nil embedded field invariant**: Each wrapper constructor requires its `go/ast` argument
-   to be non-nil and guarantees the wrapper's embedded field is accessible:
+1. **Metadata population safety**: after `ParseFile` (plan 04) returns, every `*ast.FuncDecl`
+   in the file that carries a Gobra spec has a corresponding non-nil `GobraMetadata` entry:
    ```go
-   //@ requires goFunc != nil && spec != nil
-   //@ ensures  acc(f.GoFunc) && f.GoFunc != nil
-   //@ ensures  acc(f.Spec)   && f.Spec   != nil
-   func NewPFunctionDecl(goFunc *ast.FuncDecl, spec *PFunctionSpec, bpi *PBodyParameterInfo) (f *PFunctionDecl)
-
    //@ requires goStmt != nil
    //@ ensures  acc(w.Stmt) && w.Stmt != nil
    func NewPGoStmt(goStmt ast.Stmt) (w *PGoStmt)
-
-   //@ requires goFor != nil && body != nil
-   //@ ensures  acc(s.GoFor) && s.GoFor != nil
-   //@ ensures  acc(s.Body)  && s.Body  != nil
-   func NewPForStmt(goFor *ast.ForStmt, spec PLoopSpec, body *PBlockStmt) (s *PForStmt)
    ```
+   For `*ast.FuncDecl` nodes, the parser calls `pfile.Metadata[decl] = &GobraMetadata{Spec: ...}`
+   directly rather than constructing a wrapper type; the postcondition is expressed on `ParseFile`
+   in plan 04's C9 section.
 
-2. **Read-only traversal immutability**: The `Visitor.Visit` dispatch methods require read
+2. **Read-only traversal immutability**: the `Visitor.Visit` dispatch methods require read
    access to the node but do not modify it:
    ```go
    //@ requires acc(n, 1/2)
    //@ ensures  acc(n, 1/2)
-   func (v *defaultVisitor) VisitPFunctionDecl(n *PFunctionDecl)
+   func (v *defaultVisitor) VisitPBlockStmt(n *PBlockStmt)
    ```
    The `1/2` fractional permission expresses that the visitor holds a read-only share; the
    caller retains the other half, preventing concurrent mutation.
 
-3. **PBlockStmt source-order invariant**: After `MergeGhostStatements` (plan 07), every
+3. **PBlockStmt source-order invariant**: after `MergeGhostStatements` (plan 07), every
    adjacent pair of statements in `PBlockStmt.Stmts` must be in non-decreasing `Pos()` order.
    This invariant is expressed as a loop invariant on the merge function (plan 07), but is
    defined here as a predicate over `PBlockStmt`:
@@ -331,38 +318,61 @@ type PFile struct {
     GhostDecls []PDecl   // file-scope ghost declarations (ADTs, ghost funcs, predicates)
                          // populated by plan 07's MergeGhostStatements
 
-    // BlockAnnotations maps each PBlockStmt to its raw //@ annotations.
+    // Metadata maps each go/ast node to its Gobra-specific extensions (spec, loop spec,
+    // receiver info, ghost methods, block mapping). Populated by plan 04 (ParseFile) and
+    // augmented by plan 07 (MergeGhostStatements). Nil entries mean no Gobra extension for
+    // that node. Callers look up pfile.Metadata[goAstNode] instead of type-asserting through
+    // companion wrapper structs.
+    Metadata map[ast.Node]*GobraMetadata
+
+    // BlockAnnotations maps each *ast.BlockStmt to its raw //@ annotations.
     // Key nil holds file-scope annotations (ghost ADTs, predicates, funcs produced by the
     // Gobrafier for top-level //@ blocks); plan 07 routes these to GhostDecls.
     // Populated by plan 04 (ParseFile); consumed and set to nil by plan 07 (MergeGhostStatements).
     // Nil after merge is complete. Callers must not treat PBlockStmt.Stmts as fully merged
     // until BlockAnnotations is nil.
-    BlockAnnotations map[*PBlockStmt][]RawAnnotation
+    BlockAnnotations map[*ast.BlockStmt][]RawAnnotation
+}
+
+// GobraMetadata holds Gobra-specific extensions for a go/ast node.
+// Stored in PFile.Metadata; callers look up pfile.Metadata[node] to obtain extensions.
+// Only fields relevant to the specific node type are populated; others are zero-valued.
+type GobraMetadata struct {
+    // For *ast.FuncDecl (functions and methods)
+    Spec          *PFunctionSpec
+    BodyParamInfo *PBodyParameterInfo
+    Receiver      *PReceiver  // non-nil only for method declarations
+
+    // For *ast.TypeSpec
+    GhostExt PNode // non-nil only for Gobra-extended type forms (e.g., ADT tagging)
+
+    // For *ast.InterfaceType
+    GhostMethods []*PFunctionSpec // additional ghost method specs; nil for plain interfaces
+
+    // For *ast.ForStmt / *ast.RangeStmt
+    LoopSpec *PLoopSpec // nil if no loop spec annotations
+
+    // For *ast.BlockStmt — maps to the corresponding PBlockStmt with interleaved ghost stmts
+    Block *PBlockStmt
 }
 ```
 
-### PFunctionDecl / PMethodDecl
+### PBodyParameterInfo
 
 ```go
 // PBodyParameterInfo tracks parameters declared shared in the function body.
 // Matches Scala PBodyParameterInfo. Nil when there is no body or no shared params.
+// Stored in PFile.Metadata[funcDecl].BodyParamInfo.
 type PBodyParameterInfo struct {
     ShareableParameters []*ast.Ident
 }
-
-type PFunctionDecl struct {
-    GoFunc       *ast.FuncDecl
-    Spec         *PFunctionSpec
-    BodyParamInfo *PBodyParameterInfo // nil if no body or no shared params
-}
-
-type PMethodDecl struct {
-    GoFunc       *ast.FuncDecl
-    Receiver     *PReceiver      // full Gobra receiver (named/unnamed, value/ptr/ghost-ptr)
-    Spec         *PFunctionSpec
-    BodyParamInfo *PBodyParameterInfo
-}
 ```
+
+Function and method declarations have no wrapper struct. Gobra data for an `*ast.FuncDecl`
+is accessed via `pfile.Metadata[funcDecl]`:
+- `.Spec` — the `*PFunctionSpec` (pre/postconditions, modifiers, termination measures)
+- `.BodyParamInfo` — `*PBodyParameterInfo` (nil if no body or no shared params)
+- `.Receiver` — `*PReceiver` (non-nil only for method declarations)
 
 ### PReceiver / PMethodRecvType
 
@@ -531,39 +541,22 @@ func hasModifier[M PModifier](s *PFunctionSpec) bool {
 }
 ```
 
-### PTypeDecl / PInterfaceType / PRangeStmt
+### Type and Interface Extensions (via side-table)
 
-These wrapper types appear in the Visitor interface and must have concrete definitions.
+Type declarations and interface types have no wrapper structs. Gobra data is accessed via
+`pfile.Metadata[goAstNode]`:
 
-```go
-// PTypeDecl wraps *ast.TypeSpec with an optional Gobra type extension (e.g., ADT tagging).
-// Implements PDecl so it can appear in PFile.GhostDecls when a ghost type is declared.
-type PTypeDecl struct {
-    GoSpec   *ast.TypeSpec
-    GhostExt PNode  // non-nil only for Gobra-extended type forms; nil for plain Go types
-}
-func (*PTypeDecl) pDecl() {}
-func (d *PTypeDecl) Pos() token.Pos { return d.GoSpec.Pos() }
-func (d *PTypeDecl) End() token.Pos { return d.GoSpec.End() }
+- `*ast.TypeSpec` → `pfile.Metadata[typeSpec].GhostExt PNode` — non-nil only for
+  Gobra-extended type forms (e.g., ADT tagging); nil for plain Go types. These nodes still
+  implement `PDecl` via the ghost type system; `PFile.GhostDecls` stores them as `PDecl`
+  values that the type checker obtains by inspecting metadata entries.
 
-// PInterfaceType wraps *ast.InterfaceType with ghost method specs (pure predicates, etc.)
-// that have no representation in go/ast.
-type PInterfaceType struct {
-    GoIface      *ast.InterfaceType
-    GhostMethods []*PMethodDecl  // additional ghost method specs; empty for plain interfaces
-}
-func (t *PInterfaceType) Pos() token.Pos { return t.GoIface.Pos() }
-func (t *PInterfaceType) End() token.Pos { return t.GoIface.End() }
+- `*ast.InterfaceType` → `pfile.Metadata[ifaceType].GhostMethods []*PFunctionSpec` — ghost
+  method specs (pure predicates, etc.) not representable in `go/ast`. Nil for plain interfaces.
 
-// PRangeStmt wraps *ast.RangeStmt with a loop spec (invariants, termination measure).
-type PRangeStmt struct {
-    GoRange *ast.RangeStmt
-    Spec    PLoopSpec
-    Body    *PBlockStmt
-}
-func (s *PRangeStmt) Pos() token.Pos { return s.GoRange.Pos() }
-func (s *PRangeStmt) End() token.Pos { return s.GoRange.End() }
-```
+- `*ast.RangeStmt` → `pfile.Metadata[rangeStmt].LoopSpec *PLoopSpec` — loop spec (invariants,
+  termination measure); nil if no loop annotations. The corresponding `PBlockStmt` for the
+  range body is accessed via `pfile.Metadata[rangeStmt.Body].Block`.
 
 ### Ghost Expression Types
 
@@ -619,17 +612,15 @@ The `Visitor` interface covers all Gobra wrapper node types defined in this plan
 expression and statement types added by plan 05 extend the same interface in the same package
 (`internal/ast/frontend/`) — no circular dependency, as both plans contribute to one package.
 
+The `Visitor` interface covers only ghost-only and `PBlockStmt`-related node types.
+Traversal of `go/ast` nodes (function declarations, type specs, for loops, etc.) uses
+`ast.Inspect` directly; Gobra extensions are retrieved via `pfile.Metadata[node]`.
+
 ```go
 type Visitor interface {
-    // Wrapper nodes (Go constructs extended by Gobra)
-    VisitPFunctionDecl(n *PFunctionDecl)
-    VisitPMethodDecl(n *PMethodDecl)
-    VisitPTypeDecl(n *PTypeDecl)
-    VisitPInterfaceType(n *PInterfaceType)
+    // PBlockStmt and its statement elements
     VisitPBlockStmt(n *PBlockStmt)
     VisitPGoStmt(n *PGoStmt)
-    VisitPForStmt(n *PForStmt)
-    VisitPRangeStmt(n *PRangeStmt)
     // Loop spec nodes
     VisitPInvariant(n *PInvariant)
     VisitPWildcardMeasure(n *PWildcardMeasure)

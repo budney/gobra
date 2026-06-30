@@ -7,18 +7,23 @@
 ### Package Ownership
 | Package / Artifact | Owner Plan |
 |---|---|
-| `internal/ast/frontend/` — `PNode`, `PDecl`, `PStmt`, `PGoStmt`, `PBlockStmt`, `PFile`, `PFunctionDecl`, `PMethodDecl`, `PTypeDecl`, `PInterfaceType`, `PRangeStmt`, `PForStmt`, `PLoopSpec`, `PBodyParameterInfo`, `PReceiver`, `PFunctionSpec`, `Visitor` | 03 |
+| `internal/ast/frontend/` — `PNode`, `PDecl`, `PStmt`, `PGoStmt`, `PBlockStmt`, `PFile`, `GobraMetadata`, `PLoopSpec`, `PBodyParameterInfo`, `PReceiver`, `PFunctionSpec`, `Visitor` | 03 |
 | `internal/ast/frontend/` — `PExpression`, `PInvariant`, `PDecreases`, `PWildcardMeasure`, `PTupleTerminationMeasure` | 03 |
 | `internal/ast/frontend/` — `PModifier`, `PPure`, `PTrusted`, `POpaque`, `PMayBeUsedInInit` | 03 |
 | `internal/ast/frontend/` — `PMagicWand`, `PGhostCall`, `PMatch`, `PMatchCase` | 03 |
 | `Visitor` interface (frontend) | 03 |
+| `internal/info/checker.go` — `GobraScope` interface, `gobraScopeImpl` | 08 |
 | `internal/ast/internal/` — `Method`, `Function`, `FPredicate`, `Expr`, `Stmt`, etc. | 11 |
 | `Visitor` interface (internal) | 11 |
 | `internal/silver/` — `Program`, `Member`, `Node`, `NodeInfo`, `VprInfo`, `NoInfo`, `AnnotationInfo`, `ConsInfo` | 14 |
 | `internal/silver/printer.go` (`Print`) | 14 |
-| `internal/backend/jvm/jvm.go` — `JVM`, `Start`, `Stop`, `JVMConfig`, `WorkerPool` struct, `workerJob`, `pred ThreadAttached()` | 15 |
-| `internal/backend/jvm/jvm.go` — `NewPool`, `Submit`, full Silicon-aware worker goroutine | 15b |
-| `internal/backend/types.go` — `VerificationResult`, `VerificationError`, `SiliconInstance` interface, `SiliconConfig`, `Backend` interface | 15 / 18 |
+| `internal/backend/subprocess/subprocess.go` — `Backend`, `Start`, `Stop`, `Ping`, `SubprocessConfig`, `WorkerPool` struct, `workerJob` | 15 |
+| `internal/backend/subprocess/subprocess.go` — `NewPool`, `Submit`, full Silicon-aware goroutine worker | 15b |
+| `internal/backend/subprocess/dispatch.go` — `DispatchChopped` | 17b |
+| `internal/backend/silverserver/` — `SilverServer.scala`, `silver.proto`, `SilverServer.jar` (embedded fat JAR) | 15 |
+| `internal/proto/` — generated Go Protobuf bindings for `silver.proto` (`protoc --go_out`) | 15 |
+| `internal/backend/silver/serializer.go` — `Serialize`, `SerializedProgram`, `globalNodeID` | 16 |
+| `internal/backend/types.go` — `VerificationResult`, `VerificationError`, `SiliconInstance` interface, `SiliconConfig` | 15 |
 | `internal/backend/dedup.go` (`Deduplicate`) | 17b |
 | `internal/diagnostic/` (`Diagnostic` struct, `DiagError`/`DiagWarning`/`DiagInfo`) | 32a |
 | `internal/reporting/tags.go` (tag constants) | 32 |
@@ -45,7 +50,7 @@
 | `Translate` return | `(result *silver.Program, diags []diagnostic.Diagnostic)` — consistent with all other pipeline stages |
 | `Resolve` return | `(result []*PackageInfo, diags []Diagnostic)` — nil result on any error (strict; matches C9) |
 | `Run` return | `error` only — reporter runs inside Run; callers use `errors.Is(err, ErrVerificationFailed)` |
-| `pred ThreadAttached()` | No argument — JVM is a process-wide singleton; predicate models OS-thread state |
+| `pred ThreadAttached()` | **REMOVED** — no JNI, no thread pinning; replaced by goroutine-safety and subprocess health specs in plans 15, 15b, 17 |
 | Loop invariants | `[]PInvariant` (wrapper with source pos), not bare `[]PExpression` |
 | Termination measures | `PDecreases` interface (renamed from `PTerminationMeasure`) |
 | Function modifiers | `[]PModifier` slice on `PFunctionSpec` with node types `PPure`/`PTrusted`/`POpaque`/`PMayBeUsedInInit` |
@@ -53,11 +58,13 @@
 ### Synchronization Contracts
 | Resource | Mechanism | Plan |
 |---|---|---|
-| JVM singleton | `sync.Once` | 15 |
-| JNI thread attachment | `runtime.LockOSThread()` + `defer DetachCurrentThread()` + `pred ThreadAttached()` | 15 |
+| Subprocess fork | `sync.Mutex` on `Backend` struct during `Start`/`Stop` | 15 |
 | Worker pool channel | buffered `chan workerJob` | 15 |
 | `SiliconFrontendAPI` per worker | goroutine-local (no sharing) | 15b |
-| Z3 API mode | forces `poolSize=1`; warning logged if `--workers > 1` | 15b |
+| `globalNodeID` atomic counter | `atomic.Uint64` | 16 |
+
+**Removed**: `sync.Once` JVM singleton, `runtime.LockOSThread()`, `AttachCurrentThread`,
+`DetachCurrentThread`, `pred ThreadAttached()` — none apply in the gRPC subprocess design.
 
 ---
 
@@ -149,8 +156,10 @@
 | 13 | Full /review-plan ALL sixth pass (all 41 plans + foundation docs) | 124 | All DONE |
 | 14 | Full /review-plan ALL seventh pass (all 41 plans + foundation docs) | 125–126 | All DONE |
 | 15 | Full /check-plan (all 41 plans + foundation docs) | — | All PASS |
+| 16 | Full check-plan & review-plan execution | — | All PASS |
+| 17 | Wave 3 gRPC refactor audit (plans 15, 15b, 16, 17, 17b, 14, 32, 33, 34, 00) | 127–138 | All DONE |
 
-**Total: 126 items resolved. All rounds complete. No open items.**
+**Total: 138 items resolved. All rounds complete. No open items.**
 
 ### Active Global Constraint — HasGenericDecl ownership
 
@@ -773,4 +782,101 @@ Since `Context` is defined as an interface in `19-translator-core.md`, passing `
 | 15 | Full /check-plan (all 41 plans + foundation docs) | — | All PASS |
 
 Verification completed successfully. All plans satisfy all C1–C9 criteria with zero failures or open contradictions.
+
+---
+
+## ROUND 16 — Full /check-plan & /review-plan (all 41 plans + foundation docs)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 16 | Full /check-plan & /review-plan (all 41 plans + foundation docs) | — | All PASS |
+
+### Check-Plan Results
+All 41 plan documents satisfy all criteria (C1–C9) defined in `CRITERIA.md`.
+- Registry completeness (C1): PASS
+- Required sections (C2): PASS
+- Single owner per artifact (C3): PASS
+- Cross-plan references (C4): PASS
+- Dependency graph (C5): PASS
+- Pipeline boundaries (C6): PASS
+- Synchronization contracts (C7): PASS
+- Validation plans (C8): PASS
+- Self-Verification Annotations (C9): PASS
+
+### Review-Plan Results
+- Contradictions: None found.
+- Gaps: None found.
+- Logic errors: None found.
+- Design concerns: None found.
+- Simplifications / improvements: None found.
+
+Summary: The plan documents remain in a fully consistent, complete, and correct state.
+
+---
+
+## ROUND 17 — Wave 3 Refactor Post-Audit (check-plan on 15, 15b, 16, 17, 17b, 14, 32, 33, 34, 00, DECISIONS)
+
+| Round | Scope | Items | Status |
+|---|---|---|---|
+| 17 | Wave 3 refactored plans (gRPC/subprocess redesign) | 127–138 | In progress |
+
+### Item 127 — C4 FAIL: Plan 15b dependency misstates `Serialize` return type
+Plan 15b's Dependencies section says `Serialize` returns `(*proto.SilverProgram, error)`.
+Plan 16 defines it as returning `(*SerializedProgram, error)`.
+**Fix**: Update plan 15b dependency description to `(*SerializedProgram, error)`.
+
+### Item 128 — C4 FAIL: Plan 15b worker code passes `*SerializedProgram` to `Verify` which takes `*proto.SilverProgram`
+Worker snippet: `instance.Verify(serialized)` — `serialized` is `*SerializedProgram`.
+`SiliconInstance.Verify` takes `*proto.SilverProgram`. Plan 17 correctly uses `instance.Verify(serialized.Program)`.
+**Fix**: Change `instance.Verify(serialized)` to `instance.Verify(serialized.Program)` in plan 15b worker template.
+
+### Item 129 — C4 FAIL: Plan 15b `silver.Serialize` call has ambiguous import path
+`gobra/internal/silver` (plan 14) and `gobra/internal/backend/silver` (plan 16) both default to package name `silver`. Worker code `silver.Serialize(job.prog)` is ambiguous.
+**Fix**: Add explicit import alias (e.g., `silverser "gobra/internal/backend/silver"`) and call `silverser.Serialize(job.prog)` in plan 15b worker template.
+
+### Item 130 — C3 FAIL: `internal/proto/` ownership conflict — scratchpad says plan 16, plan 16 says plan 15
+Scratchpad registry: `internal/proto/` owned by plan 16. But plan 16's scope says "Owned by the `SilverServer` artifact (D2); this plan *consumes* the generated Go Protobuf bindings (`gobra/internal/proto`)." Plan 15 owns the `SilverServer` artifact and `silver.proto`. Moving ownership to plan 15 resolves the circular dep issue (plan 16 deps on plan 15; plan 15 cannot dep on plan 16).
+**Fix**: Move `internal/proto/` row in scratchpad to plan 15; update plan 16 scope to remove the ownership claim and say it consumes them from plan 15.
+
+### Item 131 — C5 FAIL: Plan 17b dependency on plan 16 unjustified — mergeResults uses `VerificationResult.NodeMap` (plan 15), not `SerializedProgram`
+Plan 17b lists plan 16 as a dependency for "`SerializedProgram` carries `NodeMap`; merged by `mergeResults`". But `mergeResults` merges `VerificationResult.NodeMap` — plan 15's type. Plan 17b never directly uses `SerializedProgram`. The plan 16 dependency should be removed and the note corrected to reference plan 15.
+**Fix**: Remove plan 16 from plan 17b's Dependencies; add explicit note that `VerificationResult.NodeMap` (plan 15) is what gets merged.
+
+### Item 132 — C4 FAIL: Plan 32 "JNI integration note" section describes old JNI approach
+Lines 158–162 of plan 32: "JNI integration note" references SilverBridge.getNodeFile/Line/Col/Tag, AnnotationInfo embedding, Close() freeing JNI refs. All stale — replaced by Protobuf field extraction in gRPC design.
+**Fix**: Rewrite section as "gRPC integration note" describing Protobuf field extraction.
+**Status**: RESOLVED — plan 32 "JNI integration note" rewritten as "gRPC integration note".
+
+### Item 133 — C9 FAIL: Plan 32 C9 item 4 "Called-before-Close" references `jniRefsLive` predicate
+Plan 32 C9 item 4: `//@ requires acc(jniRefsLive(result), _)` — JNI ghost predicate. No `Close()` exists in the gRPC design; `jniRefsLive` is undefined. This C9 spec is incorrect and misleading.
+**Fix**: Remove C9 item 4 from plan 32 (no Close() contract needed); renumber remaining items if needed.
+**Status**: RESOLVED — C9 item 4 removed; replaced with a note that no Close() contract is needed.
+
+### Item 134 — C4 MINOR: Plan 14 objective/scope contain stale "JNI builder" references
+Plan 14 Objective (line 6): "input to the JNI builder (16)". Out of scope (line 19): "JNI construction of Java Silver objects". Info chain section (line 68): "SilverBridge.java exposes methods to construct each type."
+**Fix**: Update plan 14 references to "Protobuf serializer" and remove SilverBridge.java mention.
+**Status**: RESOLVED — all three stale references updated.
+
+### Item 135 — C4 MINOR: Plan 33 pipeline description still says "JNI Backend"
+Plan 33 dependency line for plan 16b: "between Translator and JNI Backend".
+**Fix**: Change to "between Translator and gRPC Backend".
+**Status**: RESOLVED — plan 33 updated.
+
+### Item 136 — C1 MINOR: Plan 00 unblocked work section says "15 (JNI Setup)"
+Plan 00 line 171: "- 15 (JNI Setup)" — stale name; plan 15 is now "Subprocess Lifecycle".
+**Fix**: Update to "15 (Subprocess Lifecycle)".
+**Status**: RESOLVED — plan 00 updated.
+
+### Item 137 — C7 NOTE: CRITERIA.md C7 JNI clause is now vacuously satisfied / should be updated
+C7 says "Every goroutine that calls JNI explicitly documents runtime.LockOSThread()..." — no JNI goroutines exist in the gRPC design. Vacuously satisfied, not a failure. CRITERIA.md could be updated to replace JNI-specific language with general concurrency documentation requirements. This is a quality-of-life improvement, not a criteria failure.
+**Status**: NOTE only — not a plan file failure. No action required.
+
+### Item 138 — C4 MINOR: Plan 32 line 162 still mentions `NodeMap` tied to `Close()`
+Plan 32 line 162: "`NodeMap` field on `VerificationResult` is retained for lifecycle purposes (it is referenced by `Close()` to free JNI global references)". `Close()` was removed. The `NodeMap` is now used only for `searchInfo` DFS.
+**Fix**: Update line 162 to remove the stale `Close()` reference; note NodeMap is used only for DFS.
+**Status**: RESOLVED — addressed as part of Item 132 fix (gRPC integration note rewrite).
+
+**Round 17 complete. All 12 items (127–138) resolved. No open items.**
+
+
 

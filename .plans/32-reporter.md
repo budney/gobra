@@ -38,7 +38,7 @@ diagnostic output.
 - [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Report()`
 - [14-silver-ast.md](14-silver-ast.md) — `NodeInfo` on every Silver node
 - [15-jni-setup.md](15-jni-setup.md) — defines `VerificationResult`, `VerificationError`, `VerificationError.Node`, `VerificationError.Pos` in `internal/backend/types.go`; reporter accesses these fields directly
-- [16-silver-jni-builder.md](16-silver-jni-builder.md) — JNI object-to-Go-node identity map
+- [16-silver-jni-builder.md](16-silver-jni-builder.md) — `SerializedProgram.NodeMap` (Go-node identity map); `VerificationError.Node` populated from it by the worker
 - [17-silicon-backend.md](17-silicon-backend.md) — `Verify()` returns `*backend.VerificationResult`; `VerificationError.Node` populated by the worker before `Report()` is called
 
 ## Reference: Current Gobra
@@ -77,9 +77,9 @@ parameters are gone:
   plan 17/15b) — `searchInfo` starts from `err.Node` directly, with no nodeMap lookup.
 - `TypeInfo` was never used by the reporter; removed.
 
-`Report` must be called before `result.Close()` — see plan 16 for the correct call
-ordering. `result.Close()` releases JNI global references; the `err.Node` Go Silver structs
-are safe to read until then.
+`VerificationResult` has no `Close()` method in the gRPC design — there are no JNI global
+references to free. The `NodeMap` and `err.Node` Go Silver structs are GC'd normally after
+`Report()` returns. Callers do not need to call any cleanup function after `Report()`.
 
 ## Error Backtranslation Design
 
@@ -92,12 +92,13 @@ Each `VerificationError` has:
   obligation that failed.
 - An **offending node** — the Silver AST node that Silicon identified as the failure point.
 
-The JNI worker (plan 17) processes Silicon's raw errors before handing `VerificationResult`
-to the reporter: for each raw error, the worker calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)`
-to extract the `NodeInfo` that was embedded in the node's Viper `Info` chain during Build()
-(plan 16), and stores it as `VerificationError.Pos`. By the time `Report()` is called,
-every `VerificationError.Pos` is already populated. The reporter does NOT make additional JNI
-calls for primary position lookup.
+The gRPC worker (plan 17) processes Silicon's raw errors before handing `VerificationResult`
+to the reporter: for each `VerifyResponse.Error`, the worker reads `node_file`, `node_line`,
+`node_col`, and `node_tag` directly from the Protobuf fields and stores them in
+`VerificationError.Pos`. The worker also looks up `NodeMap[error.node_id]` and stores the Go
+Silver struct in `VerificationError.Node`. By the time `Report()` is called, every
+`VerificationError.Pos` is already populated. The reporter makes no gRPC calls for primary
+position lookup.
 
 ### Position extraction
 
@@ -154,11 +155,20 @@ multi-assignment), the `NodeInfo` stored on the Silver node is that of the **out
 enclosing Go construct** — the statement or expression that triggered the desugaring. The
 translator must propagate the outermost position when constructing synthetic Silver nodes.
 
-### JNI integration note
+### gRPC integration note
 
-The Scala Gobra uses `Source.unapply(offendingNode)` — which calls `node.getPrettyMetadata._2.getUniqueInfo[Verifier.Info]` — to extract Go source info directly from a Silver node's Viper `Info` field. Go-Gobra uses the analogous approach: the builder (plan 16) embeds `NodeInfo` as `AnnotationInfo` entries in each node's Viper `Info` chain during construction, and the worker (plan 17) calls `SilverBridge.getNodeFile/Line/Col/Tag(offendingNode)` to retrieve those fields after Silicon reports errors.
+The Scala Gobra uses `Source.unapply(offendingNode)` — which calls
+`node.getPrettyMetadata._2.getUniqueInfo[Verifier.Info]` — to extract Go source info from a
+Silver node's Viper `Info` field. Go-Gobra uses the analogous approach: the serializer
+(plan 16) embeds `NodeInfo` fields (`node_file`, `node_line`, `node_col`, `node_tag`) directly
+as Protobuf fields on each Silver node message. `SilverServer` carries these fields through to
+`VerifyResponse.Error`. The gRPC worker (plan 17) reads them directly from the response proto
+message and stores them in `VerificationError.Pos` — no `AnnotationInfo` chain lookup required.
 
-For the `searchInfo` DFS, the reporter uses `err.Node` (the Go Silver struct pre-loaded by the worker, carrying `Children()`) rather than performing a nodeMap lookup inside the reporter. The `NodeMap` field on `VerificationResult` is retained for lifecycle purposes (it is referenced by `Close()` to free JNI global references) but the reporter does not access it directly.
+For the `searchInfo` DFS, the reporter uses `err.Node` (the Go Silver struct pre-loaded by the
+worker from `VerificationResult.NodeMap`) rather than performing a nodeMap lookup inside the
+reporter. `VerificationResult.NodeMap` is a plain Go map; it is GC'd after the reporter
+returns and requires no explicit `Close()` call.
 
 ## Verification Specifications (C9)
 
@@ -190,10 +200,5 @@ verified before this plan is considered complete.
    func searchInfo(node silver.Node) (result silver.NodeInfo)
    ```
 
-4. **Called-before-Close contract** — `Report` must be called while JNI global refs are still
-   live (before `result.Close()`); this is enforced by a ghost permission:
-   ```go
-   //@ requires acc(jniRefsLive(result), _)   // ghost: JNI global refs not yet freed
-   //@ ensures  acc(jniRefsLive(result), _)   // ghost: permission returned; Close still valid
-   func Report(result *backend.VerificationResult) (diags []diagnostic.Diagnostic)
-   ```
+   There is no "Called-before-Close" contract — `VerificationResult` has no `Close()` method
+   in the gRPC design. `NodeMap` is a plain Go map; it is GC'd normally after `Report()` returns.

@@ -72,6 +72,15 @@ constructs. These have their own typing rules that differ from standard Go.
 - Structural constraint checks integrated into the checker pass (see Scope above)
 - Tests: annotation-heavy regression files from `src/test/resources/regressions/features/`
 
+## Key Implementation Note: Name Resolution via GobraScope
+
+Plan 09's spec visitor resolves names (identifiers in preconditions, ghost function calls,
+quantifier bound variables, etc.) by calling `GobraScope.Lookup(name)` — defined in plan 08
+and constructed there per scope. `GobraScope.Lookup` checks ghost declarations first, then
+delegates to the underlying `*go/types.Scope`. Plan 09 does NOT call `GhostTypeInfo.Types`
+for name-by-string lookup; `GhostTypeInfo` is storage (maps `PNode` → resolved `GhostType`)
+that plan 09 **writes** during `CheckSpecs`, not a symbol table it reads for resolution.
+
 ## Resolved Questions
 
 **Separate pass vs. integrated (resolved):** Spec type checking runs as a **separate pass**

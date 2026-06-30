@@ -39,12 +39,15 @@ verified as a whole.
   all packages A imports already have a completed `ExternalTypeInfo`. Never type-check a
   package before its dependencies.
 - **`go/types` importer**: The `go/types.Check` call for each package requires a
-  `types.Importer`. Implement a custom importer that serves `*types.Package` objects from
-  already-completed packages in this session, falling back to the stdlib importer for
-  standard library packages not being verified.
+  `types.Importer`. Implement a custom importer (`gobImporter`) that serves `*types.Package`
+  objects from already-completed packages in this session, falling back to the stdlib importer
+  for standard library packages not being verified. The importer wraps a `GobraScope` per
+  imported package (see D16 in DECISIONS.md) so that cross-package ghost name resolution
+  routes through `GobraScope.Lookup` rather than accessing `GhostTypeInfo` directly.
 - **Ghost info across packages**: `ExternalTypeInfo` must expose not just standard Go
   exported symbols but also exported ghost declarations (predicates, ghost functions, ADT
-  types). These are not visible to `go/types` and must be handled separately.
+  types). These are not visible to `go/types`; the custom importer surfaces them via a
+  `GobraScope` constructed from each imported package's `PFile.GhostDecls`.
 
 ## Deliverables
 

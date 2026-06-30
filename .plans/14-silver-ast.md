@@ -3,7 +3,7 @@
 ## Objective
 
 Define Go struct types for the Silver intermediate representation. These types are the output
-of the translator and the input to the JNI builder (16). They mirror the Silver AST defined
+of the translator and the input to the Protobuf serializer (16). They mirror the Silver AST defined
 in the `silver` submodule's Scala types, but expressed purely in Go.
 
 ## Scope
@@ -16,7 +16,7 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
 - Position information on every node (maps to Go source for error reporting)
 
 **Out of scope:**
-- JNI construction of Java Silver objects (16-silver-jni-builder.md)
+- Protobuf serialization of the Silver AST (16-silver-jni-builder.md)
 - Translation logic (19+)
 
 ## Dependencies
@@ -65,7 +65,7 @@ in the `silver` submodule's Scala types, but expressed purely in Go.
   - `ConsInfo{Head Info, Tail Info}` — chains multiple info objects together
   The Go Silver AST must model these: `NodeInfo` is stored alongside a `VprInfo interface`
   that represents the Viper-level info chain (`NoInfo | AnnotationInfo | ConsInfo`).
-  `SilverBridge.java` exposes methods to construct each type (see plan 16).
+  The Protobuf serializer (plan 16) embeds `NodeInfo` fields directly on each Protobuf message; the `VprInfo` chain is serialized separately for backend annotation fields such as `@opaque`/`@reveal`.
 
 ## Deliverables
 
@@ -105,17 +105,27 @@ type NodeInfo struct {
     Line   int    // 1-based line in Go source
     Col    int    // 1-based column in Go source
     Tag    string // identifies which Go construct produced this node (see below)
-    NodeID uint64 // unique node ID assigned by plan 16's JNI builder; 0 for synthetic nodes
+    NodeID uint64 // unique node ID assigned by plan 16's serializer; 0 for synthetic nodes
 }
 ```
 
-**`NodeID` assignment**: the JNI builder (plan 16) assigns a globally unique `uint64` ID to
-each Silver node at `Build()` time, stores it in the Java Silver node's `Info` chain as
-`gobra_node_id` (alongside `gobra_node_file`, `gobra_node_line`, etc.), and records the
-mapping `NodeID → silver.Node` in `BuiltProgram.NodeMap`. When Silicon reports an error on
-a node, the JNI worker calls `SilverBridge.getNodeId(offendingNode)` to extract the ID, then
-looks up `NodeMap[id]` to retrieve the Go Silver struct for `SearchInfo` DFS (plan 32).
-Synthetic nodes carry `NodeID = 0`; the worker skips the `NodeMap` lookup for ID 0.
+**`NodeID` assignment**: the Protobuf serializer (plan 16) assigns a globally unique `uint64`
+ID to each Silver node during `Serialize()`, stores it as the `node_id` field of the
+corresponding Protobuf message, and records the mapping `NodeID → silver.Node` in
+`SerializedProgram.NodeMap`. `SilverServer` propagates these IDs through to
+`VerifyResponse.Error.node_id`. When Silicon reports an error, the Go worker reads the
+`node_id` from the gRPC response and looks up `NodeMap[id]` to retrieve the Go Silver struct
+for `SearchInfo` DFS (plan 32). The primary position (`File`, `Line`, `Col`, `Tag`) comes
+from the `node_file`, `node_line`, `node_col`, `node_tag` Protobuf fields on the error
+response — no `AnnotationInfo` chain extraction is needed. Synthetic nodes carry `NodeID = 0`;
+the worker skips the `NodeMap` lookup for ID 0.
+
+**NodeInfo travels as Protobuf fields**: every Silver node message in `silver.proto` carries
+`node_id`, `node_file`, `node_line`, `node_col`, and `node_tag` as scalar Protobuf fields.
+There are no `AnnotationInfo` chains and no `ConsInfo` structures for position data. The Go
+Silver AST's `NodeInfo` struct (above) is the single source of truth; the serializer copies it
+into these fields. The `VprInfo` field on Go Silver nodes is used only for backend-specific
+annotations (e.g., `@opaque`/`@reveal` for plan 27), not for position data.
 
 **Why `Tag`?** When Silicon reports an error on a Silver node, the error type alone (e.g.,
 "precondition might not hold") is not enough to generate the right Go-level message. A
@@ -169,12 +179,12 @@ Go value-type struct, not a pointer — it cannot be nil. The constraint is on t
 every node must have a non-empty `NodeInfo.File` except synthetic nodes, which carry
 `NodeInfo{Tag: TagSynthetic}` with `File == ""`.)
 
-**Dual NodeInfo storage is intentional.** Every Silver node stores its `NodeInfo` in two
-places: (1) the Go-side `NodeInfo` field on the Go Silver struct (used by `searchInfo` DFS
-via `Children()` calls), and (2) as `AnnotationInfo` entries embedded in the Java Silver
-node's Viper `Info` chain (used by the JNI worker to extract positions via
-`SilverBridge.getNodeFile/Line/Col/Tag` without a cross-language roundtrip). Both copies are
-required. Do not omit either. See plan 16 for details on the Java-side embedding.
+**Single NodeInfo storage**: each Go Silver struct carries exactly one `NodeInfo` field. The
+serializer (plan 16) copies this into the Protobuf message's `node_file`/`node_line`/
+`node_col`/`node_tag` scalar fields. `SilverServer` propagates these fields in
+`VerifyResponse.Error`. There is no `AnnotationInfo` chain and no Java-side position
+embedding — the Protobuf fields are the cross-language transport. The Go-side `NodeInfo` field
+is also used by `searchInfo` DFS via `Children()` calls (plan 32).
 
 **Centralized tag registry:** The `Tag` strings set during translation (`"call"`, `"fold"`,
 `"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table. All valid

@@ -1,108 +1,79 @@
-# 15 — JNI Setup & JVM Lifecycle
+# 15 — Subprocess Lifecycle
 
 ## Objective
 
-Integrate [jnigi](https://github.com/timob/jnigi) to embed a JVM in the Go process, load the
-Silicon/ViperServer JARs onto the classpath, and provide a lifecycle API (start, stop) that
-the rest of the backend uses.
+Fork a `SilverServer` JVM subprocess per worker, manage its lifecycle (start, health-check,
+shutdown), and provide the shared backend types used by all plans in Group 4. No CGo, no JNI,
+no `runtime.LockOSThread()`.
 
 ## Scope
 
 **In scope:**
-- Add `jnigi` as a Go module dependency (requires CGo)
-- JVM startup: locate `libjvm` (platform-specific: `.so` on Linux, `.dylib` on macOS,
-  `.dll` on Windows), load it at runtime
-- Classpath construction: locate the Silicon/ViperServer fat JAR (from an environment variable
-  or config flag, e.g. `VIPERSERVER_JAR`), Z3 executable location
-- JVM options: heap size, stack size, Silicon-specific JVM flags
-- Graceful shutdown: shut down the JVM when Go-Gobra exits
-- Thread attachment: JNI requires each OS thread that calls into the JVM to be attached;
-  manage attach/detach around JNI calls
-- `WorkerPool` type skeleton and `workerJob` struct (channel infrastructure and thread-lifecycle
-  skeleton; full Silicon-aware body is in plan 15b)
+- `SubprocessConfig` struct: path to `SilverServer` fat JAR, JVM flags, Z3 executable path,
+  gRPC port allocation
+- `Start(cfg SubprocessConfig) (*Backend, error)` — forks the JVM subprocess, waits for the
+  gRPC ready signal (stdout sentinel line `"SILVERSERVER_READY"`), returns a connected `*Backend`
+- `(*Backend).Stop()` — sends SIGTERM to the subprocess; waits up to a configurable grace
+  period, then SIGKILL
+- Health check: `(*Backend).Ping() error` — sends a gRPC `PingRequest`; used by workers to
+  detect and restart dead subprocesses
+- `WorkerPool` type skeleton and `workerJob` struct (channel infrastructure and goroutine-
+  lifecycle skeleton; full Silicon-aware body is in plan 15b)
 - `internal/backend/types.go` — shared backend types owned by this plan: `VerificationResult`,
   `VerificationError`, `SiliconInstance` interface, `SiliconConfig` struct. These live in the
-  parent `backend` package so both `jvm` and `silicon` sub-packages can import them without
-  a circular dependency. See Deliverables for the full definitions.
+  parent `backend` package so both `subprocess` and `silicon` sub-packages can import them
+  without a circular dependency. See Deliverables for the full definitions.
 
 **Out of scope:**
-- Building the Silver Java AST (16-silver-jni-builder.md)
+- Protobuf serialization of the Silver AST (16-silver-jni-builder.md)
 - Calling Silicon's verify method (17-silicon-backend.md)
+- `SilverServer.scala` and `silver.proto` (owned by this plan's registry entry but built
+  separately; see `SilverServer` artifact in D2)
 
 ## Dependencies
 
 - [01-project-setup.md](01-project-setup.md) — repository and build tooling
-- [14-silver-ast.md](14-silver-ast.md) — `*silver.Program` is the job payload type in `workerJob`;
-  `silver.Node` and `silver.NodeInfo` are used in `VerificationResult` and `VerificationError`
-  (defined by this plan in `internal/backend/types.go`)
+- [14-silver-ast.md](14-silver-ast.md) — `*silver.Program` is the job payload type in
+  `workerJob`; `silver.Node` and `silver.NodeInfo` are used in `VerificationResult` and
+  `VerificationError` (defined by this plan in `internal/backend/types.go`)
 
 ## Reference: Prior Art
 
-- [jnigi README](https://github.com/timob/jnigi) — usage examples
-- Prusti's JVM setup in `viper/src/` — see how it locates `libjvm` and constructs the
-  classpath; the Go equivalent follows the same pattern
-- `src/main/scala/viper/gobra/backend/ViperBackends.scala` — current Gobra's JVM setup
-  (but embedded, not via JNI)
+- D2 in `DECISIONS.md` — architectural rationale for the subprocess approach
+- `src/main/scala/viper/gobra/backend/ViperBackends.scala` — current Gobra's backend
+  interface (reference only; not the implementation path used here)
 
 ## Platform Notes
 
-**Do not hardcode a single path** — `libjvm` location varies across JDK distributions, versions,
-and package managers. Use runtime probing in this order:
+**JVM location**: Go-Gobra locates the JVM binary (`java`) via `JAVA_HOME`:
+1. `$JAVA_HOME/bin/java` (preferred on all platforms)
+2. PATH lookup as fallback if `JAVA_HOME` is unset
 
-1. `$JAVA_HOME/lib/server/libjvm.dylib` (macOS, standard HotSpot Intel/ARM64)
-2. `$JAVA_HOME/lib/libjvm.dylib` (macOS, Temurin/Zulu on Apple Silicon — no `server/` subdir)
-3. `$JAVA_HOME/jre/lib/server/libjvm.dylib` (older macOS JDK layouts)
-4. `$JAVA_HOME/lib/server/libjvm.so` (Linux)
-5. `$JAVA_HOME/jre/lib/amd64/server/libjvm.so` (Linux, older)
-6. `%JAVA_HOME%\bin\server\jvm.dll` (Windows)
+If neither resolves, fail fast with a message directing the user to set `JAVA_HOME`.
 
-If none succeed, fail fast with a message directing the user to set `JAVA_HOME` correctly.
+**jenv compatibility**: jenv manages `JAVA_HOME` via shell shims. Require users to enable
+jenv's export plugin: `jenv enable-plugin export`. The subprocess fork uses `JAVA_HOME/bin/java`
+directly; PATH shims are insufficient. Document this in the error message when the JVM is
+not found.
 
-**jenv compatibility**: jenv manages `JAVA_HOME` via shell shims. The shims affect PATH but
-`JAVA_HOME` must resolve to the *real* JDK installation directory, not a shim. Require users
-to enable jenv's export plugin: `jenv enable-plugin export`. Document this in the error message
-when `libjvm` is not found.
+**Subprocess per worker**: Each worker goroutine (plan 15b) owns one `SilverServer`
+subprocess for fault isolation — a JVM crash kills only that worker's subprocess, not the
+Go-Gobra process. Workers restart their subprocess independently via `Start()`. No singleton.
 
-**Worker pool skeleton**: Go-Gobra uses a `WorkerPool` of JNI worker goroutines. This plan
-delivers the JVM lifecycle, thread attach/detach, and the `workerJob` channel infrastructure.
-The full Silicon-aware worker template (which initialises a `SiliconFrontendAPI` per worker)
-and N-worker expansion are in plan 15b (which depends on plan 17).
-
-**Import discipline**: Plan 15 does NOT import the `silicon` sub-package. Both `jvm` and
-`silicon` sub-packages import their shared parent package `gobra/internal/backend` for
-`VerificationResult`, `SiliconInstance`, and `SiliconConfig`. This avoids the import cycle
-(`jvm` → `silicon` → `jvm`) that would arise if `SiliconConfig` were defined inside
-`internal/backend/silicon/`.
-
-Each worker goroutine **must call `runtime.LockOSThread()` at startup** and never unlock it.
-`LockOSThread` pins the goroutine to a single OS thread for its entire lifetime, which is
-required because JNI thread attachment is per-OS-thread: `AttachCurrentThread` is called once
-on that fixed OS thread, and all subsequent JNI calls from that worker run on the same
-attached thread. Without `LockOSThread`, the Go scheduler can silently migrate the goroutine
-to a different OS thread between CGo calls, making the JNI attachment state inconsistent.
-
-Each worker goroutine is independent — workers do not share JNI state. The pool design is
-therefore correct for both `poolSize=1` and `poolSize=N` without any coordination between
-workers. Plan 34 (test infrastructure) is safe at any pool size because each worker
-serializes its own JNI calls internally.
-
-**SilverBridge JAR**: At JVM startup, extract the embedded `SilverBridge.jar` (see plan 16)
-to a temp directory and add it to the classpath alongside the ViperServer JAR.
+**Import discipline**: Plan 15 does NOT import the `silicon` sub-package. Both `subprocess`
+and `silicon` sub-packages import their shared parent package `gobra/internal/backend` for
+`VerificationResult`, `SiliconInstance`, and `SiliconConfig`. This avoids the import cycle.
 
 ## Deliverables
 
 ### `internal/backend/types.go` (package `backend`) — Shared Backend Types
 
-This file is the canonical home for all types shared between the `jvm` and `silicon`
-sub-packages. Both sub-packages import `gobra/internal/backend`; neither imports the other,
-preventing the `jvm` → `silicon` → `jvm` import cycle.
-
 ```go
 // SiliconInstance is the interface implemented by silicon.SiliconFrontendAPI.
-// Defined here so the jvm sub-package can use it without importing silicon.
+// Defined here so the subprocess sub-package can use it without importing silicon.
 type SiliconInstance interface {
     Initialize(args []string)
-    Verify(prog jobject) *VerificationResult
+    Verify(prog *proto.SilverProgram) *VerificationResult
     Stop()
 }
 
@@ -118,9 +89,8 @@ type SiliconConfig struct {
 type VerificationResult struct {
     Success bool
     Errors  []VerificationError    // non-nil only when Success == false
-    Err     error                  // non-nil if the JNI call itself failed
+    Err     error                  // non-nil if the gRPC call itself failed
     NodeMap map[uint64]silver.Node // stable node ID → Go Silver node; for searchInfo fallback
-    Close   func()                 // caller must defer result.Close() before Report()
 }
 
 // VerificationError is a single verification failure with position and message.
@@ -133,133 +103,110 @@ type VerificationError struct {
 }
 ```
 
-`jobject` is jnigi's JNI object reference type (`*jnigi.JObject`); used here and in plan 16
-to refer to Java objects passed across the JNI boundary. `silver.Node` and `silver.NodeInfo`
-are from plan 14's `internal/silver/` package (plan 15's listed dependency).
+`silver.Node` and `silver.NodeInfo` are from plan 14's `internal/silver/` package. `proto`
+refers to the generated Go Protobuf bindings for `silver.proto` (owned by the `SilverServer`
+artifact, D2).
 
-Plan 17 (`internal/backend/silicon/`) and plan 15b (`internal/backend/jvm/`) both import
-`gobra/internal/backend` (this package) for these shared types.
+Plan 17 (`internal/backend/silicon/`) and plan 15b (`internal/backend/subprocess/`) both
+import `gobra/internal/backend` (this package) for these shared types.
 
-### `internal/backend/jvm/jvm.go` — JVM Lifecycle
+**`VerificationResult.Close` is removed** — there are no JNI global references to free.
+The Go `NodeMap` (a plain `map[uint64]silver.Node`) is GC'd normally after the result is
+consumed. Callers do NOT need to call `Close()` after `Report()`.
 
-- `Start(cfg JVMConfig) (*JVM, error)` and `(*JVM).Stop()`
-- `JVMConfig` struct: ViperServer JAR path, SilverBridge JAR path (embedded), JVM flags, Z3 path
+### `internal/backend/subprocess/subprocess.go` — Subprocess Lifecycle
+
+- `SubprocessConfig` struct: `JarPath string`, `JVMArgs []string`, `Z3Exe string`,
+  `GRPCPort int` (0 = pick a free port automatically)
+- `Start(cfg SubprocessConfig) (*Backend, error)` — forks `java -jar <JarPath> <JVMArgs>
+  --z3Exe <Z3Exe> --port <port>`, reads stdout until the sentinel line
+  `"SILVERSERVER_READY"`, dials a gRPC connection, returns `*Backend`
+- `type Backend struct { cmd *exec.Cmd; conn *grpc.ClientConn; client proto.SilverServerClient }`
+- `(*Backend).Stop()` — sends SIGTERM; waits `cfg.ShutdownGrace` (default 5s); sends SIGKILL
+- `(*Backend).Ping() error` — `client.Ping(ctx, &proto.PingRequest{})` with a short timeout;
+  returns non-nil if the subprocess is unresponsive
+- `(*Backend).Client() proto.SilverServerClient` — returns the gRPC client for use by plan 17
 - `WorkerPool` type skeleton: the `WorkerPool` struct and `Stop()` method.
-  This plan delivers the channel infrastructure and thread-lifecycle skeleton only.
+  This plan delivers the channel infrastructure and goroutine-lifecycle skeleton only.
   `NewPool` (the constructor with full signature) and `Submit` are defined in plan 15b.
-  Plan 15 exports the `workerJob` channel and the `WorkerPool` struct fields so that
-  plan 15b can complete the implementation without a circular import.
-- Worker goroutine skeleton — establishes the thread-locking invariant:
-
-  ```go
-  // runWorkerSkeleton is the JVM-level thread setup. The Silicon-specific
-  // body (SiliconFrontendAPI init, Build, Verify loop) is added in plan 15b.
-  func runWorkerSkeleton(jvm *JVM, jobs <-chan workerJob) {
-      runtime.LockOSThread()
-      jvm.AttachCurrentThread()
-      defer jvm.DetachCurrentThread()
-      // Plan 15b fills in the rest.
-  }
-  ```
-
-  The `workerJob` struct (defined here):
+- `workerJob` struct (defined here):
   ```go
   type workerJob struct {
       prog   *silver.Program
       result chan *backend.VerificationResult
   }
   ```
-  `backend.VerificationResult` is defined by this plan in `internal/backend/types.go` (see
-  deliverable above). Plan 15b (in the same `jvm` package) populates it. Plan 17 and plan 32
-  consume it. The import path `gobra/internal/backend` is the parent package of `jvm`; both
-  `jvm` and `silicon` sub-packages import it.
-- `libjvm` runtime probing across all known paths
-- Build tag or `cgo` preamble isolating the JNI dependency
-- Tests: start the JVM, call `java.lang.System.getProperty("java.version")`, verify it returns
-  a non-empty string; confirm probe succeeds under a jenv-managed `JAVA_HOME`
+- Tests: start a `SilverServer` subprocess; call `Ping()`; confirm it responds; call `Stop()`;
+  confirm the process exits
+
+### `internal/backend/silverserver/` — Embedded Fat JAR
+
+- `internal/backend/silverserver/jar.go` — `//go:embed SilverServer.jar`; exports
+  `var SilverServerJAR []byte` (written to a temp file at startup for subprocess fork)
+- `SilverServer.scala` (~300 lines) and `silver.proto` are the Scala/gRPC artifacts owned by
+  this plan's package ownership registry entry; they are built via `make SilverServer.jar`
+  and embedded. See D2 in `DECISIONS.md` for the full artifact description.
+
+### `internal/proto/` — Generated Go Protobuf Bindings
+
+- Generated by `protoc --go_out=internal/proto --go-grpc_out=internal/proto silver.proto`
+  (run from `internal/backend/silverserver/`). Checked in as generated code.
+- Exports: `proto.SilverProgram`, `proto.SilverMethod`, `proto.VerifyRequest`,
+  `proto.VerifyResponse`, `proto.SilverServerClient`, `proto.PingRequest`, etc.
+- Plan 16 (`Serialize`), plan 17 (`Verify`), and plan 15b (worker goroutine) all import
+  this package. Because `silver.proto` is owned by plan 15, the generated bindings are also
+  plan 15's deliverable — no circular dependency arises.
 
 ## Resolved Questions
 
-**JVM singleton (resolved):** JNI supports at most one JVM per OS process. `JNI_CreateJavaVM`
-returns an error if called a second time in the same process and may crash on concurrent calls.
-Go-Gobra uses a process-wide JVM singleton initialized via `sync.Once`: `jvm.Start()` is safe
-to call from multiple goroutines — only the first call creates the JVM; subsequent calls return
-the existing instance. Implement as:
+**No JVM singleton**: Each worker forks its own subprocess. There is no `sync.Once` and no
+process-wide JVM state. If a worker's subprocess crashes, `Ping()` detects it; the worker
+calls `Start()` again to restart it. Other workers are unaffected.
 
-```go
-var (
-    jvmOnce     sync.Once
-    jvmInstance *JVM
-    jvmErr      error
-)
+**No thread pinning**: Worker goroutines are plain goroutines. `runtime.LockOSThread()` is
+not called. There is no `AttachCurrentThread` / `DetachCurrentThread`. Workers communicate
+with their subprocess via gRPC over a local TCP connection — no OS thread constraints apply.
 
-func Start(cfg JVMConfig) (*JVM, error) {
-    jvmOnce.Do(func() {
-        jvmInstance, jvmErr = createJVM(cfg)
-    })
-    return jvmInstance, jvmErr
-}
-```
+**CGo removed**: `CGO_ENABLED=0` builds are fully supported. The Go binary cross-compiles
+freely; a JVM of the correct version is required only at runtime on the target platform (D2).
 
-`jvm.Stop()` is called once at process exit via `defer` in `main`. Do not call `Stop()`
-concurrently with any JNI worker.
-
-**Test isolation implication:** Because `jvmErr` is set permanently on first failure, any
-subsequent call to `Start()` — even with a corrected config — returns the cached error. This
-means: if one test binary starts the JVM with a bad JDK path (e.g., `JVMConfig{LibPath: ""}`),
-all later tests in the same binary that call `Start()` will fail, even if their config is
-correct. **Test isolation for JVM startup failures requires separate test binaries.** Tests that
-exercise JVM error paths must run in isolation (e.g., via `go test -run=TestBadJVM ./internal/backend/jvm/`
-as a distinct binary from tests that require a working JVM). This constraint should be noted in
-the test infrastructure plan (34) under "JVM test isolation."
-
-**CGo and cross-compilation (resolved):** CGo is required (jnigi depends on it). Cross-
-compilation is limited to target platforms where a JVM is available. Document in the README:
-"Go-Gobra requires CGo and cannot be cross-compiled to platforms without JVM support. Set
-`CGO_ENABLED=1` (the default) when building."
+**`backend.ThreadAttached()` predicate**: This predicate and all JNI thread-safety specs are
+**removed entirely**. No plan may reference `ThreadAttached()`. The predicate does not exist
+in `internal/backend/types.go` in this design.
 
 ### Synchronization Contract (C7)
 
-1. Operating System Thread Lock: Every Go function initializing or invoking a JNI call must explicitly execute `runtime.LockOSThread()` before interacting with the `jnigi` environment.
-2. JVM Attach/Detach Lifecycle: All entry points must utilize a `defer` block ensuring the current OS thread is cleanly detached from the JVM upon function exit.
-3. Global Instance Mutex: Access to the initialized JVM instance pointer must be guarded by a package-level sync.Once or sync.Mutex.
+| Resource | Mechanism | Plan |
+|---|---|---|
+| Subprocess fork | `sync.Mutex` on `Backend` struct during `Start`/`Stop` | 15 |
+| Worker pool channel | buffered `chan workerJob` | 15 |
+| `SiliconFrontendAPI` per worker | goroutine-local (no sharing) | 15b |
+
+No `sync.Once` JVM singleton. No OS-thread locking. Workers may call `Start()` concurrently;
+each call forks an independent subprocess.
 
 ### Verification Specifications (C9)
- 
-The JNI bridge package must formally specify thread-state safety using Gobra permissions:
- 
-1. **Thread-locked invariant**: The internal `callJVM` helper may only be called from a goroutine
-   that holds the OS-thread lock and has an attached JVM thread. The thread-ownership ghost
-   predicate is declared in `internal/backend/types.go` (package `backend`):
+
+1. **`Start` postcondition** — on success the returned `*Backend` is non-nil and the
+   subprocess is reachable:
    ```go
-   //@ pred ThreadAttached()
-   ```
-   
-   Functions inside `jvm.go` reference it from the parent package:
-   ```go
-   //@ requires acc(backend.ThreadAttached(), 1)
-   //@ ensures  acc(backend.ThreadAttached(), 1)
-   func (jvm *JVM) callJVM(method string) error
-   ```
-   `ThreadAttached` takes no argument because the JVM is a process-wide singleton (plan 15
-   `sync.Once`); there is never ambiguity about which JVM's attachment is meant. The predicate
-   models OS-thread state: each goroutine that holds `acc(backend.ThreadAttached(), 1)` has its
-   underlying OS thread attached. An un-attached goroutine has no token, so calling `callJVM`
-   without it is a static verification error.
- 
-2. **Attach/detach lifecycle**: `AttachCurrentThread` produces the token; `DetachCurrentThread`
-   consumes it. The `defer` pattern in `runWorkerSkeleton` must be annotated:
-   ```go
-   //@ ensures acc(backend.ThreadAttached(), 1)
-   func (jvm *JVM) AttachCurrentThread()
- 
-   //@ requires acc(backend.ThreadAttached(), 1)
-   func (jvm *JVM) DetachCurrentThread()
-   ```
- 
-3. **JVM singleton**: `Start` has a postcondition that the returned `*JVM` is non-nil on nil error:
-   ```go
-   //@ ensures err == nil ==> j != nil
-   func Start(cfg JVMConfig) (j *JVM, err error)
+   //@ ensures err == nil ==> b != nil
+   func Start(cfg SubprocessConfig) (b *Backend, err error)
    ```
 
+2. **`Stop` postcondition** — after `Stop` returns, the subprocess is no longer running:
+   ```go
+   //@ requires b != nil
+   //@ ensures  !b.Running()
+   func (b *Backend) Stop()
+   ```
+   `Running()` is a ghost pure function that inspects `b.cmd.ProcessState`.
+
+3. **`WorkerPool` non-nil result**:
+   ```go
+   //@ requires poolSize >= 1
+   //@ ensures  pool != nil
+   func NewPool(poolSize int, cfg backend.SiliconConfig) (pool *WorkerPool)
+   ```
+   (`NewPool`'s full body is in plan 15b; the spec is declared here because `WorkerPool` is
+   owned by this plan.)

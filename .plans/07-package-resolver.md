@@ -134,27 +134,28 @@ producing a complete set of parsed frontend ASTs ready for type checking.
      `ParseAnnotation(raw.Text, raw.Pos, key == nil)` (plan 05) → `(nodes []PNode, decls []PDecl, diags)`.
      - `key == nil` signals file-scope: `decls` contains ghost declaration nodes (`PAdtType`,
        `PGhostFunc`, `PPredDecl`) which are appended directly to `pfile.GhostDecls []PDecl`.
-     - `key != nil` (block-scope): `nodes` contains spec clause and ghost statement nodes;
-       pass them to `MergeGhostStatements` for step 4.
+     - `key != nil` (block-scope, `key *ast.BlockStmt`): `nodes` contains spec clause and ghost
+       statement nodes; pass them to `MergeGhostStatements` for step 4.
   4. `MergeGhostStatements(pfile, ghostNodes)` → interleaves ghost statement nodes into the
      correct locations in the `PFile`. Two separate routing rules apply:
 
      **Rule A — loop invariant routing**: Any ghost node whose annotation keyword is
-     `invariant` (i.e., the raw annotation text parsed by plan 05 begins with `invariant`)
-     must be appended to `PForStmt.Spec.Invariants` (or `PRangeStmt.Spec.Invariants`) on the
-     `PForStmt` or `PRangeStmt` node (via the embedded `PLoopSpec` field) whose `Pos()`
-     immediately follows the invariant's `Pos()` in the enclosing `PBlockStmt.Stmts`. Do NOT
-     insert invariant nodes into `PBlockStmt.Stmts` — they are not statements. If no
-     `PForStmt`/`PRangeStmt` immediately follows, emit a diagnostic:
+     `invariant` must be appended to the enclosing for-loop's `LoopSpec.Invariants`. The
+     for/range statement whose `Pos()` immediately follows the invariant's `Pos()` in the
+     enclosing block is the target; its loop spec is accessed via
+     `pfile.Metadata[forOrRangeStmt].LoopSpec`. If the `LoopSpec` field is nil, allocate a
+     new `PLoopSpec` and store it. Do NOT insert invariant nodes into `PBlockStmt.Stmts` —
+     they are not statements. If no for/range statement immediately follows, emit a diagnostic:
      `"invariant annotation not attached to a for-loop"`.
 
-     **Rule B — all other ghost nodes**: Insert into `PBlockStmt.Stmts` in source order by
-     `Pos()`, interleaved with existing `PGoStmt` nodes.
+     **Rule B — all other ghost nodes**: Obtain the `PBlockStmt` for the enclosing block via
+     `pfile.Metadata[blockStmt].Block` and insert ghost statement nodes into its `Stmts`
+     in source order by `Pos()`, interleaved with existing `PGoStmt` nodes.
 
   `MergeGhostStatements` is a pure function in `internal/frontend/packageresolver.go`. It
   first separates ghost nodes by type (invariants vs. other), routes invariants to their
-  enclosing for-loop via `PForStmt.Spec.Invariants` (Rule A), then merges the remainder into
-  the block's statement list in `Pos()` order (Rule B).
+  enclosing for-loop's Metadata entry (Rule A), then merges the remainder into the block's
+  statement list in `Pos()` order (Rule B).
 
   File-scope `//@ ` comments are stored under the **nil key** in `pfile.BlockAnnotations`
   (plan 04 convention). `ParseAnnotation(isFileScope=true)` returns their parsed declarations
@@ -219,10 +220,10 @@ package list. The following Gobra annotations will be written into
    is processed before the block-keyed entries; `pfile.GhostDecls` is populated from the
    nil-key decls before `MergeGhostStatements` merges block-scope nodes:
    ```go
-   //@ requires pfile != nil && acc(pfile.BlockAnnotations)
+   //@ requires pfile != nil && acc(pfile.BlockAnnotations) && acc(pfile.Metadata)
    //@ ensures  acc(pfile.GhostDecls)
    //@ decreases
-   func MergeGhostStatements(pfile *frontend.PFile, blockNodes map[*frontend.PBlockStmt][]frontend.PNode) []Diagnostic
+   func MergeGhostStatements(pfile *frontend.PFile, blockNodes map[*ast.BlockStmt][]frontend.PNode) []Diagnostic
    ```
 
 4. **Termination** — `Resolve` terminates because the import graph is finite and acyclic (cycles

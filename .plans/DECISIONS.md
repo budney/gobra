@@ -19,48 +19,67 @@ rewrite in effort and risk.
 
 ---
 
-## D2 — Backend interface: JNI via jnigi (embed JVM in-process)
+## D2 — Backend interface: out-of-process gRPC subprocess (`SilverServer`)
 
-**Decision:** Go-Gobra embeds a JVM in-process using [jnigi](https://github.com/timob/jnigi)
-(a CGo-based JNI binding for Go) and calls Silicon/Carbon directly as Java objects, without
-going through the ViperServer HTTP API.
+**Decision:** Go-Gobra communicates with Silicon via an out-of-process JVM subprocess running
+`SilverServer` — a thin Scala gRPC server (~300 lines). Go-Gobra serializes the Go Silver AST
+to a Protobuf message (`SilverProgram`), sends a `VerifyRequest` over gRPC, and receives a
+`VerifyResponse` with structured error objects. `SilverServer` is built as a fat JAR, embedded
+in the Go binary via `//go:embed`, and forked as a subprocess at startup by plan 15's
+lifecycle code. Each worker goroutine (plan 15b) owns its own `SilverServer` subprocess for
+fault isolation.
 
 **Rationale:**
-- The ViperServer HTTP API accepts a local filesystem path to a `.vpr` text file; ViperServer
-  reads the file itself. This requires a shared filesystem, a running ViperServer process,
-  generating Silver as text, and writing it to disk — significant overhead and complexity.
-- JNI is what Prusti (Rust verifier) and Nagini (Python verifier) do: they embed the JVM
-  in-process and call Silicon/Carbon as native Java objects. This is the established pattern
-  for non-JVM Viper front-ends.
-- In-process JNI gives: no filesystem boundary, no HTTP overhead, richer error object access,
-  and direct `silver.ast.Program` object passing (same as Gobra's current Scala approach).
-- Go JNI libraries exist: jnigi, jnigo, GoJVM. jnigi is the most actively maintained.
+- The originally planned JNI approach (via jnigi) required CGo, a process-wide `sync.Once`
+  JVM singleton, `runtime.LockOSThread()` on every worker goroutine, and `SilverBridge.java`
+  to work around Scala collection construction difficulties. At that point — with a Java
+  artifact already present — the "no second language artifact" argument against a gRPC shim
+  was moot. The gRPC subprocess achieves the same result with fewer constraints.
+- JVM crashes are sandboxed to the subprocess: a GC failure or Silicon assertion error kills
+  only the worker's subprocess, not the Go-Gobra process. Workers restart their subprocess
+  independently.
+- No CGo: Go-Gobra is buildable with `CGO_ENABLED=0`. The Go binary cross-compiles freely;
+  a JVM of the right version is required only at runtime on the target platform.
+- Worker goroutines are plain goroutines (no `runtime.LockOSThread()`). Pool size is limited
+  only by available CPU and memory, not by OS thread counts.
+- Z3 runs as a subprocess per D15; each worker's `SilverServer` manages its own Z3 process,
+  so no Z3 thread-safety constraints apply across workers.
+
+**`SilverServer` artifact:** A thin Scala gRPC server in
+`internal/backend/silverserver/SilverServer.scala` (~300 lines). It receives a
+`VerifyRequest` containing a serialized `SilverProgram`, deserializes it into a real
+`silver.ast.Program` using Scala Protobuf bindings, calls Silicon's `verify()`, and returns
+a `VerifyResponse` with structured results. Built as a fat JAR, embedded in the Go binary
+via `//go:embed` in `internal/backend/silverserver/jar.go`, and forked by plan 15's subprocess
+lifecycle code. See [15-jni-setup.md](15-jni-setup.md).
+
+**jenv compatibility:** `JAVA_HOME` must resolve to the real JDK installation, not a shell
+shim. Users with jenv must enable the export plugin: `jenv enable-plugin export`. The `java`
+binary locator uses `JAVA_HOME` for the subprocess fork; without the real `JAVA_HOME`, the
+fork will fail. See [15-jni-setup.md](15-jni-setup.md).
 
 **Alternatives considered:**
-1. **ViperServer HTTP API + `.vpr` files** — simplest to implement but requires shared
-   filesystem, temp file I/O, and a separately managed ViperServer process. Only `viper_client`
-   (a demo/testing tool) uses this; no production Viper front-end does.
-2. **gRPC shim** — write a ~200-line Scala server accepting Silver via gRPC from Go. Clean
-   protocol, typed interface, but requires maintaining a second artifact in a second language,
-   which conflicts with the goal of a self-contained Go codebase.
-3. **Prusti-style JVM shim server** — a small JVM process accepting requests from Go. More
-   moving parts than direct JNI with no clear advantage.
+1. **ViperServer HTTP API + `.vpr` files** — simplest, but requires a shared filesystem,
+   temp file I/O, and a separately managed ViperServer process. No production Viper front-end
+   uses this path. Rejected.
+2. **JNI via jnigi (in-process)** — originally selected; later found to require CGo,
+   OS-thread pinning, a `sync.Once` JVM singleton, and `SilverBridge.java` for Scala
+   collection construction. The gRPC subprocess achieves the same integration with fewer
+   constraints. Rejected after discovering the JNI complexity.
+3. **Prusti-style JVM shim server** — effectively equivalent to `SilverServer` but without
+   the Protobuf protocol. Collapsed into the chosen approach.
 
-**Thin Java helper JAR addendum**: Direct JNI construction of `scala.collection.immutable.Seq`
-objects (required by Silver constructors) is impractical from Go — it requires calling
-`Nil$.MODULE$` and `$colon$colon()` for every list element in reverse. A thin Java helper class
-(`SilverBridge.java`, ~150 lines) wraps Silver constructors with Java-friendly `Object[]`
-signatures and handles Scala collection construction internally. This is compiled into
-`SilverBridge.jar`, embedded in the Go binary via `//go:embed`, and loaded alongside the
-ViperServer JAR at startup. See [16-silver-jni-builder.md](16-silver-jni-builder.md).
-
-**jenv compatibility**: `JAVA_HOME` must resolve to the real JDK installation, not a shell
-shim. Users with jenv must enable the export plugin: `jenv enable-plugin export`. The
-`libjvm` locator uses runtime probing across multiple known paths rather than a hardcoded
-single path — see [15-jni-setup.md](15-jni-setup.md).
-
-**Consequence:** Go-Gobra requires CGo. Cross-compilation is limited to platforms where a
-JVM is available. `JAVA_HOME` must be set at runtime and resolve to the real JDK root.
+**Consequences:**
+- Go-Gobra does NOT require CGo. `CGO_ENABLED=0` builds are supported.
+- Cross-compilation: the Go binary cross-compiles freely. A JVM of the correct version must
+  be available at runtime on the target platform.
+- `backend.ThreadAttached()` predicate and all JNI thread-safety specs are removed entirely.
+  Plan 15b's C9 specs use goroutine-safety and subprocess health invariants instead.
+- `SilverServer` and `silver.proto` must be updated in lockstep with the Silver submodule
+  version. When the `viperserver/` submodule is updated, regenerate the Protobuf bindings and
+  rebuild the fat JAR.
+- The `SilverServer` fat JAR is embedded in the Go binary; binary size increases by
+  approximately the size of the fat JAR (dominated by Silicon and dependencies).
 
 ---
 
@@ -211,41 +230,59 @@ parallel `GhostTypeInfo` for Gobra-specific constructs. The two are combined int
 
 ---
 
-## D10 — Frontend AST visitor: companion wrapper structs
+## D10 — Frontend AST visitor: side-table + `PBlockStmt` exception (Option A)
 
-**Decision:** The Gobra frontend AST uses **companion wrapper structs** (Option B) for every
-`go/ast` node that Gobra extends. A single `Visitor` interface covers all Gobra node types,
-giving the type checker (08) and desugarer (12) one traversal mechanism.
+**Decision:** The Gobra frontend AST uses a **`GobraMetadata` side-table**
+(`map[ast.Node]*GobraMetadata` field on `PFile`) to attach Gobra extensions to `go/ast` nodes.
+No companion wrapper structs are defined for `go/ast` node types. The single exception is
+`PBlockStmt`, which survives as a **standalone container** (not a wrapper) — `*ast.BlockStmt`
+cannot represent interleaved ghost/Go statement order, so `PBlockStmt` fills that structural gap.
 
-**Nodes that get wrappers** (only those Gobra actually extends):
-- `PFunctionDecl` wraps `*ast.FuncDecl` + `*PFunctionSpec` + `*PBodyParameterInfo`
-- `PMethodDecl` wraps `*ast.FuncDecl` + `Receiver *PReceiver` + `*PFunctionSpec` + `*PBodyParameterInfo`
-  (The `Receiver` field is a Gobra-specific `*PReceiver` carrying the full method receiver
-  definition: named vs. unnamed, value/actual-pointer/ghost-pointer receiver type, and
-  addressability. `go/ast` cannot distinguish ghost pointer receivers from actual pointer
-  receivers — both are `*ast.StarExpr`. `PReceiver` fills this gap and is the authoritative
-  receiver for spec checking. `ast.FuncDecl.Recv` is still used by `go/types` for Go-level
-  type checking.)
-- `PTypeDecl` wraps `*ast.TypeSpec` + optional Gobra type extension
-- `PInterfaceType` wraps `*ast.InterfaceType` + ghost method specs
-- `PBlockStmt` wraps `*ast.BlockStmt` + interleaved ghost statements
-- `PForStmt` / `PRangeStmt` wrap their `go/ast` counterparts + loop spec (`PLoopSpec`)
+**Nodes extended via the side-table** (not wrappers):
+- `*ast.FuncDecl` → `GobraMetadata.Spec *PFunctionSpec`, `.BodyParamInfo *PBodyParameterInfo`,
+  `.Receiver *PReceiver` (non-nil only for method declarations). `PReceiver` carries the full
+  Gobra receiver definition: named vs. unnamed, value/actual-pointer/ghost-pointer type, and
+  addressability — `go/ast` cannot distinguish ghost pointer receivers from actual pointer
+  receivers (both are `*ast.StarExpr`). `ast.FuncDecl.Recv` is still used by `go/types` for
+  Go-level type checking.
+- `*ast.TypeSpec` → `GobraMetadata.GhostExt PNode`
+- `*ast.InterfaceType` → `GobraMetadata.GhostMethods []*PFunctionSpec`
+- `*ast.ForStmt` → `GobraMetadata.LoopSpec *PLoopSpec`
+- `*ast.RangeStmt` → `GobraMetadata.LoopSpec *PLoopSpec`
+- `*ast.BlockStmt` → `GobraMetadata.Block *PBlockStmt` (the corresponding `PBlockStmt` with
+  interleaved ghost statements)
 
-Leaf nodes Gobra doesn't annotate (`*ast.BasicLit`, `*ast.Ident`, etc.) stay as `go/ast` types.
+`PBlockStmt` itself is a standalone node (not a wrapper). It exists because `*ast.BlockStmt`
+is structurally incapable of representing the interleaved ghost/Go statement order that Gobra
+requires. All other extension data travels via `pfile.Metadata[node]`.
+
+The `Visitor` interface is restricted to ghost-only nodes. Traversal of `go/ast` nodes uses
+`ast.Inspect` directly. The type checker (plan 08) and desugarer (plan 12) both use unified
+`ast.Inspect` + `pfile.Metadata[node]` lookups.
 
 **Rationale:**
-- A single visitor mechanism for the type checker and desugarer avoids having to coordinate
-  two traversal APIs (`go/ast`'s own visitor and a separate Gobra visitor) at every call site.
-- Boilerplate is bounded: only a small, fixed set of `go/ast` node types need wrappers.
-- The approach is consistent with the user's preference for abstraction.
+- Plan 03 requires two traversal mechanisms regardless of this choice: `go/types.Check` drives
+  traversal of the `*ast.File` for Go type checking; ghost nodes need their own handling.
+  Wrapper structs did not reduce this to one mechanism — they added boilerplate without
+  eliminating the two-mechanism structure. The "single traversal mechanism" advantage of
+  Option B was illusory.
+- No wrapper boilerplate: adding Gobra data to a Go AST node requires one `GobraMetadata`
+  struct field lookup, not a new named type plus constructor plus Visitor method.
+- Callers access the embedded `go/ast` node directly from `ast.Inspect`; no wrapper
+  type-assertion is needed to reach the underlying node.
 
 **Alternatives considered:**
-1. **Side-table only (Option A)** — no wrappers; extensions in `map[ast.Node]GobExtension`.
-   Minimal boilerplate but callers must manage two traversals.
-2. **PFile + targeted extension visitor (Option C)** — middle ground. Rejected as offering
+1. **Companion wrapper structs (Option B)** — wrappers for every `go/ast` node Gobra extends.
+   The stated advantage ("single Visitor mechanism") was illusory: plan 03 requires two
+   traversal mechanisms regardless (go/types.Check + ghost visitor). Rejected: adds wrapper
+   boilerplate without eliminating the two-mechanism structure.
+2. **`PFile` + targeted extension visitor (Option C)** — middle ground. Rejected as offering
    neither the simplicity of A nor the uniformity of B.
 
-**Consequence:** See plan 03 for the complete list of wrapper types and the visitor interface.
+**Consequence:** See plan 03 for the `GobraMetadata` struct definition, the `PFile.Metadata`
+field, and the shrunk `Visitor` interface (ghost-only nodes). Plan 08 looks up
+`pfile.Metadata[node]` for Gobra extensions. Plan 12 uses unified `ast.Inspect` with
+`pfile.Metadata[node]` lookups instead of a two-dispatch traversal model.
 
 ---
 
@@ -380,3 +417,86 @@ sets or interface satisfaction) call `ctx.TypeInfo()` to retrieve the `*TypeInfo
 cross-stage information. This rule was the basis for fixing `EncodeInterface` (plan 25) from
 `*types.Interface` to `*internal.InterfaceType` and `BoxValue`'s `T` parameter from
 `types.Type` to `internal.Type`.
+
+---
+
+## D15 — Z3 execution: subprocess via `--z3Exe` (Java API rejected)
+
+**Decision:** Go-Gobra runs Z3 as a subprocess, specified via `--z3Exe=$Z3_EXE`, and passes
+this flag as part of the `args []string` to `silicon.initialize(args)`. The Z3 Java API
+(`--z3APIMode`) is not implemented.
+
+**Rationale:**
+- The Z3 Java API has shared global state that is not thread-safe for concurrent calls from
+  different threads in the same process. Using it requires forcing `poolSize=1`, eliminating
+  all parallelism benefits from the worker pool.
+- Z3 as a subprocess imposes no such restriction: each worker forks its own Z3 subprocess
+  independently with no shared state. This is the standard Silicon deployment mode.
+- `--z3Exe` is Silicon's default path; the Java API (`--z3APIMode`) is a rarely-used
+  alternative that no production Gobra deployment relies on.
+
+**Alternatives considered:**
+1. **Z3 Java API (`--z3APIMode`)** — eliminates subprocess fork overhead but forces
+   `poolSize=1` due to thread-safety limitations. Rejected: the parallelism constraint
+   outweighs the minor startup speedup on any machine with more than one CPU.
+
+**Consequence:** The `poolSize=1` Z3-API-mode constraint is removed entirely. Workers are not
+forced to single-threaded operation on account of Z3. The `--z3APIMode` flag and associated
+warning/clamping logic are not implemented in Go-Gobra. Plan 15b's worker pool is free to use
+any `poolSize >= 1` without Z3-related restrictions.
+
+---
+
+## D16 — Ghost name resolution: `GobraScope` overlay over `*go/types.Scope`
+
+**Decision:** Ghost name resolution in the type checker (plan 08) routes through a `GobraScope`
+interface that wraps a `*go/types.Scope`. `GobraScope.Lookup(name)` checks the ghost
+declaration table first; on miss, it delegates to the underlying `types.Scope.Lookup(name)`.
+No call site accesses `GhostTypeInfo` directly for name resolution; all name-by-string lookups
+go through `GobraScope`. `GhostTypeInfo` remains as **storage** (the map of resolved ghost
+types keyed by `PNode`), not as a name-lookup mechanism.
+
+**`GobraScope` interface (defined in `internal/info/checker.go`):**
+```go
+type GobraScope interface {
+    // Lookup checks ghost declarations first, then delegates to the Go scope.
+    Lookup(name string) types.Object
+    // GoScope returns the underlying *go/types.Scope for go/types interop.
+    GoScope() *types.Scope
+}
+```
+
+**`gobraScopeImpl` (unexported implementation):**
+```go
+type gobraScopeImpl struct {
+    ghostDecls map[string]types.Object  // name → ghost object (predicate, ghost func, ADT)
+    goScope    *types.Scope
+}
+func (s *gobraScopeImpl) Lookup(name string) types.Object {
+    if obj, ok := s.ghostDecls[name]; ok { return obj }
+    return s.goScope.Lookup(name)
+}
+func (s *gobraScopeImpl) GoScope() *types.Scope { return s.goScope }
+```
+
+**Rationale:**
+- Without `GobraScope`, callers must check `GhostTypeInfo.Types[node]` and
+  `go/types.Scope.Lookup(name)` separately and reconcile results — split-tier call sites
+  that are error-prone and verbose.
+- `GobraScope` mirrors the `go/types.Scope` API, so the ghost-lookup path is structurally
+  identical to the Go-lookup path. Plans 09 and 10 both need to look up names across both
+  tiers; one `Lookup` covers both.
+- `GhostTypeInfo.Types` is keyed by `PNode` (for resolved type annotation), not by name.
+  Keeping storage and lookup separate avoids conflating the two distinct roles.
+
+**Alternatives considered:**
+1. **Direct `GhostTypeInfo` queries at each call site** — requires each caller to implement
+   the ghost-first fallback pattern manually. Rejected: duplicates the logic and misses the
+   ghost-first priority at any call site that forgets to check ghost first.
+
+**Consequence:** Plan 08 constructs a `gobraScopeImpl` per block/file/package scope,
+populating `ghostDecls` from `PFile.GhostDecls` during Pass 1. Plan 09 calls
+`GobraScope.Lookup` for name resolution in spec expressions instead of direct `GhostTypeInfo`
+queries. Plan 10 wraps `GobraScope` per imported package for cross-package ghost name
+resolution. The `GhostTypeInfo.Types` map is written by plan 09's `CheckSpecs` and read by
+downstream plans (desugarer, translator) — it is never used for name-by-string lookup.

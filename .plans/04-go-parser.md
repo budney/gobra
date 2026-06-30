@@ -14,17 +14,18 @@ process in a second pass.
   the preprocessed source bytes directly via `go/parser`'s `src interface{}` parameter —
   **no temp file needed**. `parser.AllErrors` is required to report all parse errors, not
   just the first ~10; without it the "accumulate all errors" goal is silently broken.
-- Walk the `go/ast` tree and produce Gobra frontend AST nodes
+- Walk the `go/ast` tree and populate `PFile.Metadata` entries for nodes with Gobra extensions
+  (function/method declarations get spec/receiver metadata; loop bodies get block mapping)
 - Collect all `//@ ...` comment groups and record them in `PFile.BlockAnnotations`:
   - Each `go/ast.CommentGroup` of consecutive `//@ ` lines becomes **one** `frontend.RawAnnotation`
     (lines joined with `\n`, `//@ ` prefix stripped, `Pos` is the first line). Concatenation
     happens here so plan 05 always receives one logical annotation per `RawAnnotation`.
-  - Each `RawAnnotation` is placed under the key of the **innermost enclosing `*PBlockStmt`**
+  - Each `RawAnnotation` is placed under the key of the **innermost enclosing `*ast.BlockStmt`**
     whose source range contains the comment's `Pos()`. Loop-spec annotations (`//@ invariant P`,
     `//@ decreases e`) that appear immediately before a `for` loop's `{` fall inside the
     **enclosing block** (the block containing the `for` statement), not the loop body. They
-    are stored under that enclosing block's key; plan 07 routes them to `PForStmt.Spec` during
-    `MergeGhostStatements` (step 4, Rule A).
+    are stored under that enclosing block's key; plan 07 routes them to the for/range node's
+    `GobraMetadata.LoopSpec` during `MergeGhostStatements` (step 4, Rule A).
   - File-scope annotations (from `//@ ` blocks at the top level, produced by the Gobrafier
     for ghost ADTs / predicates / funcs) are stored under the **nil key**. Plan 07 detects
     the nil key and routes these to `PFile.GhostDecls`.
@@ -97,13 +98,17 @@ file path, not any temp-file path.
     annotations via `pfile.BlockAnnotations`; there is no separate annotation-map return value.
     The nil-key convention (file-scope annotations) is described in the In-scope bullet above.
     Plan 07's `MergeGhostStatements` must check `if key == nil { ... }` before the merge loop.
+    Keys are `*ast.BlockStmt` (not `*PBlockStmt`); the `PBlockStmt` corresponding to each block
+    is obtained via `pfile.Metadata[blockStmt].Block`.
   - **Recoverable parse errors**: return a *partial* `*frontend.PFile` alongside diagnostics.
     `go/parser` (in `AllErrors` mode) reports all errors and continues; callers (plan 07, plan 33)
     inspect diagnostics and decide whether to abort.
   - **Bad\* nodes** (see section below): return `nil` for `*frontend.PFile`. Diagnostics still returned.
   - In both cases `[]Diagnostic` is non-nil (empty slice on success, non-empty on any error).
   - **`PBlockStmt.Stmts` is NOT fully assembled here.** It contains only `*PGoStmt`-wrapped Go
-    statements; plan 07 runs `MergeGhostStatements` to complete each `PBlockStmt`.
+    statements; plan 07 runs `MergeGhostStatements` to complete each `PBlockStmt`. Each
+    `*ast.BlockStmt` in the `*ast.File` has a corresponding `PBlockStmt` stored in
+    `pfile.Metadata[blockStmt].Block` — populated by `ParseFile` before returning.
 - `frontend.RawAnnotation` type is defined in `internal/ast/frontend/` (plan 03):
   `{Text string; Pos token.Pos}` — the logical annotation text with `//@ ` prefix stripped,
   position of the first line. Multi-line annotations are pre-concatenated by `ParseFile`.
@@ -161,13 +166,16 @@ so its Gobra specifications focus on nil-safety, termination, and diagnostic com
    func ParseFile(fset *token.FileSet, filename string, src []byte) (...)
    ```
 
-4. **BlockAnnotations ownership**: after a successful call, `pfile.BlockAnnotations` is
-   fully populated and no other live reference to the map exists; plan 07 holds exclusive
-   access:
+4. **BlockAnnotations ownership**: after a successful call, `pfile.BlockAnnotations` and
+   `pfile.Metadata` are fully populated and no other live reference to the maps exist;
+   plan 07 holds exclusive access:
    ```go
    //@ ensures pfile != nil ==>
-   //@     forall k *frontend.PBlockStmt ::
-   //@         k != nil ==> acc(k) && acc(pfile.BlockAnnotations[k])
+   //@     forall k *ast.BlockStmt ::
+   //@         k != nil ==> acc(pfile.BlockAnnotations[k])
+   //@ ensures pfile != nil ==>
+   //@     forall k ast.Node ::
+   //@         k != nil ==> acc(pfile.Metadata[k])
    ```
 
 ## Resolved Questions
