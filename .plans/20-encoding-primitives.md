@@ -25,6 +25,8 @@ integers (all sizes and signedness), booleans, strings, bytes, runes, and uintpt
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context and encoding interface
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.Type`, `internal.Expr`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Type`, `silver.Expr`, etc.)
 
 ## Reference: Current Gobra
 
@@ -156,11 +158,16 @@ and verified before this plan is considered complete.
    ```go
    //@ ghost field goIntDivEmitted bool
    //@ invariant goIntDivEmitted ==> goIntDivFn != nil
-   //@ invariant goIntDivEmitted ==> old(goIntDivFn) == goIntDivFn // pointer stable
+   // Pointer stability (goIntDivFn does not change after being set) is guaranteed by
+   // implementation: the cache field is written exactly once (guarded by goIntDivEmitted)
+   // and never reassigned. `old()` is not valid in a Gobra struct invariant (no before/after
+   // semantics in that context), so this property is documented here rather than encoded.
    ```
 
 5. **String domain singleton**: the `Strings` Silver domain is emitted exactly once per
-   translation context. All string-literal functions refer to the same domain instance:
+   translation context. All string-literal functions refer to the same domain instance.
+   `ctx.HasDomain` and `ctx.HasDomainFn` are ghost pure methods declared on the `Context`
+   interface in plan 19 (translator-core):
    ```go
    //@ ensures ctx.HasDomain("Strings")
    //@ ensures forall lit string :: ctx.HasDomainFn("stringLit_" + hexEncode(lit))

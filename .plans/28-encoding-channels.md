@@ -23,6 +23,8 @@ for concurrent communication; their verification requires modeling ownership tra
 
 - [19-translator-core.md](19-translator-core.md) — Context
 - [26-encoding-permissions.md](26-encoding-permissions.md) — permission transfer model
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.ChanT`, `internal.Send`, `internal.Receive`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Domain`, `silver.Method`, etc.)
 
 ## Reference: Current Gobra
 

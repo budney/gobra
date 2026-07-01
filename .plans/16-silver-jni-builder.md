@@ -189,9 +189,10 @@ only shared state is `globalNodeID`, which is protected by `atomic.Uint64`).
    ```
 
 4. **Termination** — `serializeProgram` terminates because the Silver AST is a finite DAG
-   (guaranteed by plan 14's `acyclicExp` predicate):
+   (guaranteed by plan 14's `acyclicProg` predicate; `acyclicExp` covers expression sub-trees,
+   while `acyclicProg` covers the full program — see plan 14 C9 section 4):
    ```go
-   //@ requires acyclicExp(prog, set[silver.Node]{})
+   //@ requires acyclicProg(prog, set[silver.Node]{})
    //@ decreases prog.NodeCount()
    func (s *Serializer) serializeProgram(prog *silver.Program) (msg *proto.SilverProgram, err error)
    ```

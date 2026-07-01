@@ -24,6 +24,8 @@ Implement the encoding of Go pointer types and pointer operations into Silver.
 
 - [19-translator-core.md](19-translator-core.md) — Context
 - [21-encoding-structs.md](21-encoding-structs.md) — pointer-to-struct patterns
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.PointerT`, `internal.Deref`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Ref`, `silver.FieldAccess`, etc.)
 
 ## Reference: Current Gobra
 
@@ -114,6 +116,17 @@ it is a local variable on the Go stack, not pointed to by anything in scope → 
 
 The following Gobra annotations will be written into `internal/translator/encodings/pointers.go`
 and verified before this plan is considered complete.
+
+Ghost predicates declared in `internal/translator/encodings/pointers.go` for use in C9 specs:
+```go
+// freshRef reports whether no existing Silver expression in ctx aliases this Ref value.
+// Ghost-only predicate; no runtime implementation.
+//@ pred freshRef(r silver.Expr)
+
+// inhaledAcc reports whether full write permission on r has been inhaled into the
+// current Silver method's permission state (i.e., acc(r, write) appears in the inhale).
+//@ pred inhaledAcc(r silver.Expr)
+```
 
 1. **`EncodePointer` non-nil result** — encoding always produces a valid Silver expression:
    ```go

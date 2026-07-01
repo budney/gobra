@@ -98,3 +98,8 @@ viperproject/gobra/
   runners. Use symlinks; add a note in CI to enable symlink support if needed.
 - Should `gobra-go/` have its own `README.md` explaining it is the Go rewrite in progress?
   Yes — add a minimal one pointing to `CONTEXT.md` and `DECISIONS.md` in `.plans/`.
+
+## Verification Specifications (C9)
+
+C9: N/A — This plan delivers repository skeleton, go.mod, CI configuration, Makefile, and
+license header tooling. No Go functions with verifiable pre/postconditions are implemented.

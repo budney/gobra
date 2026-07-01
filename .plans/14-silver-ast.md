@@ -187,10 +187,16 @@ embedding — the Protobuf fields are the cross-language transport. The Go-side 
 is also used by `searchInfo` DFS via `Children()` calls (plan 32).
 
 **Centralized tag registry:** The `Tag` strings set during translation (`"call"`, `"fold"`,
-`"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table. All valid
-tag constants are defined in `internal/reporting/tags.go` (owned by plan 32). Encoding modules
-import `reporting.TagXxx` constants when constructing `NodeInfo`; the reporter imports the same
-constants for its dispatch table. No bare string literals for tags anywhere outside `tags.go`.
+`"return"`, etc.) are consumed by the reporter's `(errorType, tag)` dispatch table.
+
+`TagSynthetic = "synthetic"` is the one exception: it is defined here in plan 14's
+`internal/silver/ast.go` (a `const`) because plan 14's own C9 factory preconditions reference
+it, and plan 14 must not import plan 32 (which would be circular: plan 32 depends on plan 14).
+
+All other tag constants (`TagCall`, `TagFold`, `TagReturn`, `TagLoopInv`, `TagAssert`, etc.)
+are defined in `internal/reporting/tags.go` (owned by plan 32). Encoding modules import those
+constants from plan 32's package when constructing `NodeInfo`. No bare string literals for tags
+anywhere outside `ast.go` (for `TagSynthetic`) and `tags.go` (for all others).
 See plan 32 for the full constant definitions and the canonical list of tags.
 
 ### Verification Specifications (C9)
@@ -236,4 +242,27 @@ types and postconditions on factory functions.
    //@ ensures  acc(n, 1/2) && forall i int :: 0 <= i && i < len(result) ==> result[i] != nil
    func (n *Method) Children() (result []Node)
    ```
+
+4. **`acyclicProg` predicate** — extends `acyclicExp` to top-level programs for use in
+   plan 16's termination spec:
+   ```go
+   //@ pred acyclicProg(prog *Program, visited set[Node])
+   // acyclicProg(prog, visited) holds when prog ∉ visited and
+   // for every member m of prog: acyclicExp(m, visited ∪ {prog})
+   ```
+   Factory `NewProgram` carries the postcondition:
+   ```go
+   //@ ensures acyclicProg(result, set[Node]{})
+   func NewProgram(domains []*Domain, fields []*Field, functions []*Function,
+                   predicates []*Predicate, methods []*Method) (result *Program)
+   ```
+
+5. **Ghost `NodeCount()` method** — used by plan 16's termination spec. Defined alongside
+   the Silver AST types in `internal/silver/ast.go`:
+   ```go
+   //@ pure
+   //@ ensures result >= 0
+   func (p *Program) NodeCount() (result int)
+   ```
+   Counts all `Node` values reachable from `p` via `Children()` traversal.
 

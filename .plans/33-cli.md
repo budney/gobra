@@ -149,6 +149,17 @@ Z3 always runs as a subprocess specified by `--z3Exe`. Do not add this flag.
 The following Gobra annotations will be written into `internal/pipeline/pipeline.go` and
 `internal/config/config.go` and verified before this plan is considered complete.
 
+Ghost pure function declared in `internal/pipeline/pipeline.go` for C9 error classification:
+```go
+// isInfrastructureError reports whether err represents a tool/process failure
+// (e.g., SilverServer subprocess crash, I/O error) as opposed to a normal
+// verification outcome (nil or ErrVerificationFailed).
+//@ pure
+func isInfrastructureError(err error) bool {
+    return err != nil && !errors.Is(err, ErrVerificationFailed)
+}
+```
+
 1. **`Run` error postcondition**: `nil` on clean verification; `ErrVerificationFailed` when
    Silicon reports proof failures; a wrapped infrastructure error on tool failure. The reporter
    is called inside `Run`; all output is written before `Run` returns. Callers need only check

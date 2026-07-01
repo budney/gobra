@@ -23,9 +23,11 @@ Implement a custom recursive-descent parser for `//@ ...` annotation expressions
   - Inline pattern nodes (implement `PStmt`):
     `PGhostArgs` (ghost call arguments), `PGhostResult` (ghost return result), `PGhostAssign`
     (ghost assignment replacing a Go assignment)
-  - Ghost expression nodes (implement `PNode`):
+  - Ghost expression nodes (implement `PExpression`, which extends `PNode`):
     `PForall`, `PExists`, `PAccess`, `POld`, `PBefore`, `PUnfolding`, `PPermission`,
-    sequence/set/multiset/dict/option literals and operations
+    sequence/set/multiset/dict/option literals and operations.
+    These appear in `PFunctionSpecClause.ClauseExp()` positions, so they MUST satisfy
+    `PExpression` (not just `PNode`) or they cannot be stored in spec clause `Exp` fields.
   - Visitor interface extensions: one `VisitP*` method per ghost type above, added to
     the `Visitor` interface in `internal/ast/frontend/` (extending the base set from plan 03)
 - Full coverage of the Gobra annotation language as decided in 02:
@@ -109,7 +111,18 @@ be fully checked (all ☑) before plan 05 is marked complete.
 - `type Diagnostic = diagnostic.Diagnostic` alias in `internal/frontend/annotationparser.go`
   (per plan 00 cross-cutting convention; keeps `[]Diagnostic` signatures unqualified)
 - Ghost AST type definitions in `internal/ast/frontend/` — all ghost node types listed in
-  the In-scope section above (plan 05 is the owner; these extend the package begun by plan 03)
+  the In-scope section above (plan 05 is the owner; these extend the package begun by plan 03).
+  **Canonical type names for ghost collection nodes** (used by plans 09, 11, 12, 29):
+  - `PSeqLit` — indexed sequence literal (`seq[T]{0: a, 1: b}`); implements `PExpression`
+  - `PSetLit` — set literal (`set[T]{a, b, c}`); implements `PExpression`
+  - `PMSetLit` — multiset literal (`mset[T]{a, b, c}`); implements `PExpression`
+  - `PDictLit` — dictionary literal (`dict[K]V{k: v, ...}`); implements `PExpression`
+  - `POptionLit` — option literal (`some(e)` / `none`); implements `PExpression`
+  - `PSeq` — sequence expression node (operations on sequences: `|s|`, `s[i]`, etc.); implements `PExpression`
+  - `PSet` — set expression node; implements `PExpression`
+  - `PMSet` — multiset expression node; implements `PExpression`
+  - `PDict` — dict expression node; implements `PExpression`
+  - `POption` — option expression node; implements `PExpression`
 - `internal/frontend/annotationparser.go` —
   ```go
   func ParseAnnotation(

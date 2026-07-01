@@ -170,7 +170,12 @@ before this plan is considered complete.
 
 2. **`loadSkipList` fail-fast contract** — returns a non-nil list on success and nil on any
    parse or validation failure (including unrecognised slugs); never returns a partially-loaded
-   list:
+   list. `fileExists` is a ghost pure function declared in `internal/testing/runner.go` that
+   wraps `os.Stat` for use in Gobra preconditions:
+   ```go
+   //@ pure
+   func fileExists(path string) bool
+   ```
 
    ```go
    //@ requires cfg.File == "" || fileExists(cfg.File)

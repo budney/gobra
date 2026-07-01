@@ -24,6 +24,8 @@ primary heap-allocated data structure in Go; their encoding is central to permis
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context and encoding interface
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.StructT`, `internal.FieldRef`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Ref`, `silver.Field`, `silver.FieldAccess`, etc.)
 
 ## Reference: Current Gobra
 
@@ -124,13 +126,19 @@ func MangleFieldName(f *internal.FieldDecl) string
 
 **`sharedStructConversion` permission precondition** — the bodyless Silver function requires
 at least wildcard permission on every field of the shared struct. The Go code that emits it
-must include the wildcard-permission preconditions verbatim, one per field:
-```go
-// Emitting sharedStructConversion_{S}; preconditions must exactly match the Bodyless Functions table.
-//@ requires forall i int :: 0 <= i && i < len(fields) ==> acc(x.fields[i], wildcard)
-//@ ensures  result == tuple(x.fields[0], x.fields[1], ...)
+must include the wildcard-permission preconditions verbatim, one per field. Silver `Ref` does
+not have a `.fields` slice; each field access is a separate Silver `FieldAccess` node. The
+emitted Silver function looks like:
+```silver
+function sharedStructConversion_S(x: Ref): STuple
+  requires acc(x.S_f1, wildcard) && acc(x.S_f2, wildcard) && ...
+  ensures  result == gobra__tuple2(x.S_f1, x.S_f2, ...)
 ```
-This is verified by the Scala oracle test (plan 34 differential mode).
+The Go emission code iterates over `s.Fields` and generates one `acc(x.{MangleFieldName(f)}, wildcard)`
+precondition and one `x.{MangleFieldName(f)}` result term per field. Gobra cannot express this
+as a `forall` over Silver field names (they are not a runtime-accessible collection in Silver);
+the emission loop is the only valid implementation.
+This precondition/postcondition shape is verified by the Scala oracle test (plan 34 differential mode).
 
 **Termination** — `EncodeStruct` terminates because the struct's field list is finite and
 each field type is encoded by a separate encoding module (no recursive call back into

@@ -28,6 +28,8 @@ definitions and calls, fractional permissions, wildcards, magic wands, and the g
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.Access`, `internal.Predicate`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.AccessPredicate`, `silver.MagicWand`, etc.)
 
 ## Reference: Current Gobra
 
@@ -62,6 +64,29 @@ their Silver field declarations are emitted by the relevant encoding module.
 - Tests: encode predicate definition, fold/unfold, fractional permission, magic wand
 
 ## Verification Specifications (C9)
+
+Ghost pure functions declared in `internal/translator/encodings/permissions.go` for use in
+C9 specs:
+```go
+// isNoPerm reports whether a Silver expression represents NoPerm (the zero permission).
+// Used to guard the invariant that acc() never wraps a zero-permission amount.
+//@ pure
+func isNoPerm(p silver.Expr) bool
+
+// inputSize measures the structural size of a Silver expression AST for termination proofs.
+// Returns a non-negative integer; decreases on each recursive sub-expression.
+//@ pure
+//@ ensures result >= 0
+func inputSize(e silver.Expr) (result int)
+```
+
+`silver.Assertion` used in `EncodeMagicWand` below is a type alias for `silver.Expr` defined
+in plan 14's `internal/silver/ast.go` — both magic wand operands are Silver expressions in the
+Go Silver AST (the distinction is semantic, not structural):
+```go
+// In internal/silver/ast.go (plan 14):
+type Assertion = Expr  // ghost semantic alias; both are silver.Expr at runtime
+```
 
 ```go
 // EncodeAcc postcondition — result is always a Silver permission expression node:

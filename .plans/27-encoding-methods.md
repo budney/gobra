@@ -41,6 +41,8 @@ is required before any end-to-end verification is possible.
 - [24-encoding-maps.md](24-encoding-maps.md) — map params
 - [25-encoding-interfaces.md](25-encoding-interfaces.md) — interface params
 - [26-encoding-permissions.md](26-encoding-permissions.md) — permission specs
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.FunctionDecl`, `internal.MethodDecl`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Method`, `silver.Function`, etc.)
 
 ## Reference: Current Gobra
 
@@ -73,7 +75,7 @@ A Go function marked `//@ trusted` emits a Silver Method or Function with no bod
 its preconditions and postconditions, exactly as the user wrote them. There are no
 translator-generated postconditions to audit here; correctness is the user's responsibility.
 The translator must ensure:
-- A `trusted` Silver method has `body = None` (passed as `null` to `SilverBridge.makeMethod`)
+- A `trusted` Silver method has `body = nil` in the Go Silver AST (`silver.Method.Body` is `nil`)
 - No synthetic assertions are injected into a `trusted` method body
 - The `NodeInfo` tag is `"trusted"` so the reporter can identify errors from trusted specs
 
@@ -211,4 +213,5 @@ functions and `pure` methods — the type checker (plan 09) enforces this. The e
    ```
 
 The Silver `ConsInfo` / `AnnotationInfo` types must be defined in the Go Silver AST (plan 14)
-and constructable via `SilverBridge.java` `makeAnnotationInfo` / `makeConsInfo` methods (plan 16).
+as Go structs. Plan 16 (Protobuf serializer) is responsible for serializing them into the
+`silver.proto` message; there is no `SilverBridge.java` or JNI in the gRPC design.

@@ -80,7 +80,7 @@ All decisions are fully documented with rationale in [DECISIONS.md](DECISIONS.md
 
 ## Work breakdown structure
 
-40 plan files, organized in 9 groups. See [00-overview.md](00-overview.md) for the full
+41 plan files, organized in 9 groups. See [00-overview.md](00-overview.md) for the full
 dependency table and list of currently unblocked work items.
 
 Two plans in Group 4 (Silver IR & gRPC Backend) address parallelism:
@@ -134,7 +134,7 @@ viperserver/                      ← git submodule: ViperServer + Silicon + Car
 - Go 1.21+ (`CGO_ENABLED=0` builds supported — no CGo required)
 - Java 11+ 64-bit (`JAVA_HOME` set — needed to run the `SilverServer` subprocess JAR)
 - Z3 4.8.7+ 64-bit (`Z3_EXE` set)
-- ViperServer/Silicon JAR (`VIPERSERVER_JAR` set, or built via `sbt assembly` in `viperserver/`)
+- SilverServer fat JAR — embedded in the Go binary via `//go:embed`; no external env var required. Override: set `SILVERSERVER_JAR` to a local JAR path for development/testing without rebuilding.
 - Optional (Carbon backend, deferred — see D12): Boogie (`BOOGIE_EXE` set)
 
 ---

@@ -190,10 +190,25 @@ standard edges, for each domain whose name ends in `"WellFoundedOrder"`, add the
 The following Gobra annotations will be written into `internal/silver/chopper.go` and
 verified before this plan is considered complete.
 
+The C9 specs below use two ghost pure functions defined in `internal/silver/chopper.go`.
+These must be declared before `Chop` so Gobra can verify postconditions that reference them:
+```go
+// memberIn reports whether member m appears in any of sub-program p's member slices.
+//@ pure
+//@ ensures result == (m in p.Methods || m in p.Functions || m in p.Predicates ||
+//@                    m in p.Fields  || m in p.Domains)
+func memberIn(m Member, p *Program) (result bool)
+
+// dependsOn reports whether m directly references dep in its body, spec, or type.
+// Defined recursively over the dependency graph edges computed by buildDepGraph.
+//@ pure
+func dependsOn(m Member, dep Member) (result bool)
+```
+
 **`Chop` coverage: union of sub-programs contains all important members:**
 ```go
 //@ requires prog != nil
-//@ ensures  forall m silver.Member :: cfg.Selection(m) ==>
+//@ ensures  forall m Member :: cfg.Selection(m) ==>
 //@             exists j int :: 0 <= j && j < len(result) && memberIn(m, result[j])
 //@ ensures  forall j int :: 0 <= j && j < len(result) ==> result[j] != nil
 //@ decreases // pure computation over finite AST
@@ -203,13 +218,16 @@ func Chop(prog *Program, cfg ChopConfig) (result []*Program)
 **`Chop` self-containment: each sub-program is dependency-closed:**
 ```go
 //@ ensures forall j int :: 0 <= j && j < len(result) ==>
-//@   forall m silver.Member :: memberIn(m, result[j]) ==>
-//@     forall dep silver.Member :: dependsOn(m, dep) ==> memberIn(dep, result[j])
+//@   forall m Member :: memberIn(m, result[j]) ==>
+//@     forall dep Member :: dependsOn(m, dep) ==> memberIn(dep, result[j])
 ```
 
 **`buildDepGraph` termination (finite Silver AST, no cycles):**
+`buildDepGraph` is not a pure function (it mutates a local `depGraph` map). Termination is
+proved via a loop invariant inside the function, not a function-level `//@ decreases`:
 ```go
-//@ decreases len(prog.Methods) + len(prog.Functions) + len(prog.Predicates)
+// inside buildDepGraph, over the members slice:
+//@ invariant 0 <= i && i <= len(members)
 func buildDepGraph(prog *Program) depGraph
 ```
 

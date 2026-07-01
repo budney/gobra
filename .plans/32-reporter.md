@@ -175,6 +175,20 @@ returns and requires no explicit `Close()` call.
 The following Gobra annotations will be written into `internal/reporting/reporter.go` and
 verified before this plan is considered complete.
 
+Ghost predicates declared in `internal/reporting/reporter.go` for C9 DFS termination:
+```go
+// silverNodeTree is a fractional permission predicate over the Silver node sub-tree
+// rooted at node. It gives read access to all child nodes transitively.
+//@ pred silverNodeTree(node silver.Node)
+
+// silverTreeSize measures the number of nodes in the Silver sub-tree rooted at node.
+// Strict decrease on each recursive Children() call guarantees DFS termination.
+//@ pure
+//@ requires acc(silverNodeTree(node), _)
+//@ ensures  result >= 0
+func silverTreeSize(node silver.Node) (result int)
+```
+
 1. **`Report` non-nil result** — always returns a slice (may be empty on success; nil slice
    is not returned):
    ```go

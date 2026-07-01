@@ -28,6 +28,8 @@ the need to encode method contracts for dynamic dispatch.
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.InterfaceT`, `internal.TypeAssertion`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Domain`, `silver.Method`, etc.)
 - [21-encoding-structs.md](21-encoding-structs.md) — structs as common interface implementors
 
 ## Reference: Current Gobra
@@ -284,9 +286,16 @@ Note: `T internal.Type` (plan 11), not `T types.Type` from stdlib `go/types`, fo
 layering reason as `EncodeInterface`.
 
 **`Type` domain singleton (emitted at most once):**
+
+`ctx.emittedTypeDomain` is a concrete field of `contextImpl` and is not accessible through the
+`Context` interface in Gobra specs. The singleton invariant is expressed using the ghost method
+`ctx.typeDomainEmitted()` declared on `Context` in plan 19:
 ```go
-//@ invariant len(ctx.emittedTypeDomain) <= 1
+//@ ensures ctx.typeDomainEmitted()  // Type domain is now present in the accumulated program
+func (e *InterfaceEncoding) ensureTypeDomain(ctx Context)
 ```
+The check-and-set guard (`if !ctx.typeDomainEmitted() { emit; mark }`) is enforced by the
+concrete `contextImpl` implementation. No Gobra invariant over a concrete field is needed.
 
 ## Deliverables
 

@@ -29,6 +29,8 @@ sets, multisets, dictionaries, and option types into Silver domains and built-in
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.ADT`, `internal.SeqT`, `internal.SetT`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Domain`, `silver.DomainFunc`, `silver.DomainAxiom`, etc.)
 
 ## Reference: Current Gobra
 

@@ -49,6 +49,12 @@ plug.
 - [32a-diagnostics.md](32a-diagnostics.md) — `Diagnostic` type returned by `Translate`
 - [11-internal-ast.md](11-internal-ast.md) — input to translation
 - [14-silver-ast.md](14-silver-ast.md) — output of translation
+- [08-type-checker-core.md](08-type-checker-core.md) — `TypeInfo` struct passed as parameter to `Translate`
+  and held in `Context.TypeInfo()`; plan 08 defines `TypeInfo` (including the `Go` field)
+- [09-type-checker-specs.md](09-type-checker-specs.md) — `GhostTypeInfo` in `TypeInfo.Ghost` used by
+  encoding modules to look up resolved ghost types (e.g., ADT constructor types)
+- [10-type-checker-multipackage.md](10-type-checker-multipackage.md) — cross-package `TypeInfo`
+  merging; encoding modules may query `TypeInfo` for imported package members
 
 ## Reference: Current Gobra
 
@@ -402,6 +408,56 @@ func (c *contextImpl) Dflt(t internal.Type) (result silver.Expr)
 
 For composite types, `Dflt` routes through the expression encoding dispatch and each
 encoding module handles `DfltVal` for the types it owns.
+
+5. **Ghost context query methods** — the following ghost pure methods are declared on the
+   `Context` interface (in `internal/translator/context.go`) so encoding plans can write
+   postconditions referencing them:
+   ```go
+   // HasDomain reports whether a Silver domain with the given name has been emitted
+   // into the accumulated output program. Used in C9 postconditions by plan 20.
+   //@ pure
+   func (c Context) HasDomain(name string) bool
+
+   // HasDomainFn reports whether a domain function with the given name has been emitted.
+   //@ pure
+   func (c Context) HasDomainFn(name string) bool
+   ```
+   These are ghost-only query methods; they have no runtime implementation and are erased
+   before compilation. Encoding plans reference them only in `//@ ensures` clauses.
+
+   Additional context ghost methods used by encoding plans 24, 25, and 28:
+   ```go
+   // typeDomainEmitted reports whether the Type Silver domain (plan 25) has been emitted.
+   //@ pure
+   func (c Context) typeDomainEmitted() bool
+
+   // dynTypeEstablished reports whether the dynamic type of val has been established
+   // in the accumulated Silver program as an instance of type T (plan 25).
+   //@ pure
+   func (c Context) dynTypeEstablished(val silver.Expr, T internal.Type) bool
+
+   // chanTypeFunctionDefined reports whether the chan_Type domain function (plan 28)
+   // has been emitted into the accumulated Silver program.
+   //@ pure
+   func (c Context) chanTypeFunctionDefined() bool
+
+   // exclusive reports whether the Silver expression result carries write (exclusive) permission.
+   // Used in C9 postconditions for make(chan T) encoding in plan 28.
+   //@ pure
+   func (c Context) exclusive(expr silver.Expr) bool
+   ```
+
+6. **Ghost helper predicates for `Dflt` contract** — the predicates `isIntType`, `isBoolType`,
+   and `isMapType` used in the `Dflt` contract above are ghost pure functions declared in
+   `internal/translator/context.go`:
+   ```go
+   //@ pure
+   func isIntType(t internal.Type) bool  { return /* internal.IntType case */ }
+   //@ pure
+   func isBoolType(t internal.Type) bool { return /* internal.BoolType case */ }
+   //@ pure
+   func isMapType(t internal.Type) bool  { return /* internal.MapType case */ }
+   ```
 
 ## Resolved Questions
 

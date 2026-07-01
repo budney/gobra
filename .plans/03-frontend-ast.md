@@ -392,11 +392,15 @@ type PNamedReceiver struct {
 }
 func (*PNamedReceiver) pReceiver() {}
 func (r *PNamedReceiver) RecvType() PMethodRecvType { return r.Type }
+func (r *PNamedReceiver) Pos() token.Pos { return r.ID.Pos() }
+func (r *PNamedReceiver) End() token.Pos { return r.Type.End() }
 
 type PUnnamedReceiver struct {
     Type PMethodRecvType
 }
 func (*PUnnamedReceiver) pReceiver() {}
+func (r *PUnnamedReceiver) Pos() token.Pos { return r.Type.Pos() }
+func (r *PUnnamedReceiver) End() token.Pos { return r.Type.End() }
 func (r *PUnnamedReceiver) RecvType() PMethodRecvType { return r.Type }
 
 // PMethodRecvType distinguishes the three receiver type forms.
@@ -408,9 +412,16 @@ type PMethodRecvType interface {
     TypeName() *ast.Ident // the base named type (e.g. MyType in *MyType)
 }
 
+// Pos()/End() delegate to Typ since the named type is the span anchor for these recv types.
 type PMethodReceiveName          struct{ Typ *ast.Ident } // value recv:        (r MyType)
+func (r *PMethodReceiveName)          Pos() token.Pos { return r.Typ.Pos() }
+func (r *PMethodReceiveName)          End() token.Pos { return r.Typ.End() }
 type PMethodReceiveActualPointer struct{ Typ *ast.Ident } // actual ptr recv:   (r *MyType)
+func (r *PMethodReceiveActualPointer) Pos() token.Pos { return r.Typ.Pos() }
+func (r *PMethodReceiveActualPointer) End() token.Pos { return r.Typ.End() }
 type PMethodReceiveGhostPointer  struct{ Typ *ast.Ident } // ghost ptr recv:    annotation-only
+func (r *PMethodReceiveGhostPointer)  Pos() token.Pos { return r.Typ.Pos() }
+func (r *PMethodReceiveGhostPointer)  End() token.Pos { return r.Typ.End() }
 ```
 
 ### PFunctionSpec
@@ -444,13 +455,18 @@ type PFunctionSpecClause interface {
     ClauseExp() PExpression
 }
 
-type PRequires  struct{ Exp PExpression }
-type PEnsures   struct{ Exp PExpression }
-type PPreserves struct{ Exp PExpression }
+// Each clause carries StartPos (position of the requires/ensures/preserves keyword).
+// Pos() returns the keyword position; End() delegates to the expression.
+type PRequires  struct{ Exp PExpression; StartPos token.Pos }
+type PEnsures   struct{ Exp PExpression; StartPos token.Pos }
+type PPreserves struct{ Exp PExpression; StartPos token.Pos }
 
 func (*PRequires)  pClause() {}; func (c *PRequires)  ClauseExp() PExpression { return c.Exp }
+func (c *PRequires)  Pos() token.Pos { return c.StartPos }; func (c *PRequires)  End() token.Pos { return c.Exp.End() }
 func (*PEnsures)   pClause() {}; func (c *PEnsures)   ClauseExp() PExpression { return c.Exp }
+func (c *PEnsures)   Pos() token.Pos { return c.StartPos }; func (c *PEnsures)   End() token.Pos { return c.Exp.End() }
 func (*PPreserves) pClause() {}; func (c *PPreserves) ClauseExp() PExpression { return c.Exp }
+func (c *PPreserves) Pos() token.Pos { return c.StartPos }; func (c *PPreserves) End() token.Pos { return c.Exp.End() }
 
 // PDecreases is a termination measure node, named after the decreases keyword the user writes.
 // Either a wildcard (decreases _) or a tuple of expressions (decreases e1, e2, ...).

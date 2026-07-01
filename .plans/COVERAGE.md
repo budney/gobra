@@ -133,10 +133,10 @@ complete. Add a row to the table above once the decision is made.
 
 | Construct | Status | Notes |
 |-----------|--------|-------|
-| `goto` / `LabeledStmt` (goto target) | **Action required** | Scala crashes with `???` (`NotImplementedError`) — not a clean error. Go rewrite must emit an explicit user-facing diagnostic from the type checker. Do not rely on the catch-all panic. |
-| `fallthrough` | **Action required** | Absent from Gobra's ANTLR grammar; never reaches Scala code. `go/parser` *does* parse it as `BranchStmt(token.FALLTHROUGH)`. Go rewrite type checker must explicitly reject it with a diagnostic. |
-| `unsafe` package | **Action required** | Not handled in Scala; silently fails when `unsafe.*` names are unresolved. Go rewrite should explicitly reject any `import "unsafe"` with a diagnostic during package resolution (plan 07) or type checking (plan 08). |
-| `recover()` | **Action required** | Not in Gobra's grammar at all. `go/types` resolves `recover` as a built-in; the Go rewrite type checker must explicitly reject calls to it with a diagnostic. |
+| ~~`goto` / `LabeledStmt` (goto target)~~ | Resolved: rejected | Plan 08 "Explicitly Unsupported Constructs": rejects `*ast.BranchStmt` with `Tok == token.GOTO` with diagnostic `"goto is not supported by Gobra"`. |
+| ~~`fallthrough`~~ | Resolved: rejected | Plan 08 "Explicitly Unsupported Constructs": rejects `*ast.BranchStmt` with `Tok == token.FALLTHROUGH` with diagnostic `"fallthrough is not supported by Gobra"`. |
+| ~~`unsafe` package~~ | Resolved: rejected | Plan 10 (`gobImporter`): `Import("unsafe")` returns an error. |
+| ~~`recover()`~~ | Resolved: rejected | Plan 08 "Explicitly Unsupported Constructs": rejects any `*ast.CallExpr` whose function resolves to built-in `recover` with diagnostic `"recover is not supported by Gobra"`. |
 | ~~`init()` functions~~ | Resolved: in scope | Plan 27 (lines 138–157): each `init` → `{pkg}_init_N`; wrapper `{pkg}_run_inits` calls them in order; cross-package ordering via topological translation. |
 | ~~Variadic spread `f(s...)`~~ | Resolved: in scope | Four-branch dispatch documented in plan 12 (Resolved Questions). Detection by type shape, not `CallExpr.Ellipsis`. |
 | ~~Named return values in closures~~ | Resolved: in scope | Handled via same `PNamedParameter` substitution as regular functions (Desugar.scala). No special closure case needed. |

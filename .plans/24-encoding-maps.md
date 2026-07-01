@@ -24,6 +24,8 @@ Implement the encoding of Go map types into Silver.
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.MapT`, `internal.MapLookup`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Domain`, `silver.DomainFunc`, etc.)
 - [25-encoding-interfaces.md](25-encoding-interfaces.md) — **required**: the `Type` domain and
   `comparableType` function are defined there. Plan 24 must call `ensureTypeDomain(ctx)` (defined
   in plan 25) before emitting any `comparableType` assertion. This helper is idempotent and safe
@@ -83,7 +85,6 @@ func (e *MapEncoding) EncodeMap(ctx Context, t *internal.MapType) (result silver
 ```go
 //@ requires ctx != nil
 //@ ensures  result != nil
-//@ ensures  result == ctx.Dflt(t)
 func (e *MapEncoding) EmptyMap(ctx Context, t *internal.MapType) (result silver.Expr)
 ```
 

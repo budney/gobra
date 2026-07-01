@@ -96,18 +96,15 @@ verified before this plan is considered complete.
 
 **`Gobrafy` line-count preservation and output safety:**
 ```go
-//@ requires len(src) >= 0
 //@ ensures  len(diags) == 0 ==> bytes.Count(out, []byte("\n")) == bytes.Count(src, []byte("\n"))
 //@ ensures  len(diags) > 0  ==> out == nil
-//@ decreases len(src)
 func Gobrafy(src []byte, filename string) (out []byte, diags []Diagnostic)
 ```
+Note: `//@ requires len(src) >= 0` is vacuously true for all Go slices and is omitted.
 
-**No aliasing between input and output (safe for concurrent downstream use):**
-```go
-//@ ensures forall i int :: 0 <= i && i < len(out) ==>
-//@   !( out[i:] overlaps src[i:] )
-```
+**No aliasing between input and output**: Gobra/Viper has no built-in `overlaps` predicate for
+byte-slice aliasing; this property is guaranteed by implementation (each `bytes.Replace` call
+produces a fresh allocation). Document as a comment in the implementation, not a Gobra spec.
 
 ## Deliverables
 

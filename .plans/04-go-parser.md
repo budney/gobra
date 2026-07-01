@@ -170,14 +170,11 @@ so its Gobra specifications focus on nil-safety, termination, and diagnostic com
 
 4. **BlockAnnotations ownership**: after a successful call, `pfile.BlockAnnotations` and
    `pfile.Metadata` are fully populated and no other live reference to the maps exist;
-   plan 07 holds exclusive access:
+   plan 07 holds exclusive access. In Gobra/Viper, map permission is granted on the whole
+   map, not per-key:
    ```go
-   //@ ensures pfile != nil ==>
-   //@     forall k *ast.BlockStmt ::
-   //@         k != nil ==> acc(pfile.BlockAnnotations[k])
-   //@ ensures pfile != nil ==>
-   //@     forall k ast.Node ::
-   //@         k != nil ==> acc(pfile.Metadata[k])
+   //@ ensures pfile != nil ==> acc(pfile.BlockAnnotations)
+   //@ ensures pfile != nil ==> acc(pfile.Metadata)
    ```
 
 ## Resolved Questions

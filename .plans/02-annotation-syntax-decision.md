@@ -146,6 +146,12 @@ Position mapping: the byte offset within the concatenated string maps back to th
 comment line's `token.Pos` plus the character offset within that line. Plan 05 must implement
 this mapping and must not invent an incompatible position scheme.
 
+## Verification Specifications (C9)
+
+C9: N/A — This plan is a design decision record. It contains no Go code and no functions
+to verify. The annotation parser implementation is owned by plan 05, which carries the
+relevant C9 specs.
+
 ## Annotation Grammar
 
 *This section is owned and written by plan 05 upon completing the annotation parser

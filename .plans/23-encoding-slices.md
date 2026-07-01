@@ -27,6 +27,8 @@ sub-slicing).
 ## Dependencies
 
 - [19-translator-core.md](19-translator-core.md) — Context
+- [11-internal-ast.md](11-internal-ast.md) — input types (`internal.SliceT`, `internal.IndexExpr`, etc.)
+- [14-silver-ast.md](14-silver-ast.md) — output types (`silver.Domain`, `silver.DomainFunc`, etc.)
 
 ## Reference: Current Gobra
 
@@ -134,9 +136,13 @@ func (e *SliceEncoding) EncodeSlice(ctx Context, t internal.Type) (result silver
 ```go
 //@ requires ctx != nil
 //@ ensures  result != nil
-//@ ensures  result == ctx.Dflt(internal.SliceType{Elem: elemType})
 func (e *SliceEncoding) NilSlice(ctx Context, elemType internal.Type) (result silver.Expr)
 ```
+`ctx.Dflt` routes through the encoding dispatch (which has side effects — it may emit
+auxiliary Silver definitions) so it cannot be declared `//@ pure` and cannot appear in a
+Gobra postcondition. The invariant that `NilSlice` returns the same expression as
+`ctx.Dflt(internal.SliceType{Elem: elemType})` is maintained by construction: both paths
+produce `nilSlice_{T}()` domain function application for the same `T`.
 
 **`EncodeSliceOp` non-nil result (indexing, append, sub-slice):**
 ```go

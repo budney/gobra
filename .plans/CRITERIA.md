@@ -1,7 +1,7 @@
 # Plan Review Acceptance Criteria
 
 Each criterion is binary (pass/fail). A plan set passes only if all
-eight criteria pass.  Edit this file to add, remove, or tighten
+nine criteria pass.  Edit this file to add, remove, or tighten
 criteria as the project evolves.
 
 ---

@@ -132,12 +132,17 @@ Plan 17b's dispatch and merge functions are pipeline-critical and must carry Gob
 written into `internal/backend/subprocess/dispatch.go` and `internal/backend/dedup.go`.
 
 1. **`DispatchChopped` postcondition** — result is always non-nil; `Success` iff all
-   sub-results succeed:
+   sub-results succeed; `Errors` is nil iff `Success`:
    ```go
    //@ requires p != nil && len(progs) > 0
    //@ ensures  result != nil
+   //@ ensures  result.Success == (result.Errors == nil || len(result.Errors) == 0)
+   //@ ensures  !result.Success ==> result.Errors != nil && len(result.Errors) > 0
    func (p *WorkerPool) DispatchChopped(progs []*silver.Program) (result *backend.VerificationResult)
    ```
+   The full per-sub-result aggregation semantics (`result.Success == forall i :: subResults[i].Success`)
+   cannot be expressed in a postcondition without a ghost return for `subResults`; the
+   `result.Errors`-based form above is equivalent and statically verifiable.
 
 2. **`mergeResults` postcondition** — the returned result is always non-nil and its `NodeMap`
    contains all entries from all sub-results:

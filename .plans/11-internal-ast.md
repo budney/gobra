@@ -51,7 +51,18 @@ constructs are unified.
 - **Expressions**: `Var`, `Deref`, `Ref`, `FieldRef`, `IndexedExp`, `SliceExp`,
   `PureFunctionCall`, `PureMethodCall`, `Unary`, `Binary`, `Old`, `Conditional`,
   `Tuple` (transient desugaring-only construct — see below; not stable in the final AST),
-  `SeqLit` (ghost sequence literal; carries indexed element pairs — see below)
+  `SeqLit` (ghost sequence literal; carries indexed element pairs — see below),
+  `NilLit` (zero value of a given type; used by the desugarer to synthesize zero-value
+  arguments, e.g., an empty variadic slice `in.NilLit(SliceT(elem, nil))`).
+  Definition:
+  ```go
+  type NilLit struct {
+      Typ       Type
+      StartPos  token.Pos
+      addressable bool  // always false; zero values are value-semantic
+  }
+  func (n *NilLit) Pos() token.Pos { return n.StartPos }
+  ```
 
   The `Expr` interface includes an `Addressable() bool` method. Every concrete expression
   struct stores an `addressable bool` field and implements `Addressable() bool { return e.addressable }`.
@@ -102,9 +113,10 @@ translator (plan 29). The node shape:
 type SeqLit struct {
     ElemType   Type             // ghost element type
     Elements   []SeqLitElement  // indexed element pairs from the source literal
-    Pos_       src.Pos
+    StartPos   token.Pos        // source position of the sequence literal keyword
     addressable bool             // always false (ghost, no heap)
 }
+func (s *SeqLit) Pos() token.Pos { return s.StartPos }
 
 type SeqLitElement struct {
     Index int   // explicit index from source (0-based), or -1 for "next" (no explicit index)
@@ -165,4 +177,22 @@ construction functions enforce structural invariants on the node types themselve
    ```
    The concrete body counts all `Member`, `Stmt`, and `Expr` nodes recursively via a
    tree-fold. It is used only in specifications; callers must not depend on it for runtime logic.
+
+6. **Ghost analysis helpers** — used by plan 13's C9 overflow and call-graph specs.
+   Defined in `internal/ast/internal/ghost.go`:
+   ```go
+   // ArithNode is a ghost-only interface satisfied by arithmetic Binary expression nodes
+   // (Add, Sub, Mul, Div, Mod). Used by plan 13 C9 specs to quantify over arithmetic nodes.
+   //@ ghost type ArithNode interface { HasRangeAssertion() bool }
+
+   // Contains reports whether the given node exists anywhere in the program tree.
+   //@ pure
+   //@ ensures result == (n is reachable from p via Children traversal)
+   func (p *Program) Contains(n Node) (result bool)
+
+   // CGEdges is a ghost field on function/method call statement nodes (*FunctionCall,
+   // *MethodCall, *ClosureCall) populated by the call-graph transform (plan 13).
+   // It records the set of possible callees as function/method names.
+   //@ ghost field CGEdges []string  // on *FunctionCall, *MethodCall, *ClosureCall
+   ```
 
