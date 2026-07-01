@@ -19,7 +19,7 @@
 | `internal/silver/` — `Program`, `Member`, `Node`, `NodeInfo`, `VprInfo`, `NoInfo`, `AnnotationInfo`, `ConsInfo`, `TagSynthetic` | 14 |
 | `internal/silver/printer.go` (`Print`) | 14 |
 | `internal/backend/subprocess/subprocess.go` — `Backend`, `Start`, `Stop`, `Ping`, `SubprocessConfig`, `WorkerPool` struct, `workerJob` | 15 |
-| `internal/backend/types.go` — `VerificationResult`, `VerificationError`, `SiliconInstance` interface, `SiliconConfig`, `ThreadAttached()` | 15 |
+| `internal/backend/types.go` — `VerificationResult`, `VerificationError`, `SiliconInstance` interface, `SiliconConfig` | 15 |
 | `internal/backend/subprocess/subprocess.go` — `NewPool`, `Submit`, full Silicon-aware goroutine worker | 15b |
 | `internal/proto/` — generated Go Protobuf bindings for `silver.proto` (`protoc --go_out`) | 15 |
 | `internal/backend/silverserver/` — `SilverServer.scala`, `silver.proto`, `SilverServer.jar` (embedded fat JAR) | 15 |
@@ -51,7 +51,6 @@
 | `Translate` return | `(result *silver.Program, diags []diagnostic.Diagnostic)` — consistent with all other pipeline stages |
 | `Resolve` return | `(result []*PackageInfo, diags []Diagnostic)` — nil result on any error (strict; matches C9) |
 | `Run` return | `error` only — reporter runs inside Run; callers use `errors.Is(err, ErrVerificationFailed)` |
-| `pred ThreadAttached()` | Zero-arg predicate in `internal/backend/types.go` (plan 15); no JNI, no thread pinning |
 | Loop invariants | `[]PInvariant` (wrapper with source pos), not bare `[]PExpression` |
 | Termination measures | `PDecreases` interface (renamed from `PTerminationMeasure`) |
 | Function modifiers | `[]PModifier` slice on `PFunctionSpec` with node types `PPure`/`PTrusted`/`POpaque`/`PMayBeUsedInInit` |
@@ -67,8 +66,9 @@
 | `globalNodeID` atomic counter | `atomic.Uint64` | 16 |
 
 **Removed**: JNI, CGo, `sync.Once` JVM singleton, `runtime.LockOSThread()`, `AttachCurrentThread`,
-`DetachCurrentThread` — none apply in the gRPC subprocess design. `ThreadAttached()` now models
-OS-thread/subprocess synchronization only, lives in `internal/backend/types.go` (plan 15).
+`DetachCurrentThread`, `ThreadAttached()` — none apply in the gRPC subprocess design. OS-thread/
+subprocess synchronization is handled entirely by the `sync.Mutex` on `Backend` (plan 15) and the
+worker pool's per-goroutine `SiliconFrontendAPI` instances (plan 15b); no dedicated predicate exists.
 
 ---
 
@@ -211,3 +211,16 @@ Verification Criteria bullets via a one-off script
 decomposition.md line-by-line, spot-checked generated files (01.1, 13.6) for template
 fidelity, confirmed C9 N/A logic against the `## Verification Specifications (C9)` grep
 across all 39 parent plan files.
+
+### Post-review amendment: plan 34 gap fix
+
+`/review-plan` found that plan 34's `SkipConfig`/skip-list loader, `HasGenericDecl` +
+ghost predicates, and `tests/regression_test.go` deliverables (all explicitly listed in
+[34-test-infrastructure.md](34-test-infrastructure.md) §Deliverables) had no corresponding
+sub-task entries in `decomposition.md`, so they were silently unreachable from the sub-task
+files. Added `34.3-skip-list-support-sentinel-output`, `34.4-hasgenericdecl-predicate`, and
+`34.5-regression-test-entrypoint-docs` to `decomposition.md` and hand-wrote the matching
+`.plans/tasks/34.3-*.md` / `34.4-*.md` / `34.5-*.md` files (not run through the generator
+script, to keep this targeted fix auditable). Plan 34 now has 5 sub-tasks; total sub-task
+count is **144** (was 141), covering 39 plans. The HasGenericDecl ownership constraint above
+is now satisfied by an explicit sub-task (34.4) rather than only by prose in the parent plan.

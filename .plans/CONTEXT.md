@@ -139,26 +139,38 @@ viperserver/                      ← git submodule: ViperServer + Silicon + Car
 
 ---
 
-## 🤖 AI AGENT OPERATIONAL PROTOCOLS (NON-NEGOTIABLE)
+## 🤖 Agent Context Handoff Protocol
 
-If you are an AI agent or contributor processing commands in this repository, you must adhere to these execution invariants. Failure to follow these steps will result in a validation failure.
+This project spans many separate agent sessions. A chat transcript is not durable: it can be
+summarized, truncated, or lost entirely between sessions, and a fresh agent picking up this
+work has no access to a prior session's conversation — only to what's on disk. `.plans/scratchpad.md`
+exists to carry the state a new agent needs to resume without re-deriving it from scratch
+(current constraints, dependency status, in-progress findings, the remediation queue). Explaining
+your work to the user in the chat window is expected and encouraged throughout — this protocol is
+about *also* keeping the scratchpad current, not about limiting what you say.
 
-### 1. The Transactional Scratchpad Rule (Anti-Truncation)
-- `.plans/scratchpad.md` is your external running memory state.
-- You are strictly FORBIDDEN from keeping extensive status logs in your chat context window.
-- **Incremental Write-Through:** Every time you complete a sub-task, find a bug, or modify a plan file, your very next tool call MUST be to edit or append that delta directly to `.plans/scratchpad.md` on disk. Do not wait until the entire execution is finished to update the file.
+### 1. Log incrementally, not just at the end
+When you complete a sub-task, find a bug, or modify a plan file, write that delta to
+`.plans/scratchpad.md` promptly rather than saving it all for a final summary. If a session ends
+unexpectedly (crash, context cutoff, user interruption), whatever hasn't been written to the
+scratchpad yet is effectively lost to the next agent — the chat window won't help them.
 
-### 2. The Double-Pass Execution Hook (Anti-Conversational Default)
-- Your job is not done when you generate text. Your job is done when the disk state is updated.
-- Before you return control to the user or output your final conclusion to the chat window, you MUST execute a final check to confirm that your complete report, findings, and remediation queue states are flushed to `.plans/scratchpad.md`.
-- **The Chat Invariant:** The chat window should only be used to state a 1-sentence confirmation of which scratchpad items were executed.
+### 2. Leave the scratchpad in a resumable state
+Before ending a task, make sure `.plans/scratchpad.md` reflects your final state: findings,
+remediation queue status, and anything a new agent would need to know to continue. Chat output
+is for the user in this session; the scratchpad is for whoever (human or agent) picks this up next.
 
-### 3. Strict Severity-Order Execution
-- You must always process the `Remediation Queue` in `.plans/scratchpad.md` in top-down order (Critical Global Blockers first).
-- You are forbidden from jumping down to document local file validation specs (Items 7+) while global compilation errors or circular imports (Items 1-5) remain unresolved.
+### 3. Process the Remediation Queue in severity order
+Work through the `Remediation Queue` in `.plans/scratchpad.md` top-down (critical global blockers
+first) rather than jumping to low-severity items first — a resumed session should find the most
+important work already handled, not skipped over in favor of easier items.
 
-### 4. Strict Tool-First Guardrail (Anti-Skimming Invariant)
-- **Zero Talking First:** When instructed to execute the Remediation Queue, your very first output token MUST be a physical filesystem tool call (e.g., `write_file`, `edit_file`, `grep`, or `bash`).
-- **Forbidden Conversational Openers:** You are strictly forbidden from starting your response with text strings like "Let me read...", "I will start by...", or "Looking at the scratchpad...".
-- **Strict Linear Execution:** You must read the queue, identify the lowest-numbered incomplete item, and instantly call a tool to inspect or fix *only* that item. If you talk about or modify a higher-numbered item before the current item is checked off on disk, it is a hard protocol failure.
+### 4. Execute the queue; don't just report on it
+When you're instructed to work the Remediation Queue, fix each item directly rather than coming
+back to the user with a summary of what you found or a proposed plan for what to do about it.
+"Here's what's wrong and here's how I'd fix it, want me to proceed?" is the failure mode this
+guards against — for routine, in-scope queue items, do the fix and narrate what you did, don't
+stop to ask permission first. This doesn't override the harness's normal judgment about pausing
+for genuinely destructive or ambiguous actions; it's specifically about not stalling on ordinary,
+already-authorized remediation work.
 
